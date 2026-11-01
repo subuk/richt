@@ -1,0 +1,12 @@
+key_file = "/var/lib/vmango/authorized_keys"
+
+api {
+    listen = {{ printf "%q" .vmango.listen }}
+}
+
+cloud "local" {
+    name = {{ printf "%q" .vmango.cloud_name }}
+    host "local" {
+        uri = {{ printf "%q" .vmango.libvirt_uri }}
+    }
+}

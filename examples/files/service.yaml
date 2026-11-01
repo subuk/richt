@@ -1,0 +1,6 @@
+configs:
+  greeting:
+    path: /var/tmp/richt-example/greeting.conf
+    mode: "0644"
+    template:
+      file: greeting.conf.gotmpl
