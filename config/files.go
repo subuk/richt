@@ -18,11 +18,16 @@ import (
 	"github.com/aymanbagabas/go-udiff"
 	"github.com/subuk/richt/inventory"
 	"github.com/subuk/richt/plan"
+	"github.com/subuk/richt/secrets"
 	"golang.org/x/sys/unix"
 )
 
 // Diff renders all templates and validates capabilities before observing resources.
 func Diff(r *inventory.Resolved) (*plan.Plan, error) {
+	if r == nil {
+		return nil, errors.New("resolved inventory is nil")
+	}
+	lookup := secrets.New(r.SecretSources)
 	p := &plan.Plan{Version: plan.Version}
 	for _, h := range r.Hosts {
 		if h.Transport.Type != "local" || h.Transport.Sudo {
@@ -40,7 +45,7 @@ func Diff(r *inventory.Resolved) (*plan.Plan, error) {
 			sort.Strings(names)
 			for _, name := range names {
 				c := s.Definition.Configs[name]
-				f, err := Prepare(c, s.State, h.Vars)
+				f, err := Prepare(c, s.State, h.Vars, lookup)
 				if err != nil {
 					return nil, fmt.Errorf("host %s service %s config %s: %w", h.Name, s.Name, name, err)
 				}
@@ -70,8 +75,14 @@ func Diff(r *inventory.Resolved) (*plan.Plan, error) {
 	return p, nil
 }
 
+// SecretLookup retrieves a string from the explicitly selected secret source.
+type SecretLookup interface {
+	Lookup(key, source string) (string, error)
+}
+
 // Prepare freezes rendered content and requested ownership names for a file task.
-func Prepare(c inventory.Config, state string, vars map[string]any) (*plan.FileChange, error) {
+// The optional lookup is shared across all preparations in a diff.
+func Prepare(c inventory.Config, state string, vars map[string]any, lookups ...SecretLookup) (*plan.FileChange, error) {
 	if state == "" {
 		state = "present"
 	}
@@ -105,35 +116,69 @@ func Prepare(c inventory.Config, state string, vars map[string]any) (*plan.FileC
 	} else {
 		b, err := os.ReadFile(c.Template.File)
 		if err != nil {
+			if c.Sensitive {
+				return nil, errors.New("read sensitive template failed")
+			}
 			return nil, fmt.Errorf("read template: %w", err)
 		}
 		source = string(b)
 	}
-	secretCalled := false
-	funcs := template.FuncMap{"secret": func(...any) (string, error) {
-		secretCalled = true
-		return "", errors.New("secret sources are not supported yet")
+	var secretFailure string
+	failSecret := func(message string) (string, error) {
+		secretFailure = message
+		return "", errors.New(message)
+	}
+	funcs := template.FuncMap{"secret": func(args ...any) (string, error) {
+		// Mark even failed calls before checking arguments. Runtime template errors
+		// may quote arguments, source expressions, or transformed secret values.
+		f.Sensitive = true
+		if len(args) < 1 || len(args) > 2 {
+			return failSecret("secret requires a key and optional source")
+		}
+		key, ok := args[0].(string)
+		if !ok {
+			return failSecret("secret key must be a string")
+		}
+		source := "default"
+		if len(args) == 2 {
+			source, ok = args[1].(string)
+			if !ok {
+				return failSecret("secret source must be a string")
+			}
+		}
+		if len(lookups) == 0 || lookups[0] == nil {
+			return failSecret("secret lookup is unavailable")
+		}
+		value, err := lookups[0].Lookup(key, source)
+		if err != nil {
+			return failSecret("secret lookup failed")
+		}
+		return value, nil
 	}}
 	tpl, err := template.New("config").Option("missingkey=error").Funcs(funcs).Parse(source)
-	if err == nil {
-		var b bytes.Buffer
-		err = tpl.Execute(&b, vars)
-		f.Content = b.String()
-	}
-	if secretCalled {
-		return nil, errors.New("secret sources are not supported yet")
-	}
 	if err != nil {
-		if c.Sensitive {
-			return nil, errors.New("sensitive template rendering failed")
-		}
-		return nil, fmt.Errorf("render template: %w", err)
+		// Parser errors can include arbitrary template text before a secret call
+		// can run, so never expose the underlying diagnostic.
+		return nil, errors.New("render template: parsing failed")
 	}
+	var b bytes.Buffer
+	if err := tpl.Execute(&b, vars); err != nil {
+		if secretFailure != "" {
+			return nil, errors.New("render template: " + secretFailure)
+		}
+		return nil, errors.New("render template: execution failed")
+	}
+	f.Content = b.String()
 	return f, nil
 }
 
 // Observe computes the final patch; apply never invokes it.
-func Observe(f *plan.FileChange) (bool, error) {
+func Observe(f *plan.FileChange) (changed bool, err error) {
+	defer func() {
+		if err != nil && f != nil && f.Sensitive {
+			err = errors.New("sensitive file observation failed")
+		}
+	}()
 	uid, gid, err := ownership(f)
 	if err != nil {
 		return false, err
@@ -194,7 +239,7 @@ func Observe(f *plan.FileChange) (bool, error) {
 	if err = unix.Fstat(int(file.Fd()), &st); err != nil {
 		return false, err
 	}
-	changed := f.Write || f.Mode != nil && uint32(st.Mode)&07777 != *f.Mode || uid != -1 && int(st.Uid) != uid || gid != -1 && int(st.Gid) != gid
+	changed = f.Write || f.Mode != nil && uint32(st.Mode)&07777 != *f.Mode || uid != -1 && int(st.Uid) != uid || gid != -1 && int(st.Gid) != gid
 	if f.SELinux != "" {
 		label, err := readLabel(file)
 		if err != nil {
@@ -284,7 +329,12 @@ func (Local) Resolve(t plan.Task) ([]plan.Action, error) {
 	return actions, nil
 }
 
-func (Local) Execute(ctx context.Context, a plan.Action) error {
+func (Local) Execute(ctx context.Context, a plan.Action) (err error) {
+	defer func() {
+		if err != nil && a.File != nil && a.File.Sensitive {
+			err = errors.New("sensitive file operation failed")
+		}
+	}()
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -312,12 +362,17 @@ func (Local) Execute(ctx context.Context, a plan.Action) error {
 		return os.Remove(f.Path)
 	}
 	flags := os.O_WRONLY | unix.O_NONBLOCK
+	createMode := os.FileMode(0644)
+	privateWrite := a.Kind == "overwrite-file" && f.Sensitive && f.Mode != nil
 	if a.Kind == "overwrite-file" {
 		flags |= os.O_CREATE
+		if privateWrite {
+			createMode = 0600
+		}
 	} else if a.Kind != "set-file-attributes" {
 		return fmt.Errorf("unsupported action %q", a.Kind)
 	}
-	file, err := os.OpenFile(f.Path, flags, 0644)
+	file, err := os.OpenFile(f.Path, flags, createMode)
 	if err != nil {
 		return err
 	}
@@ -330,6 +385,13 @@ func (Local) Execute(ctx context.Context, a plan.Action) error {
 		return errors.New("target is not a regular file")
 	}
 	if a.Kind == "overwrite-file" {
+		if privateWrite {
+			// Restrict the existing inode before replacing any content. The
+			// separate attribute action applies the explicitly requested mode.
+			if err = unix.Fchmod(int(file.Fd()), 0600); err != nil {
+				return err
+			}
+		}
 		if err = file.Truncate(0); err != nil {
 			return err
 		}

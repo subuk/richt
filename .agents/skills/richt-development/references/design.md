@@ -10,7 +10,7 @@ that a later extension is permanently forbidden.
 Contents: [architecture](#architecture-and-domain),
 [shipped baseline](#shipped-baseline), [plans](#executable-plans-and-progress),
 [SSH and concurrency](#ssh-sudo-and-host-concurrency),
-[secrets](#upcoming-secret-source-execution),
+[secrets](#secret-source-execution),
 [release documentation](#upcoming-first-version-documentation), and
 [later scope](#later-scope).
 
@@ -59,8 +59,8 @@ extension processes.
 
 The working CLI includes build/install/help/version, strict YAML inventory,
 side-effect-free inventory inspection, files and saved plans, DNF4/YUM4 plus systemd services, local/SSH transports,
-noninteractive sudo, and bounded host concurrency. Secret execution remains
-explicitly unsupported. First-version completion
+noninteractive sudo, bounded host concurrency, and local YAML secret sources.
+First-version completion
 still includes the upcoming work below. The verified Linux platform and real
 acceptance harnesses are recorded in the guides and
 [Linux validation skill](../../richt-linux-validation/SKILL.md).
@@ -73,6 +73,8 @@ Read these contracts instead of reconstructing syntax from older proposals:
   attributes/SELinux, confirmation, executable JSON, locking, and continuation.
 - [Services](../../../../docs/services.md) owns exact RPM requests, systemd
   capabilities, lifecycle branches, reactions, unit/drop-in handling, and removal.
+- [Secrets](../../../../docs/secrets.md) owns YAML source values, template lookup,
+  sensitivity, safe diagnostics, and secret-bearing plan handling.
 
 Important invariants across those contracts:
 
@@ -210,18 +212,18 @@ hosts finish; reapply its saved plan to skip successes and retry unfinished work
 Use Go race checking for concurrency/progress changes and authorize test hosts
 according to the current task.
 
-## Upcoming secret-source execution
+## Secret-source execution
 
-Inventory already declares named `secret_sources` with `{type: yaml, file: ...}`;
-paths resolve relative to the inventory file. Preserve that implemented syntax
-and inventory-only behavior. Actual fetching and template evaluation remain
-upcoming work:
+Inventory declares named `secret_sources` with `{type: yaml, file: ...}`;
+paths resolve relative to the inventory file. Inventory inspection never opens
+sources. Preparation implements these contracts:
 
-- Use an extensible secret-source boundary. First implementation reads local
+- The extensible secret-source boundary reads local
   YAML on the machine running diff; multiple sources of the same backend may
   read different files. Environment variables and external secret stores are
   later extensions.
-- `secret` takes a key and optional source. Omitted source means the named
+- `{{ secret "database.password" }}` takes a key and optional source, as in
+  `{{ secret "database.password" "production" }}`. Omitted source means the named
   `default`; an explicit source selects only that source. No merging, search, or
   fallback; identical keys in different sources are independent. Missing chosen
   source/key or read failure fails preparation. `default` is required only for
@@ -241,19 +243,28 @@ upcoming work:
   not the design.
 - No secret values may escape through plan displays, commands, render/command
   errors, logs, summaries, or diagnostics, including multiline values and
-  supported transformations. Define allowed functions/transformations and safe
-  error handling; do not build tracking of every transformation for partial
-  diffs. Existing explicit-sensitive redaction must continue working.
-- JSON necessarily contains secrets. Preserve existing restrictive plan/lock
-  permissions and choose any additional protection for plans and temporary files
-  containing prepared secrets. Keep real secrets out of repository fixtures and
-  test reports.
+  supported transformations. Standard Go text/template functions remain
+  available; parse and execution errors use fixed safe messages rather than
+  quoting source, arguments, or partial results. No transformation tracking or
+  partial masking is introduced. Existing explicit sensitivity remains supported.
+- JSON necessarily contains secrets. Plan, lock, and atomic replacement files
+  are created with mode 0600. Temporary plan files are removed on completion or
+  handled errors; forced termination can leave a private temporary file behind.
+  Target content travels through stdin without secret staging files or command
+  arguments. Target permissions remain explicitly controlled by `mode`.
+  Sensitive writes with an explicit mode restrict the target inode to 0600
+  before writing; the following attribute action sets the requested final mode.
+  Without an explicit mode, existing permissions and the new-file default remain.
+  Keep real secrets out of repository fixtures and test reports.
 
-Remaining choices are the source value schema/nested key access, exact template
-function calling convention within the accepted key/optional-source semantics,
-allowed transformations and safe diagnostics, and additional protection of
-secret-bearing files. Declaration fields and relative paths are already fixed
-locally; do not reopen them as missing decisions.
+YAML sources contain one mapping, with nested mappings and string leaves.
+Keys are nonempty strings without dots; dot-separated lookup selects nested
+values. Lists, nulls, non-string values/keys, duplicate keys, custom tags,
+aliases/merge keys, and extra YAML documents are rejected. One resolver lazily
+loads each selected source once per diff and caches its values or failure for
+that preparation only. No values are fetched for unused sources or absent
+files. Use explicit `sensitive: true` to hide old content during removal, or
+when a new template no longer invokes `secret`.
 
 Acceptance covers two sources with the same key, default/explicit selection and
 errors, frozen saved bytes after source changes/deletion, real change reactions,

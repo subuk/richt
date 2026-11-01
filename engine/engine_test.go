@@ -244,3 +244,120 @@ func TestHostBindingAndResolutionDoNotContactTargets(t *testing.T) {
 		t.Fatal(err, calls)
 	}
 }
+
+func TestSecretFailureBeforeAnyHostContact(t *testing.T) {
+	calls := 0
+	e := Local{Connect: func(inventory.Transport) (config.Target, error) {
+		calls++
+		return config.Target{}, errors.New("unexpected contact")
+	}}
+	for _, source := range []string{`{{secret "missing"}}`, `{{secret 1}}`, `{{secret "missing" "other"}}`} {
+		r := resolved(inventory.Service{Configs: map[string]inventory.Config{"main": {Path: "/etc/richt-test", Template: inventory.Template{Inline: inline(source)}}}})
+		r.Hosts[0].Transport = inventory.Transport{Type: "ssh", Host: "example"}
+		h := r.Hosts[0]
+		h.Name = "second"
+		r.Hosts = append(r.Hosts, h)
+		if _, err := e.Diff(context.Background(), r); err == nil || calls != 0 {
+			t.Fatal("secret preparation did not precede target binding", calls)
+		}
+	}
+}
+
+func TestSecretUnitParseFailureBeforeHostContact(t *testing.T) {
+	source := filepath.Join(tempDir(t), "source.yaml")
+	if err := os.WriteFile(source, []byte("unit: EXAMPLE_PRIVATE_UNIT_CONTENT\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, dropin := range []bool{false, true} {
+		calls := 0
+		c := inventory.Config{Path: "/etc/systemd/system/richt-secret-test.service", Template: inventory.Template{Inline: inline("[Service]\n{{secret \"unit\"}}\n")}}
+		process := inventory.Process{Unit: "richt-secret-test.service", UnitFile: &c}
+		if dropin {
+			process.UnitFile = nil
+			c.Path += ".d/20-example.conf"
+			process.Overrides = map[string]inventory.Config{"20-example.conf": c}
+		}
+		r := resolved(inventory.Service{Processes: map[string]inventory.Process{"main": process}})
+		r.SecretSources = map[string]inventory.SecretSource{"default": {Type: "yaml", File: source}}
+		r.Hosts[0].Transport = inventory.Transport{Type: "ssh", Host: "example"}
+		e := Local{Connect: func(inventory.Transport) (config.Target, error) {
+			calls++
+			return config.Target{}, errors.New("unexpected contact")
+		}}
+		if _, err := e.Diff(context.Background(), r); err == nil || strings.Contains(err.Error(), "EXAMPLE_PRIVATE") || calls != 0 {
+			t.Fatal("unsafe or late unit parsing failure")
+		}
+	}
+}
+
+func TestSecretSnapshotSharedByConfigsUnitsDropInsAndHosts(t *testing.T) {
+	source := filepath.Join(tempDir(t), "source.yaml")
+	if err := os.WriteFile(source, []byte("command: /bin/true\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	unit := inventory.Config{Path: "/etc/systemd/system/richt-secret-test.service", Template: inventory.Template{Inline: inline("[Service]\nExecReload={{secret \"command\"}}\n")}}
+	r := resolved(inventory.Service{
+		Configs:   map[string]inventory.Config{"main": {Path: "/tmp/richt-secret-test", Template: inventory.Template{Inline: inline(`{{secret "command"}}{{call .rotate}}`)}}},
+		Processes: map[string]inventory.Process{"main": {Unit: "richt-secret-test.service", UnitFile: &unit, ReloadOn: []string{"config.main"}, Overrides: map[string]inventory.Config{"20-reload.conf": {Path: "/etc/systemd/system/richt-secret-test.service.d/20-reload.conf", Template: unit.Template}}}},
+	})
+	r.SecretSources = map[string]inventory.SecretSource{"default": {Type: "yaml", File: source}}
+	r.Hosts[0].Vars = map[string]any{"rotate": func() string {
+		if err := os.WriteFile(source, []byte("command: /bin/false\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		return ""
+	}}
+	h := r.Hosts[0]
+	h.Name = "second"
+	r.Hosts = append(r.Hosts, h)
+	e := Local{Files: &config.Target{Run: func(context.Context, string, ...string) ([]byte, error) {
+		return []byte("missing\n0\n0\n0\n-\n-\n\n"), nil
+	}}, Systemd: fakeSystemd("active", true)}
+	e.Systemd.Glob = func(context.Context, string) ([]string, error) { return nil, nil }
+	p, err := e.Diff(context.Background(), r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, host := range p.Hosts {
+		files, restarts := 0, 0
+		for _, task := range host.Tasks {
+			if task.File != nil {
+				files++
+				if !task.File.Sensitive || !strings.Contains(task.File.Content, "/bin/true") || strings.Contains(task.File.Content, "/bin/false") {
+					t.Fatal("secret snapshot was not shared")
+				}
+			}
+			if task.Process != nil && task.Process.Reaction == "restart" {
+				restarts++
+			}
+		}
+		if files != 3 || restarts != 1 {
+			t.Fatal("owned secret files did not trigger restart", files, restarts)
+		}
+	}
+}
+
+func TestSecretByteChangesTriggerRealReload(t *testing.T) {
+	dir := tempDir(t)
+	source, target := filepath.Join(dir, "source.yaml"), filepath.Join(dir, "target")
+	if err := os.WriteFile(source, []byte("token: example-current\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target, []byte("example-current"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	r := resolved(inventory.Service{Configs: map[string]inventory.Config{"main": {Path: target, Template: inventory.Template{Inline: inline(`{{secret "token"}}`)}}}, Processes: map[string]inventory.Process{"main": {Unit: "richt-secret-test.service", ReloadOn: []string{"config.main"}}}})
+	r.SecretSources = map[string]inventory.SecretSource{"default": {Type: "yaml", File: source}}
+	e := Local{Systemd: fakeSystemd("active", true)}
+	p, err := e.Diff(context.Background(), r)
+	if err != nil || len(p.Hosts[0].Tasks) != 0 {
+		t.Fatal("unchanged secret caused work", err)
+	}
+	if err := os.WriteFile(source, []byte("token: example-next\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	p, err = e.Diff(context.Background(), r)
+	if err != nil || len(p.Hosts[0].Tasks) != 2 || p.Hosts[0].Tasks[1].Process.Reaction != "reload" {
+		t.Fatal("changed secret did not trigger reload", err)
+	}
+}

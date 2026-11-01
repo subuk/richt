@@ -1,6 +1,7 @@
 package plan_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -176,5 +177,84 @@ func TestStoreRejectsSymlinkLockAndHardlinkPlan(t *testing.T) {
 	content, _ := os.ReadFile(other)
 	if string(content) != "preserved" {
 		t.Fatal("lock followed symlink")
+	}
+}
+
+func TestMalformedPlanDiagnosticsDoNotQuotePayload(t *testing.T) {
+	marker := "synthetic-confidential-marker"
+	path := filepath.Join(t.TempDir(), "plan.json")
+	for _, payload := range []string{
+		`{"version":"1.1","hosts":[],"` + marker + `":true}`,
+		`{"version":"1.1","hosts":[{"tasks":[{"file":{"sensitive":true,"mode":"` + marker + `"}}]}]}`,
+		`{"version":"1.1","hosts":[{"tasks":[{"file":{"content":{"` + marker + `":true}}}]}]}`,
+		`{"version":"1.1","hosts":[]} {"` + marker + `":true}`,
+	} {
+		if err := os.WriteFile(path, []byte(payload), 0600); err != nil {
+			t.Fatal("could not write test plan")
+		}
+		if s, err := plan.Open(path); err == nil {
+			s.Close()
+			t.Fatal("malformed plan accepted")
+		} else if strings.Contains(err.Error(), marker) {
+			t.Fatal("plan diagnostic exposed confidential payload")
+		}
+		// A rejected read must release the sidecar lock.
+		if err := plan.Save(path, sample()); err != nil {
+			t.Fatal("rejected plan retained its lock")
+		}
+	}
+}
+
+type sensitiveExecutor struct{ failResolve bool }
+
+func (e sensitiveExecutor) Resolve(t plan.Task) ([]plan.Action, error) {
+	if e.failResolve {
+		return nil, errors.New(t.File.Content)
+	}
+	return []plan.Action{{Kind: "overwrite-file", File: t.File, Description: []string{t.File.Content}}}, nil
+}
+func (sensitiveExecutor) Execute(_ context.Context, a plan.Action) error {
+	return errors.New(a.File.Content)
+}
+
+func TestSensitivePlanOutputAndProgress(t *testing.T) {
+	marker := "synthetic-confidential-marker\ntransformed-marker"
+	p := &plan.Plan{Version: plan.Version, Hosts: []plan.Host{{Name: "local", Transport: "local", Tasks: []plan.Task{
+		{ID: "s/config/main", Operation: "file", File: &plan.FileChange{Path: "/example", Sensitive: true, Content: marker, Patch: marker}, Progress: plan.Progress{Status: "pending", Error: marker}},
+		{ID: "s/config/later", Progress: plan.Progress{Status: "pending"}},
+	}}}}
+	// Keep the second operation nonsensitive while still using the same fake.
+	p.Hosts[0].Tasks[1].File = &plan.FileChange{Path: "/later"}
+	var output bytes.Buffer
+	if err := plan.Display(&output, p, sensitiveExecutor{}); err != nil {
+		t.Fatal("sensitive plan display failed")
+	}
+	if strings.Contains(output.String(), "synthetic-confidential") || !strings.Contains(output.String(), "Content hidden: sensitive") {
+		t.Fatal("sensitive action description or patch was exposed")
+	}
+	for _, apply := range []bool{false, true} {
+		var err error
+		if apply {
+			_, err = plan.Apply(context.Background(), p, sensitiveExecutor{failResolve: true}, nil)
+		} else {
+			err = plan.Display(&output, p, sensitiveExecutor{failResolve: true})
+		}
+		if err == nil || strings.Contains(err.Error(), "synthetic-confidential") {
+			t.Fatal("sensitive resolution diagnostic was not protected")
+		}
+	}
+	result, err := plan.Apply(context.Background(), p, sensitiveExecutor{}, nil)
+	if err == nil || strings.Contains(err.Error(), "synthetic-confidential") {
+		t.Fatal("sensitive execution diagnostic was not protected")
+	}
+	output.Reset()
+	if err := plan.DisplayResult(&output, result); err != nil {
+		t.Fatal("result display failed")
+	}
+	if strings.Contains(output.String(), "synthetic-confidential") || result.Hosts[0].Tasks[1].Status != "blocked" {
+		t.Fatal("sensitive failure or blocked reason was exposed")
+	}
+	if p.Hosts[0].Tasks[0].Progress.Error != "sensitive file operation failed" {
+		t.Fatal("sensitive progress retained confidential payload")
 	}
 }

@@ -218,11 +218,14 @@ func display(w io.Writer, p *Plan, e Executor) error {
 		for _, t := range h.Tasks {
 			actions, err := hostExecutor.Resolve(t)
 			if err != nil {
+				if t.File != nil && t.File.Sensitive {
+					err = errors.New("sensitive file operation is invalid")
+				}
 				return fmt.Errorf("task %s: %w", t.ID, err)
 			}
 			fmt.Fprintf(w, "  %s/%s [%s]\n", t.Service, t.Component, t.Progress.Status)
 			for _, a := range actions {
-				if len(a.Description) > 0 {
+				if len(a.Description) > 0 && !(t.File != nil && t.File.Sensitive) {
 					for _, line := range a.Description {
 						fmt.Fprintf(w, "    %s\n", line)
 					}

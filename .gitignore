@@ -15,5 +15,7 @@
 !.env.example
 *.key
 *.pem
-/secrets/
+# Keep local secret data ignored alongside the source backend package.
+/secrets/*
+!/secrets/*.go
 /inventory.local.yaml

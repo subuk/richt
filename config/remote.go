@@ -80,7 +80,12 @@ func targetFileArguments(f *plan.FileChange) []string {
 
 // Observe computes the patch and attribute changes on the target. Owner/group
 // names remain in the plan; their numeric identities are not frozen locally.
-func (t Target) Observe(ctx context.Context, f *plan.FileChange) (bool, error) {
+func (t Target) Observe(ctx context.Context, f *plan.FileChange) (changed bool, err error) {
+	defer func() {
+		if err != nil && f != nil && f.Sensitive {
+			err = errors.New("sensitive file observation failed")
+		}
+	}()
 	if _, err := (Local{}).Resolve(plan.Task{Operation: "file", File: f}); err != nil {
 		return false, err
 	}
@@ -139,7 +144,7 @@ fi
 	if f.Write {
 		f.Patch = udiff.Unified(f.Path, f.Path, string(old), f.Content)
 	}
-	changed := f.Write || (f.Mode != nil && *f.Mode != uint32(mode))
+	changed = f.Write || (f.Mode != nil && *f.Mode != uint32(mode))
 	changed = changed || (string(fields[4]) != "-" && !bytes.Equal(fields[2], fields[4])) || (string(fields[5]) != "-" && !bytes.Equal(fields[3], fields[5]))
 	changed = changed || (f.SELinux != "" && string(fields[6]) != f.SELinux)
 	return changed, nil
@@ -147,7 +152,12 @@ fi
 
 func (Target) Resolve(task plan.Task) ([]plan.Action, error) { return (Local{}).Resolve(task) }
 
-func (t Target) Execute(ctx context.Context, a plan.Action) error {
+func (t Target) Execute(ctx context.Context, a plan.Action) (err error) {
+	defer func() {
+		if err != nil && a.File != nil && a.File.Sensitive {
+			err = errors.New("sensitive file operation failed")
+		}
+	}()
 	if a.File == nil {
 		return errors.New("missing file action inputs")
 	}
@@ -173,13 +183,23 @@ elif [ -e "$path" ]; then [ -f "$path" ] || exit 71; rm -f -- "$path"; fi
 		if t.RunInput == nil {
 			return errors.New("missing target input runner")
 		}
+		privateWrite := ""
+		if f.Sensitive && f.Mode != nil {
+			privateWrite = "private"
+		}
 		_, err := t.RunInput(ctx, []byte(f.Content), "sh", "-c", `set -eu
 path=$1
 if [ -e "$path" ]; then [ -f "$path" ] || exit 71; fi
-umask 022
+if [ "$2" = private ]; then
+  umask 077
+  : >> "$path"
+  chmod -- 0600 "$path"
+else
+  umask 022
+fi
 cat > "$path"
 sync -f -- "$path"
-`, "richt-file", f.Path)
+`, "richt-file", f.Path, privateWrite)
 		return targetFileError(err)
 	case "set-file-attributes":
 		mode := ""

@@ -32,9 +32,11 @@ func Open(path string) (*Store, error) {
 	l := flock.New(path+".lock", flock.SetPermissions(0600), flock.SetFlag(os.O_CREATE|os.O_RDWR|unix.O_NOFOLLOW))
 	ok, err := l.TryLock()
 	if err != nil {
+		l.Close()
 		return nil, err
 	}
 	if !ok {
+		l.Close()
 		return nil, errors.New("plan is already being applied")
 	}
 	s := &Store{path: path, lock: l}
@@ -62,6 +64,10 @@ func Open(path string) (*Store, error) {
 		if d.Decode(&extra) != io.EOF {
 			err = errors.New("plan contains trailing JSON")
 		}
+	} else {
+		// JSON diagnostics can quote unknown fields, unexpected values, and
+		// field paths. Executable plans contain secrets even when malformed.
+		err = errors.New("invalid plan JSON")
 	}
 	if err == nil {
 		err = p.Validate()
@@ -85,6 +91,7 @@ func Save(path string, p *Plan) error {
 	l := flock.New(path+".lock", flock.SetPermissions(0600), flock.SetFlag(os.O_CREATE|os.O_RDWR|unix.O_NOFOLLOW))
 	ok, err := l.TryLock()
 	if err != nil {
+		l.Close()
 		return err
 	}
 	defer l.Close()

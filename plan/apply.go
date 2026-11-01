@@ -48,6 +48,9 @@ func Apply(ctx context.Context, p *Plan, e Executor, persist func(*Plan) error, 
 		for ti, t := range h.Tasks {
 			actions, err := bound.Resolve(t)
 			if err != nil {
+				if t.File != nil && t.File.Sensitive {
+					err = errors.New("sensitive file operation is invalid")
+				}
 				return Result{}, fmt.Errorf("host %s task %s: %w", h.Name, t.ID, err)
 			}
 			resolved[hi][ti] = actions

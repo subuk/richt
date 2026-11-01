@@ -192,7 +192,12 @@ go run . inventory show -i examples/inventory/richt.yaml \
 
 Named sources currently accept only `{type: yaml, file: <local path>}`. Paths
 are relative to the inventory file. Multiple independent YAML sources are
-allowed. A `default` source is optional at this stage. Inventory commands show
+allowed. A `default` source is required only when a template calls `secret`
+without naming a source. Inventory commands show
 declarations and never read the files or their values, even if a file exists;
 missing source files therefore do not fail inventory validation. Secret lookup
-and template `secret` evaluation belong to plan preparation.
+and template `secret` evaluation belong to plan preparation. Sources are read
+locally on the machine running diff, including for SSH targets. An absent
+service does not render templates or read secret sources. See
+[YAML secrets and sensitive files](secrets.md) for the value schema, function
+arguments, caching, diagnostics, and saved-plan behavior.

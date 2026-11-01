@@ -7,14 +7,18 @@ from pathlib import Path
 import subprocess
 import sys
 import time
+import uuid
 
 binary = str(Path(sys.argv[1] if len(sys.argv) > 1 else './richt').resolve())
 work = Path(sys.argv[2] if len(sys.argv) > 2 else '/root/richt-service-test').resolve()
 work.mkdir(parents=True, exist_ok=True)
 checks = []
+secret_markers = []
 
 def run(*args, ok=True):
     p = subprocess.run(args, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    if any(marker in p.stdout for marker in secret_markers):
+        raise AssertionError('secret marker escaped through command output')
     if ok and p.returncode:
         raise AssertionError(f'{args}: exit {p.returncode}\n{p.stdout}')
     return p
@@ -115,6 +119,29 @@ path,_=diff('stopped',inventory);apply('stopped',path)
 check('stopped target can remain enabled', active()=='inactive' and run('systemctl','is-enabled','richt-demo.service').stdout.strip()=='enabled')
 inventory['services']['demo']['processes']['main']['state']='running'
 path,_=diff('running-again',inventory);apply('running-again',path)
+# Real secret rotation still schedules and executes a process reaction. Values
+# are synthetic runtime canaries; neither the test report nor CLI output prints them.
+secret_markers.extend('RICHT_TEST_'+uuid.uuid4().hex for _ in range(2))
+secret_inventory=copy.deepcopy(inventory)
+secret_source=work/'secret-source.yaml'
+secret_inventory['secret_sources']={'default':dict(type='yaml',file=secret_source.name)}
+secret_inventory['services']['demo']['configs']['main'].update(mode='0600',template=dict(inline='message={{secret "token"}}\n'))
+for index,value in enumerate(secret_markers):
+    with os.fdopen(os.open(secret_source,os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600),'w') as stream:
+        os.fchmod(stream.fileno(),0o600)
+        json.dump(dict(token=value),stream)
+    label='secret-initial' if index==0 else 'secret-rotation'
+    path,tasks=diff(label,secret_inventory)
+    check(label+' hides content and schedules one reload',
+          [task['process']['reaction'] for task in tasks if task['operation']=='systemd']==['reload'] and
+          all(task['file'].get('sensitive') for task in tasks if task['operation']=='file') and
+          'Content hidden' in (work/(label+'.diff')).read_text())
+    if index==1: secret_source.unlink()
+    before=events();apply(label,path)
+    check(label+' applies frozen bytes and executes the reload',
+          Path('/etc/richt-demo.conf').read_text()=='message='+value+'\n' and events()==before+['reload'])
+# The following template removes secret() but must still hide the previous value.
+inventory['services']['demo']['configs']['main']['sensitive']=True
 # Capability exists, but this reload command deliberately fails. Match desired and
 # current drop-in before diff so only config and reload tasks are prepared.
 failing='[Service]\nExecReload=\nExecReload=/bin/false\n'

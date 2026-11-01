@@ -101,7 +101,7 @@ func lifecycle(s Status, c *plan.ProcessChange) (string, error) {
 		return "", fmt.Errorf("unit %s does not exist", c.Unit)
 	}
 	if s.Load != "loaded" {
-		return "", fmt.Errorf("unit %s has unexpected load state %s", c.Unit, s.Load)
+		return "", fmt.Errorf("unit %s has unexpected load state", c.Unit)
 	}
 	switch s.Active {
 	case "inactive", "failed":
@@ -115,7 +115,7 @@ func lifecycle(s Status, c *plan.ProcessChange) (string, error) {
 		}
 		return c.Reaction, nil
 	default:
-		return "", fmt.Errorf("unit %s has unexpected active state %s", c.Unit, s.Active)
+		return "", fmt.Errorf("unit %s has unexpected active state", c.Unit)
 	}
 }
 func enabled(s Status) bool { return s.Enabled == "enabled" || s.Enabled == "enabled-runtime" }
@@ -213,7 +213,7 @@ func (b Backend) Execute(ctx context.Context, a plan.Action) error {
 			return nil
 		}
 		if s.Load != "loaded" {
-			return fmt.Errorf("unit %s has unexpected load state %s", c.Unit, s.Load)
+			return fmt.Errorf("unit %s has unexpected load state", c.Unit)
 		}
 		if enabled(s) == *c.Enabled {
 			return nil
@@ -289,7 +289,7 @@ func (b Backend) Execute(ctx context.Context, a plan.Action) error {
 func ReloadSetting(content string, current bool) (bool, error) {
 	options, err := unit.DeserializeOptions(strings.NewReader(content))
 	if err != nil {
-		return false, fmt.Errorf("parse systemd unit: %w", err)
+		return false, errors.New("invalid systemd unit configuration")
 	}
 	for _, option := range options {
 		if option.Section == "Service" && option.Name == "ExecReload" {
@@ -305,7 +305,17 @@ func ReloadSupported(unitName string, status Status, files []*plan.FileChange) (
 	return (Backend{}).ReloadSupported(context.Background(), unitName, status, files)
 }
 
-func (b Backend) ReloadSupported(ctx context.Context, unitName string, status Status, files []*plan.FileChange) (bool, error) {
+func (b Backend) ReloadSupported(ctx context.Context, unitName string, status Status, files []*plan.FileChange) (supported bool, err error) {
+	defer func() {
+		if err != nil {
+			for _, f := range files {
+				if f != nil && f.Sensitive {
+					err = errors.New("sensitive unit capability check failed")
+					break
+				}
+			}
+		}
+	}()
 	readFile := func(path string) ([]byte, error) {
 		if b.ReadFile != nil {
 			return b.ReadFile(ctx, path)

@@ -53,6 +53,14 @@ IDs are allowed. These rules also apply to local files. The saved file bytes,
 resource requests, task order, and process branches remain fixed; apply does
 not reread inventory/templates or recalculate changes.
 
+YAML secret sources are read on the controller during preparation, including
+when writes use SSH or sudo. Apply and continuation use real saved bytes without
+reading those sources. Secret calls automatically hide the entire old/new file
+diff; explicit `sensitive: true` also protects old bytes when removing a secret
+call or a file. Set target `mode: "0600"` explicitly when required. Saved plans
+contain real secrets and use mode 0600, as do their locks and atomic replacements.
+See [YAML secrets and sensitive files](secrets.md).
+
 ## Parallel execution and continuation
 
 ```sh
@@ -107,11 +115,24 @@ python3 tests/integration/ssh.py --binary ./bin/richt \
 
 Verified on 2026-11-01 with two isolated AlmaLinux 10.2 x86_64 system containers,
 each running its own SSH server, systemd 257, filesystem, and DNF 4.20 RPM
-database, on a disposable SELinux-Enforcing Linux host. The 26 SSH harness
+database, on a disposable SELinux-Enforcing Linux host. The 31 SSH harness
 checks passed with non-root logins, SSH-agent authentication, and noninteractive
-sudo. The 14 local file and 29 local RPM/systemd checks also passed.
+sudo. The 17 local file and 33 local RPM/systemd checks also passed.
 
-Additional checks verified changed live SSH aliases, unknown/changed host-key
+The SSH run includes two independent YAML sources, automatic sensitivity,
+partial failure and continuation after deleting the source files, frozen
+multiline bytes, and mode 0600 on both targets. Secret bytes are checked by
+digest so reports do not contain their values. Both containers and the temporary
+SSH agent were stopped after verification; reports were retained.
+
+A macOS controller also passed six secret checks through a non-root login to
+the enforcing Linux host with explicit sudo: controller-local sources,
+automatically hidden files, a deliberate partial failure after deleting sources,
+continuation that skips successful tasks, frozen multiline content, root-owned
+mode 0600 targets with the requested SELinux label, and private saved progress.
+Its unique temporary inputs and targets were removed after verification.
+
+Earlier KRG-73 checks verified changed live SSH aliases, unknown/changed host-key
 rejection, password-required sudo failure, conflicting SSH session options, and
 local named UID/GID changes after preparation. A macOS controller prepared and
 applied a sensitive file with an explicit SELinux label on the Linux host, then

@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/subuk/richt/plan"
 )
 
 func testInventory(t *testing.T) (string, string) {
@@ -114,6 +117,170 @@ func TestParallelismValidation(t *testing.T) {
 		code, _, err := run(t, "apply", "-y", "--parallelism="+n, "missing-plan.json")
 		if code == 0 || !strings.Contains(err, "parallelism must be positive") {
 			t.Fatal(code, err)
+		}
+	}
+}
+
+func TestCLISecretPlansFreezeInputsAndProtectOutput(t *testing.T) {
+	dir := t.TempDir()
+	parent := filepath.Join(dir, "managed")
+	target := filepath.Join(parent, "config")
+	defaultValue, alternateValue := "synthetic-default-marker\nsecond-line", "synthetic-alternate-marker"
+	defaultSource, alternateSource := filepath.Join(dir, "default.yaml"), filepath.Join(dir, "alternate.yaml")
+	for path, value := range map[string]string{defaultSource: defaultValue, alternateSource: alternateValue} {
+		if err := os.WriteFile(path, []byte("token: "+strconv.Quote(value)+"\n"), 0600); err != nil {
+			t.Fatal("could not write synthetic source")
+		}
+	}
+	inventoryPath, saved := filepath.Join(dir, "inventory.yaml"), filepath.Join(dir, "plan.json")
+	text := fmt.Sprintf(`secret_sources:
+  default: {type: yaml, file: default.yaml}
+  alternate: {type: yaml, file: alternate.yaml}
+services:
+  example:
+    configs:
+      main:
+        path: %s
+        sensitive: false
+        template:
+          inline: '{{ secret "token" }}|{{ secret "token" "alternate" }}|{{ printf "%%q" (secret "token") }}|{{ printf "%%x" (secret "token") }}'
+hosts:
+  - name: local
+    transport: {type: local}
+    services: [{name: example}]
+`, target)
+	if err := os.WriteFile(inventoryPath, []byte(text), 0600); err != nil {
+		t.Fatal("could not write synthetic inventory")
+	}
+	assertSafe := func(stdout, stderr string) {
+		t.Helper()
+		for _, marker := range []string{"synthetic-default-marker", "synthetic-alternate-marker", "second-line", fmt.Sprintf("%x", defaultValue)} {
+			if strings.Contains(stdout+stderr, marker) {
+				t.Fatal("CLI exposed a synthetic confidential value")
+			}
+		}
+	}
+	code, stdout, stderr := run(t, "diff", "-i", inventoryPath, "-o", saved)
+	assertSafe(stdout, stderr)
+	if code != 0 || !strings.Contains(stdout, "Content hidden: sensitive") {
+		t.Fatal("secret diff did not produce a sensitive saved plan")
+	}
+	s, err := plan.Open(saved)
+	if err != nil {
+		t.Fatal("could not inspect saved plan")
+	}
+	want := defaultValue + "|" + alternateValue + "|" + strconv.Quote(defaultValue) + "|" + fmt.Sprintf("%x", defaultValue)
+	f := s.Plan.Hosts[0].Tasks[0].File
+	if !f.Sensitive || f.Content != want || !strings.Contains(f.Patch, defaultValue[:len("synthetic-default-marker")]) {
+		s.Close()
+		t.Fatal("plan did not retain exact prepared secret bytes and sensitivity")
+	}
+	s.Close()
+	for _, path := range []string{saved, saved + ".lock"} {
+		info, err := os.Stat(path)
+		if err != nil || info.Mode().Perm() != 0600 {
+			t.Fatal("saved plan or lock permissions are not restrictive")
+		}
+	}
+	for _, path := range []string{inventoryPath, defaultSource, alternateSource} {
+		if err := os.Remove(path); err != nil {
+			t.Fatal("could not remove preparation source")
+		}
+	}
+	// Fail the frozen task, then repair the filesystem and explicitly continue.
+	if err := os.WriteFile(parent, nil, 0600); err != nil {
+		t.Fatal("could not install failure fixture")
+	}
+	code, stdout, stderr = run(t, "apply", "-y", saved)
+	assertSafe(stdout, stderr)
+	if code == 0 || !strings.Contains(stdout+stderr, "sensitive file operation failed") {
+		t.Fatal("expected a protected sensitive apply failure")
+	}
+	if err := os.Remove(parent); err != nil {
+		t.Fatal("could not remove failure fixture")
+	}
+	code, stdout, stderr = run(t, "apply", "-y", saved)
+	assertSafe(stdout, stderr)
+	if code != 0 {
+		t.Fatal("frozen saved plan could not continue without secret sources")
+	}
+	content, err := os.ReadFile(target)
+	if err != nil || string(content) != want {
+		t.Fatal("saved apply did not write frozen prepared bytes")
+	}
+	code, stdout, stderr = run(t, "apply", "-y", saved)
+	assertSafe(stdout, stderr)
+	if code != 0 || !strings.Contains(stdout, "previously completed") {
+		t.Fatal("saved secret task did not preserve successful progress")
+	}
+	// Explicit sensitivity still hides the old secret when the new template
+	// removes every secret call and no source exists anymore.
+	text = strings.Replace(text, "sensitive: false", "sensitive: true", 1)
+	start := strings.Index(text, "          inline:")
+	end := start + strings.Index(text[start:], "\nhosts:")
+	text = text[:start] + "          inline: 'public replacement'" + text[end:]
+	if err := os.WriteFile(inventoryPath, []byte(text), 0600); err != nil {
+		t.Fatal("could not write replacement inventory")
+	}
+	code, stdout, stderr = run(t, "apply", "-y", "-i", inventoryPath)
+	assertSafe(stdout, stderr)
+	if code != 0 || !strings.Contains(stdout, "Content hidden: sensitive") {
+		t.Fatal("explicit sensitive replacement failed without sources")
+	}
+}
+
+func TestCLIMalformedPlanDoesNotExposeSecretFields(t *testing.T) {
+	marker := "synthetic-confidential-marker"
+	path := filepath.Join(t.TempDir(), "plan.json")
+	if err := os.WriteFile(path, []byte(`{"version":"1.1","hosts":[],"`+marker+`":true}`), 0600); err != nil {
+		t.Fatal("could not write malformed fixture")
+	}
+	code, stdout, stderr := run(t, "apply", "-y", path)
+	if code == 0 || strings.Contains(stdout+stderr, marker) {
+		t.Fatal("malformed plan CLI diagnostic was not protected")
+	}
+}
+
+func TestCLISecretPreparationErrorsDoNotExposeValues(t *testing.T) {
+	dir := t.TempDir()
+	marker := "synthetic-confidential-marker\nsecond-line"
+	if err := os.WriteFile(filepath.Join(dir, "source.yaml"), []byte("token: "+strconv.Quote(marker)+"\n"), 0600); err != nil {
+		t.Fatal("could not write synthetic source")
+	}
+	path := filepath.Join(dir, "inventory.yaml")
+	for _, source := range []string{
+		`{{printf "%x" (secret "token")}}{{call (secret "token")}}`,
+		`{{secret "missing-key"}}`,
+		`{{secret "token" "missing-source"}}`,
+	} {
+		text := fmt.Sprintf(`secret_sources:
+  default: {type: yaml, file: source.yaml}
+services:
+  example:
+    configs:
+      main:
+        path: %s
+        template:
+          inline: '%s'
+hosts:
+  - name: local
+    transport: {type: local}
+    services: [{name: example}]
+`, filepath.Join(dir, "target"), source)
+		if err := os.WriteFile(path, []byte(text), 0600); err != nil {
+			t.Fatal("could not write synthetic inventory")
+		}
+		code, stdout, stderr := run(t, "diff", "-i", path)
+		if code == 0 {
+			t.Fatal("invalid secret preparation succeeded")
+		}
+		for _, value := range []string{"synthetic-confidential-marker", "second-line", fmt.Sprintf("%x", marker)} {
+			if strings.Contains(stdout+stderr, value) {
+				t.Fatal("preparation error exposed a confidential value or transformation")
+			}
+		}
+		if _, err := os.Stat(filepath.Join(dir, "target")); !os.IsNotExist(err) {
+			t.Fatal("failed preparation changed the target")
 		}
 	}
 }

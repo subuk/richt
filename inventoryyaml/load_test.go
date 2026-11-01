@@ -73,7 +73,8 @@ processes:
         template: {inline: "[Service]\nRestart=always\n"}
 `)
 	secret := filepath.Join(dir, "secrets/not-readable.yaml")
-	write(t, secret, "credential: NEVER_PRINT_SECRET\n")
+	// Invalid source contents must not affect inventory-only inspection.
+	write(t, secret, "credential: [NEVER_PRINT_SECRET\n")
 	if err := os.Chmod(secret, 0000); err != nil {
 		t.Fatal(err)
 	}

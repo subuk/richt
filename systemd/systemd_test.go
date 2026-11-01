@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -151,5 +154,51 @@ func TestReloadSupportedReadsTargetFiles(t *testing.T) {
 	yes, err = b.ReloadSupported(context.Background(), "unit.service", Status{Fragment: "/target/unit.service", DropIns: []string{"/target/10-reset.conf"}}, []*plan.FileChange{{Path: "/etc/systemd/system/unit.service.d/20-reload.conf", Content: "[Service]\nExecReload=/bin/true\n"}})
 	if err != nil || !yes {
 		t.Fatal(yes, err)
+	}
+}
+
+func TestUnitDiagnosticsDoNotExposeContentOrUnexpectedState(t *testing.T) {
+	const private = "EXAMPLE_PRIVATE_UNIT_VALUE"
+	if _, err := ReloadSetting("[Service]\n"+private+"\n", false); err == nil || strings.Contains(err.Error(), private) {
+		t.Fatal("unsafe parser diagnostic")
+	}
+	for _, property := range []string{"LoadState", "ActiveState"} {
+		b := Backend{Run: func(context.Context, string, ...string) ([]byte, error) {
+			return []byte("LoadState=loaded\nActiveState=active\n" + property + "=" + private + "\n"), nil
+		}}
+		_, _, err := b.NeedsChange(context.Background(), &plan.ProcessChange{Unit: "demo.service", State: "running", Timeout: "1s"})
+		if err == nil || strings.Contains(err.Error(), private) {
+			t.Fatal("unsafe systemd state diagnostic")
+		}
+	}
+	b := Backend{Glob: func(context.Context, string) ([]string, error) {
+		return nil, errors.New(private)
+	}}
+	_, err := b.ReloadSupported(context.Background(), "demo.service", Status{}, []*plan.FileChange{{Path: "/etc/systemd/system/demo.service", Sensitive: true}})
+	if err == nil || strings.Contains(err.Error(), private) {
+		t.Fatal("unsafe sensitive capability diagnostic")
+	}
+}
+
+func TestDefaultLocalCommandFailureDoesNotExposeUnitOutput(t *testing.T) {
+	dir := t.TempDir()
+	script := "#!/bin/sh\nprintf 'EXAMPLE_PRIVATE_UNIT_STDOUT\\n'\nprintf 'EXAMPLE_PRIVATE_UNIT_STDERR\\n' >&2\nprintf '%s\\n' \"$*\" >&2\nexit 42\n"
+	if err := os.WriteFile(filepath.Join(dir, "systemctl"), []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+	// Exercise the actual default command boundary instead of a fake runner.
+	err := (Backend{}).Execute(context.Background(), plan.Action{Kind: "systemd", Process: &plan.ProcessChange{Unit: "EXAMPLE_PRIVATE_ARGUMENT.service", State: "running", Timeout: "5s"}})
+	if err == nil {
+		t.Fatal("expected process command failure")
+	}
+	for _, diagnostic := range []string{fmt.Sprint(err), fmt.Sprintf("%+v", err)} {
+		if strings.Contains(diagnostic, "EXAMPLE_PRIVATE") {
+			t.Fatal("systemd diagnostic exposed unit input or output")
+		}
+	}
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) || exit.ExitCode() != 42 || len(exit.Stderr) != 0 {
+		t.Fatal("systemd error retained output or lost exit status")
 	}
 }

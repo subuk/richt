@@ -120,6 +120,14 @@ processes:
 default path is `/etc/systemd/system/<unit>.d/<key>`. Explicit paths must match
 these locations. Templates are resolved relative to the service definition.
 
+Calling `secret` automatically makes a unit or drop-in sensitive, and the whole
+file diff is hidden. Real secret changes still schedule daemon reload and the
+normal process reaction. Set `mode: "0600"` when its target bytes must be private;
+sensitivity alone does not change target permissions. Use `sensitive: true`
+explicitly to protect old bytes after removing a secret call or declaring the
+service absent. Absent services do not open templates or secret sources. See
+[YAML secrets and sensitive files](secrets.md).
+
 Changes to owned units or drop-ins appear in the file diff. Richt schedules
 `systemctl daemon-reload` before process tasks, then a restart reaction for the
 process whose definition changed (or only start when it is stopped). Managed
@@ -182,8 +190,11 @@ with a previously absent repo config, exact update/downgrade, no-op diff,
 unversioned policy, merged reactions, no extra restart after start, independent
 enablement and stopped state, multiple processes with `after`, command failure,
 a shared command/wait timeout, unsupported reload, persisted process resume,
-YUM 4 exact install/removal, and complete declared-resource removal. The full
-harness passed all 29 checks on the environment listed above. Plans, displayed diffs, apply output,
+YUM 4 exact install/removal, and complete declared-resource removal. It also
+checks initial secret rendering and secret rotation, actual reload reactions,
+redacted file display, and frozen apply after deleting the secret source.
+The full harness passed all 33 checks on 2026-11-01 on the environment listed
+above. Plans, displayed diffs, apply output,
 and `acceptance.json` remain in the work directory. Application event traces
 are deliberately retained. Fixture scripts require only standard Python and
 shell facilities in addition to the listed RPM build tools.

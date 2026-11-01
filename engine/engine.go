@@ -12,6 +12,7 @@ import (
 	"github.com/subuk/richt/inventory"
 	"github.com/subuk/richt/plan"
 	"github.com/subuk/richt/rpm"
+	"github.com/subuk/richt/secrets"
 	"github.com/subuk/richt/systemd"
 	"github.com/subuk/richt/transport"
 )
@@ -124,11 +125,12 @@ func (e Local) Diff(ctx context.Context, r *inventory.Resolved) (*plan.Plan, err
 		return nil, errors.New("resolved inventory is nil")
 	}
 	prepared := make([][]preparedService, len(r.Hosts))
+	lookup := secrets.New(r.SecretSources)
 	for hi, h := range r.Hosts {
 		for _, s := range h.Services {
 			ps := preparedService{service: s, binaries: map[string]*plan.RPMChange{}}
 			add := func(name, ref, process string, c inventory.Config) error {
-				f, err := config.Prepare(c, s.State, h.Vars)
+				f, err := config.Prepare(c, s.State, h.Vars, lookup)
 				if err != nil {
 					return fmt.Errorf("host %s service %s %s: %w", h.Name, s.Name, name, err)
 				}
@@ -309,6 +311,14 @@ func (e Local) observe(ctx context.Context, ps preparedService) ([]plan.Task, er
 	}
 	for _, name := range order {
 		v := s.Definition.Processes[name]
+		var unitFiles []*plan.FileChange
+		sensitiveUnit := false
+		for _, f := range ps.files {
+			if f.process == name {
+				unitFiles = append(unitFiles, f.file)
+				sensitiveUnit = sensitiveUnit || f.file.Sensitive
+			}
+		}
 		state := v.State
 		if state == "" {
 			state = "running"
@@ -342,16 +352,13 @@ func (e Local) observe(ctx context.Context, ps preparedService) ([]plan.Task, er
 		}
 		_, status, err := e.Systemd.NeedsChange(ctx, c)
 		if err != nil {
+			if sensitiveUnit {
+				err = errors.New("sensitive unit observation failed")
+			}
 			return nil, err
 		}
 		// Reload declarations are capabilities, even when no input currently changes.
 		if !absent && len(v.ReloadOn) > 0 {
-			var unitFiles []*plan.FileChange
-			for _, f := range ps.files {
-				if f.process == name {
-					unitFiles = append(unitFiles, f.file)
-				}
-			}
 			canReload, err := e.Systemd.ReloadSupported(ctx, v.Unit, status, unitFiles)
 			if err != nil {
 				return nil, fmt.Errorf("process %s: %w", name, err)

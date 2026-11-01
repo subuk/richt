@@ -9,7 +9,9 @@ its plans, command output, and acceptance.json in the chosen work directory.
 """
 
 import argparse
+import hashlib
 import json
+import os
 import re
 import shlex
 import subprocess
@@ -39,6 +41,7 @@ def main():
     root = "/var/tmp/richt-ssh-" + uuid.uuid4().hex[:12]
     aliases = {"a-target": args.host_a, "b-target": args.host_b}
     checks = []
+    secret_markers = []
     commands = 0
     report = {"targets": aliases, "remote_root": root, "checks": checks, "status": "running"}
 
@@ -46,6 +49,8 @@ def main():
         nonlocal commands
         result = subprocess.run([str(x) for x in argv], text=True, stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT, timeout=180)
+        if any(marker in result.stdout for marker in secret_markers):
+            raise AssertionError("secret marker escaped through command output")
         commands += 1
         (work / f"command-{commands:03}.log").write_text(
             "$ " + shlex.join([str(x) for x in argv]) + "\n" + result.stdout)
@@ -254,6 +259,49 @@ def main():
         check("explicit continuation skips successful tasks", "previously completed" in continued.stdout and
               remote(args.host_a, "cat " + shlex.quote(root + "/progress-first")).stdout == "external change\n" and
               all(task["progress"]["status"] == "success" for host in json.loads(target.read_text())["hosts"] for task in host["tasks"]))
+
+        # The only secret inputs here are synthetic runtime canaries. Compare
+        # remote bytes by digest so neither raw values nor commands contain them.
+        secret_markers.extend("RICHT_TEST_" + uuid.uuid4().hex for _ in range(3))
+        default_value = secret_markers[0] + "\n" + secret_markers[1] + "\n"
+        alternate_value = secret_markers[2]
+        source_default = work / "secrets-default.yaml"
+        source_alternate = work / "secrets-alternate.yaml"
+        for source_path, value in [(source_default, default_value), (source_alternate, alternate_value)]:
+            with os.fdopen(os.open(source_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w") as stream:
+                os.fchmod(stream.fileno(), 0o600)
+                json.dump({"database": {"password": value}}, stream)
+        secret_files = file_inventory({
+            "a-first": dict(config(root + "/secret-first", '{{secret "database.password"}}'), mode="0600"),
+            "b-fail": dict(config(root + "/secret-second", '{{secret "database.password" "alternate"}}'), mode="0600")})
+        secret_files["secret_sources"] = {
+            "default": {"type": "yaml", "file": source_default.name},
+            "alternate": {"type": "yaml", "file": source_alternate.name}}
+        _, target, prepared = diff("secrets", secret_files)
+        check("SSH plans retain independent sources and automatic sensitivity", all(
+            [task["file"]["content"] for task in host["tasks"]] == [default_value, alternate_value] and
+            all(task["file"].get("sensitive") for task in host["tasks"])
+            for host in prepared["hosts"]))
+        remote(args.host_a, "mkdir " + shlex.quote(root + "/secret-second"))
+        failed = apply("secrets-failure", target, parallelism=1, ok=False)
+        saved_secrets = json.loads(target.read_text())
+        check("SSH secret failure preserves completed host and task progress", failed.returncode != 0 and
+              [task["progress"]["status"] for task in saved_secrets["hosts"][0]["tasks"]] == ["success", "error"] and
+              all(task["progress"]["status"] == "success" for task in saved_secrets["hosts"][1]["tasks"]))
+        source_default.unlink()
+        source_alternate.unlink()
+        remote(args.host_a, "rmdir " + shlex.quote(root + "/secret-second"))
+        resumed = apply("secrets-resume-without-sources", target)
+        check("SSH secret continuation skips successes without source files", "previously completed" in resumed.stdout)
+        expected_digests = [hashlib.sha256(value.encode()).hexdigest() for value in [default_value, alternate_value]]
+        check("SSH sudo writes frozen multiline secret bytes", all(
+            [line.split()[0] for line in remote(alias, "sha256sum -- " + shlex.quote(root + "/secret-first") +
+             " " + shlex.quote(root + "/secret-second")).stdout.splitlines()] == expected_digests
+            for alias in aliases.values()))
+        check("SSH secret files retain requested restrictive modes", all(
+            remote(alias, "stat -c '%a' -- " + shlex.quote(root + "/secret-first") + " " +
+                   shlex.quote(root + "/secret-second")).stdout.splitlines() == ["600", "600"]
+            for alias in aliases.values()))
 
         # Prepare reachable hosts, then change only saved connection data. This
         # simulates a target becoming unreachable after preparation, while

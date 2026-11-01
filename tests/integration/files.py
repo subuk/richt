@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+import uuid
 parser = argparse.ArgumentParser(description="Run disposable Linux file, SELinux, and terminal acceptance checks.")
 parser.add_argument("--binary", required=True, help="Path to the built richt binary")
 parser.add_argument("--work-root", default="/tmp", help="Existing directory for a unique disposable test directory")
@@ -26,8 +27,11 @@ inv = base + "/inventory.yaml"
 saved = base + "/plan.json"
 source = base + "/config.tmpl"
 checks=[]
+secret_markers=[]
 def run(args,ok=True):
  p=subprocess.run([cli]+args,text=True,capture_output=True)
+ if any(marker in p.stdout+p.stderr for marker in secret_markers):
+  raise RuntimeError('secret marker escaped through CLI output')
  if (p.returncode==0)!=ok: raise RuntimeError((args,p.returncode,p.stdout,p.stderr))
  return p.stdout+p.stderr
 def write_inv(configs, state='present'):
@@ -79,6 +83,47 @@ try:
     run(['apply','-y',saved],False);p=json.load(open(saved));assert p['hosts'][0]['tasks'][0]['progress']['status']=='success';assert p['hosts'][0]['tasks'][1]['progress']['status']=='error';os.rmdir(second);open(first,'w').write('manual-after-first-success');run(['apply','-y',saved]);assert open(first).read()=='manual-after-first-success';assert open(second).read()=='message=example-one\n';checks.append('second task failure persists first success and explicit resume skips first task')
     # sensitive
     open(second,'w').write('OLD_EXAMPLE_PRIVATE\n');open(source,'w').write('NEW_EXAMPLE_PRIVATE\n');write_inv([('main',second,'        sensitive: true\n')]);out=run(['diff','-i',inv,'-o',saved]);assert 'EXAMPLE_PRIVATE' not in out and 'Content hidden' in out;run(['apply','-y',saved]);checks.append('sensitive output hides both patch sides')
+    # Synthetic canaries are generated at runtime, never included in reports.
+    secret_markers.extend('RICHT_TEST_'+uuid.uuid4().hex for _ in range(3))
+    default_value=secret_markers[0]+'\n'+secret_markers[1]+'\n'
+    production_value=secret_markers[2]
+    default_source=base+'/default.yaml';production_source=base+'/production.yaml'
+    for filename,value in [(default_source,default_value),(production_source,production_value)]:
+     with open(filename,'w') as f: json.dump({'database':{'password':value}},f)
+     os.chmod(filename,0o600)
+    first_secret=target+'/secret-first';second_secret=target+'/secret-second'
+    secret_config=lambda path,template: dict(path=path,mode='0600',selinux='system_u:object_r:etc_t:s0',template=dict(inline=template))
+    secret_inventory=dict(secret_sources={
+      'default':dict(type='yaml',file='default.yaml'),
+      'production':dict(type='yaml',file='production.yaml')},
+      services=dict(example=dict(configs={
+       'a':secret_config(first_secret,'{{secret "database.password"}}'),
+       'b':secret_config(second_secret,'{{secret "database.password" "production"}}')})),
+      hosts=[dict(name='local',transport=dict(type='local'),services=[dict(name='example')])])
+    with open(inv,'w') as f: json.dump(secret_inventory,f)
+    out=run(['diff','-i',inv,'-o',saved])
+    tasks=json.load(open(saved))['hosts'][0]['tasks']
+    assert all(task['file']['sensitive'] for task in tasks) and out.count('Content hidden')==2
+    assert [task['file']['content'] for task in tasks]==[default_value,production_value]
+    assert os.stat(saved).st_mode&0o777==0o600 and os.stat(saved+'.lock').st_mode&0o777==0o600
+    checks.append('two independent YAML sources freeze multiline bytes and sensitivity in a private plan')
+    os.mkdir(second_secret)
+    run(['apply','-y',saved],False)
+    assert [task['progress']['status'] for task in json.load(open(saved))['hosts'][0]['tasks']]==['success','error']
+    assert open(first_secret).read()==default_value
+    os.remove(default_source);os.remove(production_source);os.remove(inv)
+    os.rmdir(second_secret)
+    open(first_secret,'w').write('manual-after-secret-success\n')
+    out=run(['apply','-y',saved])
+    assert 'previously completed' in out and open(first_secret).read()=='manual-after-secret-success\n'
+    assert open(second_secret).read()==production_value and os.stat(second_secret).st_mode&0o777==0o600
+    assert 'system_u:object_r:etc_t:s0' in subprocess.check_output(['ls','-Z',second_secret],text=True)
+    checks.append('secret plan resumes without sources, skips successes, and writes frozen bytes with mode and SELinux')
+    secret_inventory['services']['example']['configs']={'main':dict(path=second_secret,sensitive=True,template=dict(inline='public replacement\n'))}
+    with open(inv,'w') as f: json.dump(secret_inventory,f)
+    out=run(['diff','-i',inv,'-o',saved]);assert 'Content hidden' in out
+    run(['apply','-y',saved]);assert open(second_secret).read()=='public replacement\n'
+    checks.append('explicit sensitivity hides an old secret after removing the secret call')
     print(json.dumps({'checks':checks,'count':len(checks),'selinux':subprocess.check_output(['getenforce'],text=True).strip()},indent=2))
 finally:
     if args.keep:

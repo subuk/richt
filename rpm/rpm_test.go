@@ -3,7 +3,12 @@ package rpm
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/subuk/richt/plan"
@@ -69,5 +74,65 @@ func TestQueryFailureAndManagerVersion(t *testing.T) {
 		if b.CheckManager(context.Background(), "dnf") == nil {
 			t.Fatal("accepted", v)
 		}
+	}
+}
+
+func TestLocalCommandErrorsDoNotRetainArgumentsOrOutput(t *testing.T) {
+	const private = "EXAMPLE_PRIVATE_COMMAND_VALUE"
+	out, err := Run(context.Background(), "sh", "-c", `printf '%s stdout\n' "$1"; printf '%s stderr\n' "$1" >&2; exit 42`, "richt-test", private)
+	if err == nil || len(out) != 0 {
+		t.Fatal("expected command failure without output")
+	}
+	for _, diagnostic := range []string{fmt.Sprint(err), fmt.Sprintf("%+v", err)} {
+		if strings.Contains(diagnostic, private) || strings.Contains(diagnostic, "printf") || strings.Contains(diagnostic, "stdout") || strings.Contains(diagnostic, "stderr") {
+			t.Fatal("command diagnostic exposed sensitive inputs")
+		}
+	}
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) || exit.ExitCode() != 42 || len(exit.Stderr) != 0 {
+		t.Fatal("exit status was lost or retained stderr")
+	}
+	_, err = Run(context.Background(), "/does-not-exist/"+private)
+	if err == nil || strings.Contains(fmt.Sprintf("%+v", err), private) {
+		t.Fatal("executable path leaked")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err = Run(ctx, "sh", "-c", "exit 0"); !errors.Is(err, context.Canceled) {
+		t.Fatal("cancellation was not preserved")
+	}
+}
+
+func TestLocalCommandReturnsOnlyStdout(t *testing.T) {
+	out, err := Run(context.Background(), "sh", "-c", `printf 'expected'; printf 'EXAMPLE_PRIVATE_STDERR' >&2`)
+	if err != nil || string(out) != "expected" {
+		t.Fatal("stderr contaminated successful stdout")
+	}
+}
+
+func TestDefaultRPMCommandFailureDoesNotExposePackageOutput(t *testing.T) {
+	dir := t.TempDir()
+	script := "#!/bin/sh\nprintf 'EXAMPLE_PRIVATE_RPM_STDOUT\\n'\nprintf 'EXAMPLE_PRIVATE_RPM_STDERR\\n' >&2\nprintf '%s\\n' \"$*\" >&2\nexit 42\n"
+	if err := os.WriteFile(filepath.Join(dir, "dnf"), []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+	err := (Backend{}).Execute(context.Background(), plan.Action{Kind: "rpm", RPM: &plan.RPMChange{Manager: "dnf", Package: "EXAMPLE_PRIVATE_PACKAGE", State: "present"}})
+	if err == nil || strings.Contains(fmt.Sprintf("%v %+v", err, err), "EXAMPLE_PRIVATE") {
+		t.Fatal("RPM diagnostic exposed command inputs or output")
+	}
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) || exit.ExitCode() != 42 || len(exit.Stderr) != 0 {
+		t.Fatal("RPM error retained output or lost exit status")
+	}
+}
+
+func TestManagerVersionDiagnosticDoesNotExposeOutput(t *testing.T) {
+	b := Backend{Run: func(context.Context, string, ...string) ([]byte, error) {
+		return []byte("EXAMPLE_PRIVATE_VERSION_OUTPUT\n"), nil
+	}}
+	err := b.CheckManager(context.Background(), "dnf")
+	if err == nil || strings.Contains(fmt.Sprintf("%+v", err), "EXAMPLE_PRIVATE") {
+		t.Fatal("manager diagnostic exposed command output")
 	}
 }

@@ -2,6 +2,8 @@ package config
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -153,5 +155,94 @@ func TestTargetRejectsDirectoryAndChecksMissingOwnerBeforeCreate(t *testing.T) {
 	}
 	if _, err := os.Stat(f.Path); !os.IsNotExist(err) {
 		t.Fatal("observation created target")
+	}
+}
+
+func TestSensitiveTargetErrorsAndInput(t *testing.T) {
+	marker := "synthetic-confidential-marker\nsecond-line"
+	f := &plan.FileChange{Path: "/example", State: "present", Content: marker, Sensitive: true, Write: true}
+	target := Target{
+		Run: func(context.Context, string, ...string) ([]byte, error) { return nil, errors.New(marker) },
+		RunInput: func(_ context.Context, input []byte, name string, args ...string) ([]byte, error) {
+			if string(input) != marker {
+				t.Fatal("prepared file content was not sent through stdin")
+			}
+			if strings.Contains(name+strings.Join(args, " "), marker) {
+				t.Fatal("file content was included in target command arguments")
+			}
+			return nil, errors.New(marker)
+		},
+	}
+	if _, err := target.Observe(context.Background(), f); err == nil || err.Error() != "sensitive file observation failed" {
+		t.Fatal("sensitive target observation error was not protected")
+	}
+	for _, kind := range []string{"create-parent-directories", "overwrite-file", "set-file-attributes", "remove-file"} {
+		if err := target.Execute(context.Background(), plan.Action{Kind: kind, File: f}); err == nil || err.Error() != "sensitive file operation failed" {
+			t.Fatal("sensitive target command error was not protected")
+		}
+	}
+}
+
+func TestSensitiveTargetExplicitModeRestrictsBeforeWrite(t *testing.T) {
+	target, dir := shellTarget(t)
+	for _, existing := range []bool{false, true} {
+		for _, finalMode := range []uint32{0640, 0400, 0000} {
+			t.Run(fmt.Sprintf("existing-%t-mode-%04o", existing, finalMode), func(t *testing.T) {
+				path := filepath.Join(dir, fmt.Sprintf("target-%t-%04o", existing, finalMode))
+				var before os.FileInfo
+				if existing {
+					if err := os.WriteFile(path, []byte("old synthetic content"), 0666); err != nil {
+						t.Fatal("could not create fixture")
+					}
+					if err := os.Chmod(path, 0666); err != nil {
+						t.Fatal("could not set fixture mode")
+					}
+					before, _ = os.Stat(path)
+				}
+				f := &plan.FileChange{Path: path, State: "present", Content: "synthetic private content", Sensitive: true, Mode: &finalMode, Write: true}
+				if err := target.Execute(context.Background(), plan.Action{Kind: "overwrite-file", File: f}); err != nil {
+					t.Fatal("private target overwrite failed")
+				}
+				written, err := os.Stat(path)
+				if err != nil || written.Mode().Perm() != 0600 {
+					t.Fatal("target was not private immediately after overwrite")
+				}
+				if existing && !os.SameFile(before, written) {
+					t.Fatal("target overwrite replaced the existing inode")
+				}
+				content, err := os.ReadFile(path)
+				if err != nil || string(content) != f.Content {
+					t.Fatal("target overwrite did not retain prepared content")
+				}
+				if err := target.Execute(context.Background(), plan.Action{Kind: "set-file-attributes", File: f}); err != nil {
+					t.Fatal("target final attributes failed")
+				}
+				final, err := os.Stat(path)
+				if err != nil || final.Mode().Perm() != os.FileMode(finalMode) || !os.SameFile(written, final) {
+					t.Fatal("target final attributes did not restore requested mode on the same inode")
+				}
+			})
+		}
+	}
+}
+
+func TestSensitiveTargetPermissionFailurePrecedesContentReplacement(t *testing.T) {
+	target, dir := shellTarget(t)
+	path := filepath.Join(dir, "target")
+	const oldContent = "old synthetic content"
+	if err := os.WriteFile(path, []byte(oldContent), 0644); err != nil {
+		t.Fatal("could not create fixture")
+	}
+	if err := os.WriteFile(filepath.Join(dir, "chmod"), []byte("#!/bin/sh\nprintf 'synthetic-confidential-marker' >&2\nexit 1\n"), 0700); err != nil {
+		t.Fatal("could not install permission failure fixture")
+	}
+	mode := uint32(0600)
+	f := &plan.FileChange{Path: path, State: "present", Content: "synthetic-confidential-marker", Sensitive: true, Mode: &mode, Write: true}
+	if err := target.Execute(context.Background(), plan.Action{Kind: "overwrite-file", File: f}); err == nil || err.Error() != "sensitive file operation failed" {
+		t.Fatal("permission failure diagnostic was not protected")
+	}
+	content, err := os.ReadFile(path)
+	if err != nil || string(content) != oldContent {
+		t.Fatal("content changed before restrictive permissions succeeded")
 	}
 }

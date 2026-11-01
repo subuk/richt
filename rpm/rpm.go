@@ -11,17 +11,28 @@ import (
 
 	"github.com/subuk/richt/inventory"
 	"github.com/subuk/richt/plan"
+	"github.com/subuk/richt/transport"
 )
 
 type Runner func(context.Context, string, ...string) ([]byte, error)
 
 func Run(ctx context.Context, name string, args ...string) ([]byte, error) {
-	out, err := exec.CommandContext(ctx, name, args...).CombinedOutput()
+	client := transport.Client{Connection: inventory.Transport{Type: "local"}}
+	out, err := client.Run(ctx, name, args...)
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		return nil, fmt.Errorf("%s %s: %w: %s", name, strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+		// Preserve exit status without retaining stderr, command arguments, or
+		// executable paths, any of which may contain secrets from target inputs.
+		var exit *exec.ExitError
+		if errors.As(err, &exit) {
+			return nil, fmt.Errorf("local command failed: %w", &exec.ExitError{ProcessState: exit.ProcessState})
+		}
+		if errors.Is(err, exec.ErrNotFound) {
+			return nil, fmt.Errorf("local command failed: %w", exec.ErrNotFound)
+		}
+		return nil, errors.New("local command failed")
 	}
 	return out, nil
 }
@@ -36,7 +47,7 @@ func (b Backend) CheckManager(ctx context.Context, manager string) error {
 	}
 	line, _, _ := strings.Cut(strings.TrimSpace(string(out)), "\n")
 	if !strings.HasPrefix(line, "4.") {
-		return fmt.Errorf("%s: supported package manager is DNF 4 (including YUM 4 compatibility); got %q", manager, line)
+		return errors.New("supported package manager is DNF 4 (including YUM 4 compatibility)")
 	}
 	return nil
 }

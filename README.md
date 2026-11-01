@@ -8,8 +8,9 @@ weighted tags.
 Local and SSH execution support DNF4/YUM4, systemd, file ownership and
 permissions, and SELinux contexts. SSH uses the system client and current
 `ssh_config`; explicit sudo uses noninteractive authentication. Integration checks run on AlmaLinux 10.2 amd64 with SELinux
-Enforcing. Inventory inspection and SSH control also run on macOS. Secret backends remain
-deferred: templates calling `secret` fail during preparation.
+Enforcing. Inventory inspection and SSH control also run on macOS. Local YAML
+secret sources resolve during preparation; templates select a default or named
+source and automatically hide the complete file diff.
 
 ## Build and install
 
@@ -53,8 +54,8 @@ On a disposable Linux machine, try the local file example. Its managed target is
 
 `diff` displays changes without modifying managed resources. A saved JSON plan
 contains prepared contents, patches, operations, and task progress. Applying it
-does not reread inventory or templates, recompute changes, or check whether file
-contents changed since diff. Review the displayed operations before confirming.
+does not reread inventory, templates, or secret sources, recompute changes, or
+check whether file contents changed since diff. Review the displayed operations before confirming.
 Without `-y`, apply requires a terminal and explicit agreement.
 
 Apply handles up to 20 hosts concurrently; `--parallelism N` overrides the limit
@@ -64,8 +65,10 @@ successful ones. A failure stops that host; other hosts continue. Progress is
 saved atomically under a same-plan lock. A progress save failure stops further
 actions; in-flight operations are awaited. Applying without a plan file keeps progress only in memory. Host, tag,
 and service filters are available when building plans and rejected for saved
-plans. `sensitive: true` hides the entire file diff and file error details, while
-the executable JSON retains the real content.
+plans. Calling `secret` or setting `sensitive: true` hides the entire file diff
+and file error details. The executable JSON retains real rendered content and
+patches, so keep plans private. Plan and lock files use mode 0600; set target
+files to `mode: "0600"` explicitly when needed.
 
 See the focused guides and examples:
 
@@ -73,6 +76,8 @@ See the focused guides and examples:
   — [two-host inventory example](examples/inventory/richt.yaml).
 - [File templates, SELinux, confirmation, and saved plans](docs/files.md)
   — [local file example](examples/files/inventory.yaml).
+- [YAML secrets, sensitive files, and frozen inputs](docs/secrets.md)
+  — [isolated two-source example](examples/secrets/README.md).
 - [SSH, sudo, and parallel apply](docs/ssh.md)
   — [two-host SSH example](examples/ssh/inventory.yaml).
 - [RPM packages, systemd reactions, and service removal](docs/services.md)
@@ -100,7 +105,10 @@ It allocates unique directories below the supplied roots, verifies file and
 terminal behavior, and removes its own directories afterwards. Add `--keep` to
 retain them. Package and systemd integration instructions are in the
 [service guide](docs/services.md); use a disposable VM with a snapshot for those
-stateful scenarios.
+stateful scenarios. On 2026-11-01, the expanded suites passed 17 file, 33
+RPM/systemd, and 31 SSH/sudo checks on AlmaLinux 10.2, including YAML secrets,
+frozen inputs, real process reactions, and explicit continuation. See the
+guides for the tested platform and scope.
 
 ## Code organization
 
