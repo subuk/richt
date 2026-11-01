@@ -2,11 +2,17 @@ key_file = "/var/lib/vmango/authorized_keys"
 
 api {
     listen = {{ printf "%q" .vmango.listen }}
+    jwt_signing_key_file = "/var/lib/vmango/jwt_signing_key"
+    console_signing_key_file = "/var/lib/vmango/console_signing_key"
+    session_dir = "/var/lib/vmango/sessions"
+    token_dir = "/var/lib/vmango/tokens"
 }
 
 cloud "local" {
     name = {{ printf "%q" .vmango.cloud_name }}
+    zone "local" {}
     host "local" {
+        zone = "local"
         uri = {{ printf "%q" .vmango.libvirt_uri }}
     }
 }

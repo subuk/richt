@@ -1,0 +1,20 @@
+{
+  "name": "richt-website",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/hugo.mjs build",
+    "serve": "node scripts/hugo.mjs serve",
+    "check": "node scripts/check.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "hugo-extended": "0.163.0",
+    "lunr": "2.3.9",
+    "sass-embedded": "1.105.0"
+  },
+  "workspaces": [
+    "packages/hugoautogen"
+  ]
+}

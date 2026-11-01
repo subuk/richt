@@ -8,8 +8,8 @@ configs:
   main:
     path: /etc/vmango.conf
     owner: root
-    group: vmango
-    mode: "0640"
+    group: root
+    mode: "0644"
     template:
       file: ../templates/vmango.conf.gotmpl
 

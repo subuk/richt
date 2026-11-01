@@ -7,7 +7,7 @@ tags:
         libvirt_uri: "qemu:///system"
         cloud_name: Local
       vmango_repository:
-        target: epel-9
+        target: rhel-10
   home:
     weight: 20
     vars:

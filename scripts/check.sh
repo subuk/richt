@@ -2,7 +2,7 @@
 set -eu
 cd "$(dirname "$0")/.."
 GO=${GO:-go}
-unformatted=$(find . -name '*.go' -not -path './.git/*' -not -path './vendor/*' -exec gofmt -l {} +)
+unformatted=$(find . \( -path './.git' -o -path './vendor' -o -path './website' \) -prune -o -name '*.go' -exec gofmt -l {} +)
 if [ -n "$unformatted" ]; then
     printf 'Run gofmt on:\n%s\n' "$unformatted" >&2
     exit 1

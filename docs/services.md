@@ -1,4 +1,8 @@
-# RPM and systemd services
+---
+title: "RPM and systemd services"
+description: "Manage exact package requests, process reactions, unit files, and explicit removal."
+weight: 60
+---
 
 Richt manages each service in binary → config → process order. A service may
 contain any nonempty combination of these component sets. Services run in their
@@ -80,7 +84,8 @@ immediately before its lifecycle task and chooses an already displayed branch:
 | inactive or failed | stopped | any or none | no action |
 
 An unexpected load/activation state fails the task. There is no extra restart
-or reload after start. A lifecycle command and its state verification form one
+or reload after start. `timeout` must be a positive Go duration and defaults
+to **5s**. A lifecycle command and its state verification form one
 persisted task. Start/reload/restart must reach active; stop must reach inactive
 or failed. Status is polled while waiting. The command and all waiting share
 one timeout; timeout and command errors stop that host, without retry or
@@ -171,7 +176,19 @@ reaction remains in that file, so continuation starts with the failed process
 task and does not re-render or rewrite completed configs. There is no automatic
 rollback, retry, autosaved plan, or run history.
 
-## Reproducible isolated verification
+## Ready-package walkthrough
+
+For the current full local example, use [ready vmango RPMs](../examples/vmango/README.md)
+on a disposable DNF 4/systemd target. It covers repository configuration,
+package/config/process preparation, and explicit removal without creating a
+custom RPM. See [validation](validation.md) for the results actually recorded
+for that scenario.
+
+## Developer fixture regression suite
+
+The following harness is a separate developer regression tool. Its custom RPM
+build prerequisites are not required by the ready-vmango walkthrough or current
+package acceptance.
 
 Use a disposable AlmaLinux machine with root privileges. The fixture only
 manages resources named `richt-*`; the harness deliberately installs/removes
@@ -193,8 +210,9 @@ a shared command/wait timeout, unsupported reload, persisted process resume,
 YUM 4 exact install/removal, and complete declared-resource removal. It also
 checks initial secret rendering and secret rotation, actual reload reactions,
 redacted file display, and frozen apply after deleting the secret source.
-The full harness passed all 33 checks on 2026-11-01 on the environment listed
-above. Plans, displayed diffs, apply output,
+The recorded fixture run passed all 33 checks on 2026-11-01 on the environment
+listed above; this is evidence for that fixture suite, not a verification claim
+for the ready-vmango example. Plans, displayed diffs, apply output,
 and `acceptance.json` remain in the work directory. Application event traces
 are deliberately retained. Fixture scripts require only standard Python and
 shell facilities in addition to the listed RPM build tools.

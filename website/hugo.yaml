@@ -1,0 +1,113 @@
+baseURL: http://localhost:1313/
+title: Richt
+defaultContentLanguage: en
+enableRobotsTXT: false
+disableKinds: [taxonomy, term, RSS]
+languages:
+  en:
+    label: English
+    params:
+      description: Prepare, review, and apply Linux host configuration.
+menu:
+  main:
+    - name: Documentation
+      pageRef: /docs
+      weight: 10
+    - name: GitHub
+      url: https://github.com/subuk/richt
+      weight: 20
+markup:
+  goldmark:
+    renderer:
+      unsafe: false
+  highlight:
+    noClasses: false
+  tableOfContents:
+    startLevel: 2
+    endLevel: 3
+outputs:
+  home: [HTML]
+  section: [HTML]
+params:
+  docsy:
+    plugins:
+      click-to-copy:
+        enable: false
+      tabpane-persist:
+        enable: false
+      mermaid:
+        enable: false
+      markmap:
+        enable: false
+  github_repo: https://github.com/subuk/richt
+  github_project_repo: https://github.com/subuk/richt
+  github_branch: main
+  github_subdir: docs
+  offlineSearch: true
+  offlineSearchSummaryLength: 160
+  offlineSearchMaxResults: 12
+  prism_syntax_highlighting: false
+  copyright:
+    authors: Richt contributors
+  ui:
+    showLightDarkModeMenu: true
+    navbar_logo: false
+    sidebar_menu_compact: false
+    sidebar_search_disable: false
+    feedback:
+      enable: false
+    readingtime:
+      enable: false
+module:
+  hugoVersion:
+    extended: true
+    min: 0.163.0
+  imports:
+    - path: github.com/docsy/docsy/theme
+  mounts:
+    - source: content
+      target: content
+    - source: ../docs
+      target: content/docs
+    - source: static
+      target: static
+    - source: node_modules/lunr/lunr.min.js
+      target: static/vendor/lunr.min.js
+    - source: ../examples
+      target: static/examples
+      files:
+        - continuation/inventory.yaml
+        - continuation/README.md
+        - files/inventory.yaml
+        - files/greeting.conf.gotmpl
+        - files/README.md
+        - files/service.yaml
+        - inventory/richt.yaml
+        - inventory/README.md
+        - inventory/services/vmango.yaml
+        - inventory/services/vmango-repository.yaml
+        - inventory/templates/vmango.conf.gotmpl
+        - inventory/templates/vmango.repo.gotmpl
+        - rpm-systemd/inventory.yaml
+        - rpm-systemd/verify.py
+        - rpm-systemd/build-repository.sh
+        - secrets/default.yaml
+        - secrets/inventory.yaml
+        - secrets/verify.py
+        - secrets/README.md
+        - secrets/production.yaml
+        - secrets/app.conf.gotmpl
+        - ssh/inventory.yaml
+        - ssh/README.md
+        - vmango/inventory.yaml
+        - vmango/README.md
+        - vmango/services/repository.yaml
+        - vmango/services/vmango.yaml
+        - vmango/templates/vmango.conf.gotmpl
+        - vmango/templates/vmango.repo.gotmpl
+    - source: assets
+      target: assets
+    - source: ../examples
+      target: assets/examples
+    - source: layouts
+      target: layouts

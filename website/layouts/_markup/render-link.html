@@ -1,0 +1,21 @@
+{{- $href := .Destination -}}
+{{- $url := urls.Parse $href -}}
+{{- if and (not $url.IsAbs) (not (hasPrefix $href "#")) (not (hasPrefix $href "/")) -}}
+  {{- $sourceDir := .Page.Params.sourceDir | default "docs" -}}
+  {{- $source := path.Clean (path.Join $sourceDir $url.Path) -}}
+  {{- if and (hasPrefix $source "examples/") (eq (path.Base $source) "README.md") -}}
+    {{- $href = printf "docs/walkthroughs/%s/" (path.Base (path.Dir $source)) | relURL -}}
+  {{- else if and (hasPrefix $source "docs/") (strings.HasSuffix $source ".md") -}}
+    {{- with site.GetPage (printf "/%s" $source) -}}
+      {{- $href = .RelPermalink -}}
+    {{- else -}}
+      {{- errorf "Missing documentation target %q on %s" $source $.Page.RelPermalink -}}
+    {{- end -}}
+  {{- else if hasPrefix $source "examples/" -}}
+    {{- $href = $source | relURL -}}
+  {{- else -}}
+    {{- $href = printf "%s/blob/%s/%s" site.Params.github_repo site.Params.github_branch $source -}}
+  {{- end -}}
+  {{- with $url.Fragment -}}{{- $href = printf "%s#%s" $href . -}}{{- end -}}
+{{- end -}}
+<a href="{{ $href | safeURL }}"{{ with .Title }} title="{{ . }}"{{ end }}>{{ .Text | safeHTML }}</a>

@@ -1,0 +1,35 @@
+body { letter-spacing: 0; }
+.td-navbar { background: #fafaf7; border-bottom: 1px solid #d9ddd4; }
+.td-navbar .navbar-brand, .td-navbar .nav-link { color: #252c28; text-shadow: none; }
+.td-navbar .navbar-brand { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-weight: 700; letter-spacing: -1px; }
+.td-navbar .navbar-brand::before { content: ">_ "; color: #a44931; }
+.td-navbar .navbar-toggler { color: #252c28; }
+.td-sidebar { background: #f5f5f1; }
+.td-content { max-width: 920px; }
+.td-content h1 { letter-spacing: -1px; font-weight: 600; }
+.td-content h2 { letter-spacing: -.5px; }
+.td-content a { text-underline-offset: 3px; }
+.highlight { position: relative; }
+.highlight pre { background: #f2f3ef; border: 1px solid #d9ddd4; border-radius: 4px; padding: 1rem; }
+.copy-code { position: absolute; right: 8px; top: 8px; border: 1px solid #d9ddd4; border-radius: 3px; background: #fff; color: #626961; font-size: 11px; padding: 3px 7px; }
+.chroma .c, .chroma .c1, .chroma .cm { color: #626961; }
+.chroma .k, .chroma .nt, .chroma .na { color: #a44931; }
+.chroma .s, .chroma .s1, .chroma .s2, .chroma .l, .chroma .mi { color: #426a47; }
+.td-offline-search-results { max-width: min(560px, 90vw); }
+[data-bs-theme="dark"] {
+  --bs-body-bg: #171c1a;
+  --bs-body-color: #e2e8df;
+  --bs-link-color: #e2987c;
+  --bs-link-hover-color: #f2b79f;
+  .td-navbar { background: #171c1a; border-color: #3a473e; }
+  .td-navbar .navbar-brand, .td-navbar .nav-link, .td-navbar .navbar-toggler { color: #e2e8df; }
+  .td-navbar .navbar-brand::before { color: #e2987c; }
+  .td-sidebar { background: #1c2320; border-color: #3a473e; }
+  .td-sidebar-nav .td-sidebar-link { color: #a6b2a7; }
+  .td-sidebar-nav .td-sidebar-link.active { color: #e2987c; }
+  .highlight pre { background: #1e2722; color: #e2e8df; border-color: #3a473e; }
+  .copy-code { background: #1c2320; color: #a6b2a7; border-color: #3a473e; }
+  .chroma .c, .chroma .c1, .chroma .cm { color: #a6b2a7; }
+  .chroma .k, .chroma .nt, .chroma .na { color: #e2987c; }
+  .chroma .s, .chroma .s1, .chroma .s2, .chroma .l, .chroma .mi { color: #adcc9c; }
+}

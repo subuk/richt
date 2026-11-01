@@ -1,4 +1,8 @@
-# YAML inventory
+---
+title: "YAML inventory"
+description: "Define services and hosts, merge tag variables, resolve paths, and select assignments."
+weight: 40
+---
 
 Validate and view the supplied two-host example without network access:
 

@@ -1,0 +1,22 @@
+binaries:
+  package:
+    type: rpm
+    manager: dnf
+    package: vmango
+    version: "0:0.16.0-1.el10.x86_64"
+configs:
+  main:
+    path: /etc/vmango.conf
+    owner: root
+    group: root
+    mode: "0644"
+    template:
+      file: ../templates/vmango.conf.gotmpl
+processes:
+  web:
+    type: systemd
+    unit: vmango.service
+    state: running
+    enabled: true
+    timeout: 15s
+    restart_on: [binary.package, config.main]

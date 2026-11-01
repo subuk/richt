@@ -1,126 +1,84 @@
 # Richt
 
-Richt is a Go CLI that prepares, displays, and applies an executable host
-configuration plan. Services combine RPM packages, templated files, and systemd
-processes. YAML inventory assigns services to hosts and resolves variables from
-weighted tags.
+Richt is a standalone Go CLI that prepares, displays, and explicitly applies
+executable Linux host configuration plans. YAML inventory assigns reusable
+services containing RPM packages, templated files, and systemd processes.
+Weighted tags supply host variables. Local and SSH execution support explicit
+noninteractive sudo, bounded host concurrency, and local YAML secret sources.
 
-Local and SSH execution support DNF4/YUM4, systemd, file ownership and
-permissions, and SELinux contexts. SSH uses the system client and current
-`ssh_config`; explicit sudo uses noninteractive authentication. Integration checks run on AlmaLinux 10.2 amd64 with SELinux
-Enforcing. Inventory inspection and SSH control also run on macOS. Local YAML
-secret sources resolve during preparation; templates select a default or named
-source and automatically hide the complete file diff.
+## Start here
 
-## Build and install
-
-Use Go 1.27.3 or newer and Make. Dependencies are pinned in `go.mod` and verified
-by `go.sum`.
+Build from a checkout with Go 1.27.3 or newer and Make:
 
 ```sh
 make build
 ./bin/richt --help
 ./bin/richt --version
-make install
 ```
 
-`make install` writes `richt` into `GOBIN`, or `$(go env GOPATH)/bin` when `GOBIN`
-is unset. Add that directory to `PATH`. For a workspace-local installation, use
-`GOBIN="$PWD/bin" make install` after creating the `bin` directory.
+Follow the [config-only quickstart](docs/quickstart.md) to create, review, apply,
+update, and remove a file in a private temporary directory without root. See
+[installation](docs/installation.md) for `make install`, cross-builds, controller/
+target requirements, and privileges. Full-stack Linux acceptance is recorded on
+AlmaLinux 10.2 x86_64 with DNF 4/YUM 4, systemd, and SELinux Enforcing; see
+[validation](docs/validation.md) for scope and evidence.
 
-Development builds report `richt dev`. Set a build label with
-`make build VERSION=0.1.0`. `make linux-amd64` builds a static Linux amd64 binary
-at `bin/richt-linux-amd64`.
-
-## Use
-
-Inspect the supplied inventory without contacting hosts or reading templates:
+Inspect the illustrative two-host inventory without contacting hosts or reading
+templates or secret sources:
 
 ```sh
 ./bin/richt inventory validate -i examples/inventory/richt.yaml
-./bin/richt inventory show -i examples/inventory/richt.yaml
 ./bin/richt inventory show -i examples/inventory/richt.yaml --tag hypervisor --service vmango
 ```
 
-On a disposable Linux machine, try the local file example. Its managed target is
-`/var/tmp/richt-example/greeting.conf`:
+For persistent progress, prepare a plan with `diff -o PLAN.json`, then run
+`apply PLAN.json`. Apply displays the plan and requires terminal agreement
+unless `-y` is supplied. Saved plans contain real executable inputs, potentially
+including secrets. Apply does not reread sources, recalculate changes, or check
+for drift. Explicit continuation skips successful tasks and retries unfinished
+ones; a failure blocks that host while other hosts continue. There is no
+autosave, automatic retry, rollback, or run history.
+
+## Documentation and examples
+
+The [documentation index](docs/_index.md) links the complete first-version guide:
+
+- [CLI commands and flags](docs/cli.md), [inventory schema and selection](docs/inventory.md).
+- [Files and saved plans](docs/files.md), [manual continuation](docs/continuation.md).
+- [RPM/systemd lifecycle and removal](docs/services.md), [SSH/sudo and concurrency](docs/ssh.md).
+- [Secrets and sensitive output](docs/secrets.md), [limitations](docs/limitations.md).
+- [Examples](docs/examples.md): [ready vmango RPMs](examples/vmango/README.md),
+  [two YAML secret sources](examples/secrets/README.md), and
+  [deliberate failure/continuation](examples/continuation/README.md).
+
+To preview the Hugo/Docsy documentation site locally, install Node.js 22 or
+newer with npm, then run:
 
 ```sh
-./bin/richt diff -i examples/files/inventory.yaml
-./bin/richt diff -i examples/files/inventory.yaml -o /var/tmp/richt-example-plan.json
-./bin/richt apply /var/tmp/richt-example-plan.json
-./bin/richt apply -y -i examples/files/inventory.yaml
+npm ci --prefix website
+make docs-serve
+# Build or check without serving:
+make docs-build
+make docs-check
 ```
 
-`diff` displays changes without modifying managed resources. A saved JSON plan
-contains prepared contents, patches, operations, and task progress. Applying it
-does not reread inventory, templates, or secret sources, recompute changes, or
-check whether file contents changed since diff. Review the displayed operations before confirming.
-Without `-y`, apply requires a terminal and explicit agreement.
+Site dependencies and setup are documented in [website/README.md](website/README.md).
+These commands build or serve local files; they do not publish a site.
 
-Apply handles up to 20 hosts concurrently; `--parallelism N` overrides the limit
-for the current run, including saved plans. A value of 1 runs sequentially.
-A new explicit apply of a saved plan retries unfinished tasks and skips
-successful ones. A failure stops that host; other hosts continue. Progress is
-saved atomically under a same-plan lock. A progress save failure stops further
-actions; in-flight operations are awaited. Applying without a plan file keeps progress only in memory. Host, tag,
-and service filters are available when building plans and rejected for saved
-plans. Calling `secret` or setting `sensitive: true` hides the entire file diff
-and file error details. The executable JSON retains real rendered content and
-patches, so keep plans private. Plan and lock files use mode 0600; set target
-files to `mode: "0600"` explicitly when needed.
-
-See the focused guides and examples:
-
-- [Inventory schema, variables, validation, and selection](docs/inventory.md)
-  — [two-host inventory example](examples/inventory/richt.yaml).
-- [File templates, SELinux, confirmation, and saved plans](docs/files.md)
-  — [local file example](examples/files/inventory.yaml).
-- [YAML secrets, sensitive files, and frozen inputs](docs/secrets.md)
-  — [isolated two-source example](examples/secrets/README.md).
-- [SSH, sudo, and parallel apply](docs/ssh.md)
-  — [two-host SSH example](examples/ssh/inventory.yaml).
-- [RPM packages, systemd reactions, and service removal](docs/services.md)
-  — [local package and service example](examples/rpm-systemd/inventory.yaml).
-
-## Verify
+## Development
 
 ```sh
 make check
 ```
 
-This checks formatting without modifying files, runs `go vet` and all Go tests,
-exercises the CLI, and cross-builds Linux amd64. GitHub Actions runs the same
-checks for pushes and pull requests. The checks do not contact integration
-hosts, publish artifacts, or deploy changes.
+This checks formatting, runs vet and all Go tests, exercises CLI smoke behavior,
+and cross-builds Linux amd64. It does not access hosts or prove runtime RPM,
+systemd, root, or SELinux behavior. [Linux validation](docs/validation.md) describes
+the separate disposable-host acceptance workflows.
 
-The file acceptance suite requires root on a disposable Linux machine with
-SELinux Enforcing:
-
-```sh
-python3 tests/integration/files.py --binary ./bin/richt --work-root /root --target-root /var/lib
-```
-
-It allocates unique directories below the supplied roots, verifies file and
-terminal behavior, and removes its own directories afterwards. Add `--keep` to
-retain them. Package and systemd integration instructions are in the
-[service guide](docs/services.md); use a disposable VM with a snapshot for those
-stateful scenarios. On 2026-11-01, the expanded suites passed 17 file, 33
-RPM/systemd, and 31 SSH/sudo checks on AlmaLinux 10.2, including YAML secrets,
-frozen inputs, real process reactions, and explicit continuation. See the
-guides for the tested platform and scope.
-
-## Code organization
-
-The CLI uses Kong for arguments and owns confirmation and output. Public Go
-packages separate inventory rules, YAML loading, executable plans, file
-operations, RPM operations, systemd operations, and service orchestration.
-Packages contain implemented behavior; the repository has no `internal`
-directories or empty future implementation layers.
-
-Contributor and agent guidance is in [AGENTS.md](AGENTS.md). Repository-local
-skills cover [feature and bugfix development](.agents/skills/richt-development/SKILL.md)
-and [Linux acceptance validation](.agents/skills/richt-linux-validation/SKILL.md).
-The [design and roadmap](.agents/skills/richt-development/references/design.md)
-records accepted architecture, upcoming first-version requirements, and later
-scope without requiring external project context.
+Public Go packages separate inventory/domain validation, YAML loading, executable
+plans, files, RPM, systemd, transport, and orchestration. The CLI uses Kong.
+Contributor guidance is in [AGENTS.md](AGENTS.md); the local
+[development workflow](.agents/skills/richt-development/SKILL.md) and
+[design and roadmap](.agents/skills/richt-development/references/design.md)
+record implementation rules and later scope.

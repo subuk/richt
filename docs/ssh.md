@@ -1,4 +1,8 @@
-# SSH, sudo, and parallel apply
+---
+title: "SSH, sudo, and parallel apply"
+description: "Reuse OpenSSH configuration, apply explicit privileges, and bound host concurrency."
+weight: 70
+---
 
 Richt uses the system OpenSSH `ssh` executable. Existing `ssh_config` aliases,
 identity files, SSH agent, proxy/jump settings, and known-hosts policy remain in
@@ -89,7 +93,14 @@ and may have taken effect; interrupted unfinished tasks can run again on an
 explicit continuation. SSH client cancellation cannot guarantee that a command
 already accepted by the remote host stopped.
 
-## Disposable acceptance
+## Developer fixture acceptance
+
+The following harness uses custom fixture RPMs for developer regressions. It is
+separate from the [ready-vmango walkthrough](../examples/vmango/README.md) and
+current package acceptance, which do not build RPMs. For a file-only SSH
+scenario, define configs with `transport: {type: ssh, host: <alias>, sudo: true}`
+and use the same diff/save/apply workflow without a package repository. See
+[validation](validation.md) for newly recorded runs.
 
 Use two isolated Linux SSH targets with their own RPM database, filesystem, and
 systemd instance. Both need an SSH alias, a non-root login with noninteractive
@@ -113,8 +124,8 @@ python3 tests/integration/ssh.py --binary ./bin/richt \
   --work-root /tmp/richt-ssh-acceptance
 ```
 
-Verified on 2026-11-01 with two isolated AlmaLinux 10.2 x86_64 system containers,
-each running its own SSH server, systemd 257, filesystem, and DNF 4.20 RPM
+The recorded fixture run on 2026-11-01 used two isolated AlmaLinux 10.2 x86_64
+system containers, each running its own SSH server, systemd 257, filesystem, and DNF 4.20 RPM
 database, on a disposable SELinux-Enforcing Linux host. The 31 SSH harness
 checks passed with non-root logins, SSH-agent authentication, and noninteractive
 sudo. The 17 local file and 33 local RPM/systemd checks also passed.

@@ -1,0 +1,7 @@
+{{- $source := printf "%s/README.md" .Page.Params.sourceDir -}}
+{{- with resources.Get $source -}}
+  {{- $content := replaceRE `(?s)^# [^\n]*\n+` "" .Content -}}
+  {{- $content | safeHTML -}}
+{{- else -}}
+  {{- errorf "Missing example source %s" $source -}}
+{{- end -}}

@@ -19,3 +19,8 @@
 /secrets/*
 !/secrets/*.go
 /inventory.local.yaml
+/website/node_modules/
+/website/public/
+/website/resources/
+/website/.hugo_build.lock
+/website/.cache/

@@ -1,0 +1,14 @@
+{{- $source := "" -}}
+{{- with .Params.sourceDir -}}
+  {{- $source = printf "%s/README.md" . -}}
+{{- else -}}
+  {{- if eq .Path "/docs/walkthroughs" -}}
+    {{- $source = "website/content/docs/walkthroughs/_index.md" -}}
+  {{- else if .File -}}
+    {{- $source = printf "docs/%s" (path.Base .File.Filename) -}}
+  {{- end -}}
+{{- end -}}
+<div class="td-page-meta ms-2 pb-1 pt-2 mb-0">
+  {{- with $source }}<a href="{{ printf "%s/blob/%s/%s" site.Params.github_repo site.Params.github_branch . }}" class="td-page-meta__view">View source on GitHub</a>{{ end -}}
+  <a href="https://github.com/subuk/richt/issues" class="td-page-meta__issue">Report a documentation issue</a>
+</div>

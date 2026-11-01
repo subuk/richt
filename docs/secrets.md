@@ -1,4 +1,8 @@
-# YAML secrets and sensitive files
+---
+title: "YAML secrets and sensitive files"
+description: "Resolve local secret sources during preparation and protect executable saved inputs."
+weight: 80
+---
 
 Secret values are fetched during plan preparation on the machine running
 `diff` or `apply -i`. Inventory inspection does not open secret sources, and

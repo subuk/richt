@@ -1,4 +1,8 @@
-# Files and saved plans
+---
+title: "Files and saved plans"
+description: "Render templates, manage file attributes, and execute protected JSON plans."
+weight: 50
+---
 
 Build with `make build`. The example writes `/var/tmp/richt-example/greeting.conf` on the local machine:
 
