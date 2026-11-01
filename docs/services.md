@@ -1,4 +1,4 @@
-# Local RPM and systemd services
+# RPM and systemd services
 
 Richt manages each service in binary → config → process order. A service may
 contain any nonempty combination of these component sets. Services run in their
@@ -10,8 +10,8 @@ command**. YUM 3, DNF 5, APT, and non-systemd process managers are unsupported.
 The end-to-end verification environment is **AlmaLinux 10.2 x86_64, DNF 4.20.0,
 YUM 4 compatibility, systemd 257, SELinux Enforcing**. Other Linux versions have
 not been verified. `manager --version` is checked during preparation without
-reading repository metadata. Local transport is supported; SSH and sudo are
-separate work.
+reading repository metadata. Local and SSH transports are supported, including explicit noninteractive sudo.
+See [SSH and parallel apply](ssh.md) for connection and authentication rules.
 
 ## Package requests
 
@@ -31,8 +31,9 @@ write epoch `0` explicitly when the package has no epoch. The installed RPM
 database determines whether the exact request already holds. An exact request
 uses `dnf -y install-nevra -- NAME-EPOCH:VERSION-RELEASE.ARCH` (or `yum`), allowing
 both upgrades and downgrades. An unversioned request uses `install-n`; removal
-uses `remove`. Package names and versions are validated and passed as separate
-arguments, without a shell.
+uses `remove`. Package names and versions are validated as individual arguments. Local
+execution passes them directly; SSH safely quotes each argument for the target
+shell.
 
 Diff reads the installed RPM database, without consulting repository metadata.
 A preceding config-only service can therefore create a `.repo` file that does

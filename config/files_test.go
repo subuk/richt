@@ -174,7 +174,11 @@ func TestPreparationErrorsBeforeChanges(t *testing.T) {
 		} else {
 			c.Group = "richt-group-does-not-exist"
 		}
-		if _, err := config.Prepare(c, "absent", nil); err == nil {
+		f, err := config.Prepare(c, "absent", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := config.Observe(f); err == nil {
 			t.Fatalf("expected %s error", field)
 		}
 	}
@@ -183,29 +187,40 @@ func TestPreparationErrorsBeforeChanges(t *testing.T) {
 	}
 }
 
-func TestRejectSymlinksIncludingParent(t *testing.T) {
+func TestFollowSymlinksIncludingParentAndRemoveNamedLink(t *testing.T) {
 	dir := directory(t)
 	target := filepath.Join(dir, "target")
-	os.WriteFile(target, []byte("unmanaged"), 0600)
+	if err := os.WriteFile(target, []byte("unmanaged"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	link := filepath.Join(dir, "link")
-	os.Symlink(target, link)
-	if _, err := config.Diff(resolved(link, "bad", false)); err == nil {
-		t.Fatal("accepted target symlink")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
 	}
+	apply(t, diff(t, resolved(link, "through target", false)))
 	parent := filepath.Join(dir, "parent")
-	os.Symlink(dir, parent)
-	if _, err := config.Diff(resolved(filepath.Join(parent, "target"), "bad", false)); err == nil {
-		t.Fatal("accepted parent symlink")
+	if err := os.Symlink(dir, parent); err != nil {
+		t.Fatal(err)
 	}
+	apply(t, diff(t, resolved(filepath.Join(parent, "target"), "through parent", false)))
 	path := filepath.Join(dir, "later")
-	p := diff(t, resolved(path, "bad", false))
-	os.Symlink(target, path)
-	if _, err := plan.Apply(context.Background(), p, config.Local{}, nil); err == nil {
-		t.Fatal("accepted apply symlink")
+	p := diff(t, resolved(path, "saved", false))
+	if err := os.Symlink(target, path); err != nil {
+		t.Fatal(err)
 	}
+	apply(t, p)
 	b, _ := os.ReadFile(target)
-	if string(b) != "unmanaged" {
-		t.Fatal("followed symlink")
+	if string(b) != "saved\n" {
+		t.Fatal(string(b))
+	}
+	r := resolved(link, "", false)
+	r.Hosts[0].Services[0].State = "absent"
+	apply(t, diff(t, r))
+	if _, err := os.Lstat(link); !os.IsNotExist(err) {
+		t.Fatal("named link remains", err)
+	}
+	if _, err := os.Stat(target); err != nil {
+		t.Fatal("removed symlink target", err)
 	}
 }
 
@@ -216,5 +231,21 @@ func TestDisplayFailure(t *testing.T) {
 	p := diff(t, resolved(filepath.Join(directory(t), "file"), "hello", false))
 	if err := plan.Display(failingWriter{}, p, config.Local{}); err == nil {
 		t.Fatal("ignored output failure")
+	}
+}
+
+func TestPreparationPreservesRequestedOwnerNamesAndRemoteLabel(t *testing.T) {
+	f, err := config.Prepare(inventory.Config{Path: "/etc/richt-example", Owner: "target-only-user", Group: "target-only-group", SELinux: "system_u:object_r:etc_t:s0", Template: inventory.Template{Inline: ptr("prepared locally")}}, "present", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.Owner != "target-only-user" || f.Group != "target-only-group" || f.UID != nil || f.GID != nil {
+		t.Fatal(f)
+	}
+	if _, err = (config.Local{}).Resolve(plan.Task{Operation: "file", File: f}); err != nil {
+		t.Fatal("resolution used controller capabilities", err)
+	}
+	if _, err = config.Prepare(inventory.Config{Path: "/etc/richt-example", SELinux: "bad", Template: inventory.Template{Inline: ptr("text")}}, "present", nil); err == nil {
+		t.Fatal("accepted malformed label")
 	}
 }

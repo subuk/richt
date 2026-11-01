@@ -19,10 +19,10 @@ output in English.
   implementations. Use the existing public packages. Do not add `internal/`,
   empty future layers, or speculative interfaces. Add abstractions when an
   implemented boundary needs them.
-- Current execution supports local transport, DNF4/YUM4, files, and systemd.
-  SSH/sudo, bounded host parallelism, and real secret fetching are accepted
-  upcoming work, with requirements in the local design reference. Preserve
-  explicit unsupported-capability errors until the relevant implementation.
+- Current execution supports local/SSH transports, explicit noninteractive sudo,
+  bounded host parallelism, DNF4/YUM4, files, and systemd. Read [SSH rules](docs/ssh.md)
+  for live client settings and authentication. Real secret fetching remains
+  upcoming work; preserve explicit unsupported-capability errors until implemented.
 
 ## Behavioral contracts
 

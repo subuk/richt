@@ -124,3 +124,32 @@ func TestFinalDropInPrecedenceAndNotifyReload(t *testing.T) {
 		t.Fatal("notify-reload capability missing", got, err)
 	}
 }
+
+func TestReloadSupportedReadsTargetFiles(t *testing.T) {
+	var reads, globs []string
+	b := Backend{
+		ReadFile: func(_ context.Context, path string) ([]byte, error) {
+			reads = append(reads, path)
+			switch path {
+			case "/target/unit.service":
+				return []byte("[Service]\nExecReload=/bin/true\n"), nil
+			case "/target/10-reset.conf":
+				return []byte("[Service]\nExecReload=\n"), nil
+			default:
+				return nil, fmt.Errorf("unexpected target read %s", path)
+			}
+		},
+		Glob: func(_ context.Context, pattern string) ([]string, error) {
+			globs = append(globs, pattern)
+			return nil, nil
+		},
+	}
+	yes, err := b.ReloadSupported(context.Background(), "unit.service", Status{Fragment: "/target/unit.service", DropIns: []string{"/target/10-reset.conf"}}, nil)
+	if err != nil || yes || len(reads) != 2 || len(globs) != 3 {
+		t.Fatal(yes, err, reads, globs)
+	}
+	yes, err = b.ReloadSupported(context.Background(), "unit.service", Status{Fragment: "/target/unit.service", DropIns: []string{"/target/10-reset.conf"}}, []*plan.FileChange{{Path: "/etc/systemd/system/unit.service.d/20-reload.conf", Content: "[Service]\nExecReload=/bin/true\n"}})
+	if err != nil || !yes {
+		t.Fatal(yes, err)
+	}
+}

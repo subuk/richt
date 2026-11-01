@@ -7,18 +7,29 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"unicode"
 )
 
-const Version = "1.0"
+const Version = "1.1"
 
 type Plan struct {
 	Version string `json:"version"`
 	Hosts   []Host `json:"hosts"`
 }
 type Host struct {
-	Name      string `json:"name"`
-	Transport string `json:"transport"`
-	Tasks     []Task `json:"tasks"`
+	Name       string      `json:"name"`
+	Transport  string      `json:"transport"`
+	Connection *Connection `json:"connection,omitempty"`
+	Tasks      []Task      `json:"tasks"`
+}
+
+// Connection preserves explicit inventory settings. SSH client configuration is
+// deliberately read by the system SSH client at execution time.
+type Connection struct {
+	Host string `json:"host,omitempty"`
+	User string `json:"user,omitempty"`
+	Port int    `json:"port,omitempty"`
+	Sudo bool   `json:"sudo,omitempty"`
 }
 type Task struct {
 	ID        string         `json:"id"`
@@ -37,6 +48,8 @@ type FileChange struct {
 	Patch     string  `json:"patch,omitempty"`
 	Sensitive bool    `json:"sensitive,omitempty"`
 	Write     bool    `json:"write,omitempty"`
+	Owner     string  `json:"owner,omitempty"`
+	Group     string  `json:"group,omitempty"`
 	UID       *int    `json:"uid,omitempty"`
 	GID       *int    `json:"gid,omitempty"`
 	Mode      *uint32 `json:"mode,omitempty"`
@@ -78,9 +91,27 @@ type Executor interface {
 	Execute(context.Context, Action) error
 }
 
+// HostExecutor binds operations to a host without contacting it. Authentication
+// and connection errors belong to execution and fail only the affected host.
+type HostExecutor interface {
+	ForHost(Host) (Executor, error)
+}
+
+// Bind is shared by preparation, display, and apply. Legacy executors remain
+// usable for unprivileged local plans.
+func Bind(h Host, e Executor) (Executor, error) {
+	if hostExecutor, ok := e.(HostExecutor); ok {
+		return hostExecutor.ForHost(h)
+	}
+	if h.Transport != "local" || (h.Connection != nil && h.Connection.Sudo) {
+		return nil, fmt.Errorf("executor does not support host %s connection", h.Name)
+	}
+	return e, nil
+}
+
 func (p *Plan) Validate() error {
-	if p.Version != Version {
-		return fmt.Errorf("incompatible plan version %q (supported %s)", p.Version, Version)
+	if p.Version != Version && p.Version != "1.0" {
+		return fmt.Errorf("incompatible plan version %q (supported 1.0 and %s)", p.Version, Version)
 	}
 	seenHosts := map[string]bool{}
 	for _, h := range p.Hosts {
@@ -88,8 +119,27 @@ func (p *Plan) Validate() error {
 			return errors.New("plan has an empty or duplicate host")
 		}
 		seenHosts[h.Name] = true
-		if h.Transport != "local" {
+		if h.Transport != "local" && h.Transport != "ssh" {
 			return fmt.Errorf("host %s: unsupported transport %q", h.Name, h.Transport)
+		}
+		if p.Version == "1.0" && (h.Transport != "local" || h.Connection != nil) {
+			return fmt.Errorf("host %s: version 1.0 supports plain local connections only", h.Name)
+		}
+		if h.Connection != nil {
+			c := h.Connection
+			if c.Port < 0 || c.Port > 65535 {
+				return fmt.Errorf("host %s: invalid connection port", h.Name)
+			}
+			if h.Transport == "local" && (c.Host != "" || c.User != "" || c.Port != 0) {
+				return fmt.Errorf("host %s: local connection has SSH settings", h.Name)
+			}
+			if strings.ContainsAny(c.Host, "/@") || strings.HasPrefix(c.Host, "-") || strings.HasPrefix(c.User, "-") ||
+				strings.IndexFunc(c.Host+c.User, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }) >= 0 {
+				return fmt.Errorf("host %s: invalid connection host or user", h.Name)
+			}
+		}
+		if h.Transport == "ssh" && (h.Connection == nil || h.Connection.Host == "") {
+			return fmt.Errorf("host %s: SSH connection requires host", h.Name)
 		}
 		ids := map[string]bool{}
 		for _, t := range h.Tasks {
@@ -100,6 +150,12 @@ func (p *Plan) Validate() error {
 			payloads := 0
 			if t.File != nil {
 				payloads++
+				if p.Version == "1.0" && (t.File.Owner != "" || t.File.Group != "") {
+					return fmt.Errorf("task %s: ownership names require plan version %s", t.ID, Version)
+				}
+				if (t.File.Owner != "" && t.File.UID != nil) || (t.File.Group != "" && t.File.GID != nil) {
+					return fmt.Errorf("task %s: ownership name and numeric ID are mutually exclusive", t.ID)
+				}
 			}
 			if t.RPM != nil {
 				payloads++
@@ -133,14 +189,34 @@ func display(w io.Writer, p *Plan, e Executor) error {
 		return err
 	}
 	for _, h := range p.Hosts {
+		hostExecutor, err := Bind(h, e)
+		if err != nil {
+			return fmt.Errorf("host %s: %w", h.Name, err)
+		}
 		if _, err := fmt.Fprintf(w, "Host %s (%s)\n", h.Name, h.Transport); err != nil {
 			return err
+		}
+		if c := h.Connection; c != nil {
+			fmt.Fprint(w, "  Connection:")
+			if c.Host != "" {
+				fmt.Fprintf(w, " host=%s", c.Host)
+			}
+			if c.User != "" {
+				fmt.Fprintf(w, " user=%s", c.User)
+			}
+			if c.Port != 0 {
+				fmt.Fprintf(w, " port=%d", c.Port)
+			}
+			fmt.Fprintf(w, " sudo=%t\n", c.Sudo)
+		}
+		if h.Transport == "ssh" {
+			fmt.Fprintln(w, "  SSH uses current client configuration; explicit connection settings take precedence")
 		}
 		if len(h.Tasks) == 0 {
 			fmt.Fprintln(w, "  No changes")
 		}
 		for _, t := range h.Tasks {
-			actions, err := e.Resolve(t)
+			actions, err := hostExecutor.Resolve(t)
 			if err != nil {
 				return fmt.Errorf("task %s: %w", t.ID, err)
 			}
@@ -157,6 +233,12 @@ func display(w io.Writer, p *Plan, e Executor) error {
 				}
 				f := a.File
 				fmt.Fprintf(w, "    %s %s", a.Kind, f.Path)
+				if f.Owner != "" {
+					fmt.Fprintf(w, " owner=%s", f.Owner)
+				}
+				if f.Group != "" {
+					fmt.Fprintf(w, " group=%s", f.Group)
+				}
 				if f.UID != nil {
 					fmt.Fprintf(w, " uid=%d", *f.UID)
 				}
@@ -195,93 +277,6 @@ type HostResult struct {
 type Result struct {
 	Hosts    []HostResult
 	PlanPath string
-}
-
-// Apply never observes resources to rebuild a plan. A failed host does not block others.
-// A persistence error stops the entire run before any further action starts.
-func Apply(ctx context.Context, p *Plan, e Executor, persist func(*Plan) error) (Result, error) {
-	result := Result{}
-	if err := p.Validate(); err != nil {
-		return result, err
-	}
-	// Resolve everything before performing any mutation, including unsupported operations.
-	resolved := make([][][]Action, len(p.Hosts))
-	for hi, h := range p.Hosts {
-		resolved[hi] = make([][]Action, len(h.Tasks))
-		for ti, t := range h.Tasks {
-			a, err := e.Resolve(t)
-			if err != nil {
-				return result, fmt.Errorf("host %s task %s: %w", h.Name, t.ID, err)
-			}
-			resolved[hi][ti] = a
-		}
-	}
-	var errs []error
-	globalStop := ""
-	save := func() error {
-		if persist == nil {
-			return nil
-		}
-		if err := persist(p); err != nil {
-			return fmt.Errorf("save progress: %w", err)
-		}
-		return nil
-	}
-	for hi := range p.Hosts {
-		h := &p.Hosts[hi]
-		hr := HostResult{Name: h.Name}
-		blocked := globalStop
-		for ti := range h.Tasks {
-			t := &h.Tasks[ti]
-			if t.Progress.Status == "success" {
-				hr.Tasks = append(hr.Tasks, TaskResult{ID: t.ID, Status: "previously completed"})
-				continue
-			}
-			if blocked != "" {
-				hr.Tasks = append(hr.Tasks, TaskResult{ID: t.ID, Status: "blocked", Error: blocked})
-				continue
-			}
-			if err := ctx.Err(); err != nil {
-				blocked = err.Error()
-				errs = append(errs, err)
-				hr.Tasks = append(hr.Tasks, TaskResult{ID: t.ID, Status: "blocked", Error: blocked})
-				continue
-			}
-			t.Progress = Progress{Status: "running"}
-			if err := save(); err != nil {
-				globalStop = err.Error()
-				blocked = globalStop
-				errs = append(errs, err)
-				hr.Tasks = append(hr.Tasks, TaskResult{ID: t.ID, Status: "blocked", Error: blocked})
-				continue
-			}
-			var runErr error
-			for _, a := range resolved[hi][ti] {
-				if runErr = e.Execute(ctx, a); runErr != nil {
-					break
-				}
-			}
-			if runErr != nil {
-				message := runErr.Error()
-				if t.File != nil && t.File.Sensitive {
-					message = "sensitive file operation failed"
-				}
-				t.Progress = Progress{Status: "error", Error: message}
-				blocked = message
-				errs = append(errs, fmt.Errorf("host %s task %s: %s", h.Name, t.ID, message))
-			} else {
-				t.Progress = Progress{Status: "success"}
-			}
-			if err := save(); err != nil {
-				globalStop = err.Error()
-				blocked = globalStop
-				errs = append(errs, err)
-			}
-			hr.Tasks = append(hr.Tasks, TaskResult{ID: t.ID, Status: t.Progress.Status, Error: t.Progress.Error})
-		}
-		result.Hosts = append(result.Hosts, hr)
-	}
-	return result, errors.Join(errs...)
 }
 
 func DisplayResult(w io.Writer, r Result) error {

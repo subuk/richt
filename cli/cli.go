@@ -33,8 +33,9 @@ type arguments struct {
 	} `cmd:"" help:"Show changes without modifying resources."`
 	Apply struct {
 		selection
-		Plan string `arg:"" optional:"" help:"Saved plan to execute and update." type:"path"`
-		Yes  bool   `short:"y" help:"Apply without a confirmation prompt."`
+		Plan        string `arg:"" optional:"" help:"Saved plan to execute and update." type:"path"`
+		Yes         bool   `short:"y" help:"Apply without a confirmation prompt."`
+		Parallelism int    `default:"20" help:"Maximum number of hosts to apply concurrently (positive)."`
 	} `cmd:"" help:"Apply a saved plan, or build and apply changes."`
 }
 type selection struct {
@@ -130,6 +131,9 @@ func execute(command string, f arguments, stdin *os.File, out io.Writer) error {
 		}
 		return err
 	case "apply", "apply <plan>":
+		if f.Apply.Parallelism <= 0 {
+			return fmt.Errorf("parallelism must be positive")
+		}
 		var p *plan.Plan
 		var persist func(*plan.Plan) error
 		if f.Apply.Plan != "" {
@@ -159,7 +163,7 @@ func execute(command string, f arguments, stdin *os.File, out io.Writer) error {
 		if err := confirm(stdin, out, f.Apply.Yes); err != nil {
 			return err
 		}
-		result, err := plan.Apply(context.Background(), p, engine.Local{}, persist)
+		result, err := plan.Apply(context.Background(), p, engine.Local{}, persist, plan.ApplyOptions{HostConcurrency: f.Apply.Parallelism})
 		result.PlanPath = f.Apply.Plan
 		printErr := plan.DisplayResult(out, result)
 		if err != nil {

@@ -68,14 +68,15 @@ try:
     open(path,'w').write('manual-intervening-change\n');os.remove(source);os.remove(inv);run(['apply','-y',saved]);assert open(path).read()=='message=example-two\n' and os.stat(path).st_ino==inode;checks.append('saved apply ignores deleted inventory/template and intervening target content, preserves inode')
     assert 'previously completed' in run(['apply','-y',saved]);checks.append('repeat saved apply skips successful tasks')
     open(source,'w').write('message={{.greeting}}\n');write_inv([('main',path,'')],state='absent');run(['diff','-i',inv,'-o',saved]);run(['apply','-y',saved]);assert not os.path.exists(path);checks.append('explicit absent removes file')
-    # errors during diff
-    os.symlink(source,path);write_inv([('main',path,'')]);run(['diff','-i',inv],False);os.unlink(path);checks.append('symlink target rejected')
+    # Ordinary writes follow target and parent symlinks.
+    link_target=target+'/link-target';open(link_target,'w').write('old\n');os.symlink(link_target,path);write_inv([('main',path,'')]);run(['diff','-i',inv,'-o',saved]);run(['apply','-y',saved]);assert os.path.islink(path) and open(link_target).read()=='message=example-one\n';os.unlink(path);checks.append('symlink target is written through')
+    parent_link=target+'/parent-link';os.symlink(target+'/nested',parent_link);write_inv([('main',parent_link+'/via-link','')]);run(['diff','-i',inv,'-o',saved]);run(['apply','-y',saved]);assert open(target+'/nested/via-link').read()=='message=example-one\n';checks.append('symlink parent is followed')
     for extra in ['        owner: richt-user-does-not-exist\n','        group: richt-group-does-not-exist\n']:
      write_inv([('main',path,extra)]);run(['diff','-i',inv],False)
     checks.append('missing owner and group rejected')
     # partial failure+resume
-    first=target+'/resume-first';parent=target+'/resume-parent';second=parent+'/resume-second';write_inv([('a',first,''),('b',second,'')]);run(['diff','-i',inv,'-o',saved]);os.mkdir(parent);os.symlink(source,second)
-    run(['apply','-y',saved],False);p=json.load(open(saved));assert p['hosts'][0]['tasks'][0]['progress']['status']=='success';assert p['hosts'][0]['tasks'][1]['progress']['status']=='error';os.unlink(second);open(first,'w').write('manual-after-first-success');run(['apply','-y',saved]);assert open(first).read()=='manual-after-first-success';assert open(second).read()=='message=example-one\n';checks.append('second task failure persists first success and explicit resume skips first task')
+    first=target+'/resume-first';parent=target+'/resume-parent';second=parent+'/resume-second';write_inv([('a',first,''),('b',second,'')]);run(['diff','-i',inv,'-o',saved]);os.mkdir(parent);os.mkdir(second)
+    run(['apply','-y',saved],False);p=json.load(open(saved));assert p['hosts'][0]['tasks'][0]['progress']['status']=='success';assert p['hosts'][0]['tasks'][1]['progress']['status']=='error';os.rmdir(second);open(first,'w').write('manual-after-first-success');run(['apply','-y',saved]);assert open(first).read()=='manual-after-first-success';assert open(second).read()=='message=example-one\n';checks.append('second task failure persists first success and explicit resume skips first task')
     # sensitive
     open(second,'w').write('OLD_EXAMPLE_PRIVATE\n');open(source,'w').write('NEW_EXAMPLE_PRIVATE\n');write_inv([('main',second,'        sensitive: true\n')]);out=run(['diff','-i',inv,'-o',saved]);assert 'EXAMPLE_PRIVATE' not in out and 'Content hidden' in out;run(['apply','-y',saved]);checks.append('sensitive output hides both patch sides')
     print(json.dumps({'checks':checks,'count':len(checks),'selinux':subprocess.check_output(['getenforce'],text=True).strip()},indent=2))

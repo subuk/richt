@@ -5,12 +5,11 @@ configuration plan. Services combine RPM packages, templated files, and systemd
 processes. YAML inventory assigns services to hosts and resolves variables from
 weighted tags.
 
-Local execution supports DNF4/YUM4, systemd, file ownership and permissions, and
-SELinux contexts. Integration checks run on AlmaLinux 10.2 amd64 with SELinux
-Enforcing. Inventory inspection also runs on macOS. SSH execution, sudo, and
-secret backends are deferred: inventory can describe them, while execution of
-unsupported capabilities fails explicitly before changes. Templates calling
-`secret` fail during preparation.
+Local and SSH execution support DNF4/YUM4, systemd, file ownership and
+permissions, and SELinux contexts. SSH uses the system client and current
+`ssh_config`; explicit sudo uses noninteractive authentication. Integration checks run on AlmaLinux 10.2 amd64 with SELinux
+Enforcing. Inventory inspection and SSH control also run on macOS. Secret backends remain
+deferred: templates calling `secret` fail during preparation.
 
 ## Build and install
 
@@ -58,10 +57,12 @@ does not reread inventory or templates, recompute changes, or check whether file
 contents changed since diff. Review the displayed operations before confirming.
 Without `-y`, apply requires a terminal and explicit agreement.
 
+Apply handles up to 20 hosts concurrently; `--parallelism N` overrides the limit
+for the current run, including saved plans. A value of 1 runs sequentially.
 A new explicit apply of a saved plan retries unfinished tasks and skips
 successful ones. A failure stops that host; other hosts continue. Progress is
 saved atomically under a same-plan lock. A progress save failure stops further
-tasks. Applying without a plan file keeps progress only in memory. Host, tag,
+actions; in-flight operations are awaited. Applying without a plan file keeps progress only in memory. Host, tag,
 and service filters are available when building plans and rejected for saved
 plans. `sensitive: true` hides the entire file diff and file error details, while
 the executable JSON retains the real content.
@@ -72,6 +73,8 @@ See the focused guides and examples:
   — [two-host inventory example](examples/inventory/richt.yaml).
 - [File templates, SELinux, confirmation, and saved plans](docs/files.md)
   — [local file example](examples/files/inventory.yaml).
+- [SSH, sudo, and parallel apply](docs/ssh.md)
+  — [two-host SSH example](examples/ssh/inventory.yaml).
 - [RPM packages, systemd reactions, and service removal](docs/services.md)
   — [local package and service example](examples/rpm-systemd/inventory.yaml).
 

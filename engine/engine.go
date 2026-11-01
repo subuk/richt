@@ -13,11 +13,56 @@ import (
 	"github.com/subuk/richt/plan"
 	"github.com/subuk/richt/rpm"
 	"github.com/subuk/richt/systemd"
+	"github.com/subuk/richt/transport"
 )
 
 type Local struct {
 	RPM     rpm.Backend
 	Systemd systemd.Backend
+	Files   *config.Target
+	// Connect optionally supplies a target command boundary for SSH and sudo.
+	Connect func(inventory.Transport) (config.Target, error)
+}
+
+// ForHost binds the existing resource executors without contacting the host.
+func (e Local) ForHost(h plan.Host) (plan.Executor, error) {
+	c := inventory.Transport{Type: h.Transport}
+	if h.Connection != nil {
+		c.Host = h.Connection.Host
+		c.User = h.Connection.User
+		c.Port = h.Connection.Port
+		c.Sudo = h.Connection.Sudo
+	}
+	if c.Type == "local" && !c.Sudo {
+		return e, nil
+	}
+	var target config.Target
+	if e.Connect != nil {
+		var err error
+		target, err = e.Connect(c)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		client, err := transport.New(c)
+		if err != nil {
+			return nil, err
+		}
+		target = config.Target{Run: client.Run, RunInput: client.RunInput}
+	}
+	e.Files = &target
+	e.RPM = rpm.Backend{Run: target.Run}
+	e.Systemd = systemd.Backend{Run: target.Run, ReadFile: target.ReadFile, Glob: target.Glob}
+	return e, nil
+}
+
+func host(h inventory.ResolvedHost) plan.Host {
+	p := plan.Host{Name: h.Name, Transport: h.Transport.Type, Tasks: []plan.Task{}}
+	c := h.Transport
+	if c.Type == "ssh" || c.Sudo {
+		p.Connection = &plan.Connection{Host: c.Host, User: c.User, Port: c.Port, Sudo: c.Sudo}
+	}
+	return p
 }
 
 func (e Local) Resolve(t plan.Task) ([]plan.Action, error) {
@@ -42,6 +87,9 @@ func (e Local) Execute(ctx context.Context, a plan.Action) error {
 	case "systemd", "systemd-enable", "daemon-reload":
 		return e.Systemd.Execute(ctx, a)
 	default:
+		if e.Files != nil {
+			return e.Files.Execute(ctx, a)
+		}
 		return (config.Local{}).Execute(ctx, a)
 	}
 }
@@ -77,9 +125,6 @@ func (e Local) Diff(ctx context.Context, r *inventory.Resolved) (*plan.Plan, err
 	}
 	prepared := make([][]preparedService, len(r.Hosts))
 	for hi, h := range r.Hosts {
-		if h.Transport.Type != "local" || h.Transport.Sudo {
-			return nil, fmt.Errorf("host %s: only local transport without sudo is supported", h.Name)
-		}
 		for _, s := range h.Services {
 			ps := preparedService{service: s, binaries: map[string]*plan.RPMChange{}}
 			add := func(name, ref, process string, c inventory.Config) error {
@@ -136,13 +181,19 @@ func (e Local) Diff(ctx context.Context, r *inventory.Resolved) (*plan.Plan, err
 	}
 	p := &plan.Plan{Version: plan.Version, Hosts: []plan.Host{}}
 	// Capability checks happen before observing the first service or writing anything.
-	checkedManagers := map[string]bool{}
-	for _, host := range prepared {
-		for _, service := range host {
+	bound := make([]Local, len(r.Hosts))
+	for hi, h := range r.Hosts {
+		executor, err := e.ForHost(host(h))
+		if err != nil {
+			return nil, fmt.Errorf("host %s: %w", h.Name, err)
+		}
+		bound[hi] = executor.(Local)
+		checkedManagers := map[string]bool{}
+		for _, service := range prepared[hi] {
 			for _, binary := range service.binaries {
 				if !checkedManagers[binary.Manager] {
-					if err := e.RPM.CheckManager(ctx, binary.Manager); err != nil {
-						return nil, err
+					if err := bound[hi].RPM.CheckManager(ctx, binary.Manager); err != nil {
+						return nil, fmt.Errorf("host %s: %w", h.Name, err)
 					}
 					checkedManagers[binary.Manager] = true
 				}
@@ -150,9 +201,9 @@ func (e Local) Diff(ctx context.Context, r *inventory.Resolved) (*plan.Plan, err
 		}
 	}
 	for hi, h := range r.Hosts {
-		ph := plan.Host{Name: h.Name, Transport: "local", Tasks: []plan.Task{}}
+		ph := host(h)
 		for _, ps := range prepared[hi] {
-			tasks, err := e.observe(ctx, ps)
+			tasks, err := bound[hi].observe(ctx, ps)
 			if err != nil {
 				return nil, fmt.Errorf("host %s service %s: %w", h.Name, ps.service.Name, err)
 			}
@@ -218,7 +269,13 @@ func (e Local) observe(ctx context.Context, ps preparedService) ([]plan.Task, er
 	}
 	for i := range ps.files {
 		f := &ps.files[i]
-		yes, err := config.Observe(f.file)
+		var yes bool
+		var err error
+		if e.Files != nil {
+			yes, err = e.Files.Observe(ctx, f.file)
+		} else {
+			yes, err = config.Observe(f.file)
+		}
 		if err != nil {
 			if f.file.Sensitive {
 				err = errors.New("sensitive file observation failed")
@@ -295,7 +352,7 @@ func (e Local) observe(ctx context.Context, ps preparedService) ([]plan.Task, er
 					unitFiles = append(unitFiles, f.file)
 				}
 			}
-			canReload, err := systemd.ReloadSupported(v.Unit, status, unitFiles)
+			canReload, err := e.Systemd.ReloadSupported(ctx, v.Unit, status, unitFiles)
 			if err != nil {
 				return nil, fmt.Errorf("process %s: %w", name, err)
 			}

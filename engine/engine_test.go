@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/subuk/richt/config"
 	"github.com/subuk/richt/inventory"
 	"github.com/subuk/richt/plan"
 	"github.com/subuk/richt/rpm"
@@ -166,6 +167,80 @@ func TestPreparationBeforeObservationAndManagerAvailability(t *testing.T) {
 	}
 	s.Configs = nil
 	if _, err := e.Diff(context.Background(), resolved(s)); err == nil || calls != 1 {
+		t.Fatal(err, calls)
+	}
+}
+
+func TestMixedHostsUseTargetCapabilitiesAndPersistConnections(t *testing.T) {
+	calls := map[string][]string{}
+	e := Local{RPM: rpm.Backend{Run: func(_ context.Context, name string, args ...string) ([]byte, error) {
+		calls["local"] = append(calls["local"], name)
+		if name == "dnf" {
+			return []byte("4.20.0"), nil
+		}
+		return nil, nil
+	}}, Connect: func(c inventory.Transport) (config.Target, error) {
+		return config.Target{Run: func(_ context.Context, name string, args ...string) ([]byte, error) {
+			calls[c.Host] = append(calls[c.Host], name)
+			if name == "dnf" {
+				return []byte("4.20.0"), nil
+			}
+			return nil, nil
+		}}, nil
+	}}
+	r := resolved(inventory.Service{Binaries: map[string]inventory.Binary{"main": {Package: "demo"}}})
+	h := r.Hosts[0]
+	h.Name = "remote"
+	h.Transport = inventory.Transport{Type: "ssh", Host: "server-alias", User: "deploy", Port: 2222, Sudo: true}
+	r.Hosts = append(r.Hosts, h)
+	h.Name = "remote-two"
+	h.Transport.Host = "second-alias"
+	r.Hosts = append(r.Hosts, h)
+	p, err := e.Diff(context.Background(), r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"local", "server-alias", "second-alias"} {
+		if strings.Join(calls[name], ",") != "dnf,rpm" {
+			t.Fatal(name, calls)
+		}
+	}
+	c := p.Hosts[1].Connection
+	if c == nil || c.Host != "server-alias" || c.User != "deploy" || c.Port != 2222 || !c.Sudo || p.Hosts[1].Transport != "ssh" {
+		t.Fatal(p.Hosts[1])
+	}
+	if p.Hosts[0].Connection != nil {
+		t.Fatal("plain local has connection")
+	}
+}
+
+func TestRemoteTemplatesRenderBeforeAnyTargetBinding(t *testing.T) {
+	connects := 0
+	e := Local{Connect: func(inventory.Transport) (config.Target, error) {
+		connects++
+		return config.Target{}, errors.New("unexpected target contact")
+	}}
+	r := resolved(inventory.Service{Configs: map[string]inventory.Config{"bad": {Path: "/etc/richt-test", Template: inventory.Template{Inline: inline("{{.missing}}")}}}})
+	r.Hosts[0].Transport = inventory.Transport{Type: "ssh", Host: "alias"}
+	if _, err := e.Diff(context.Background(), r); err == nil || !strings.Contains(err.Error(), "render template") || connects != 0 {
+		t.Fatal(err, connects)
+	}
+}
+
+func TestHostBindingAndResolutionDoNotContactTargets(t *testing.T) {
+	calls := 0
+	e := Local{Connect: func(inventory.Transport) (config.Target, error) {
+		return config.Target{Run: func(context.Context, string, ...string) ([]byte, error) {
+			calls++
+			return nil, errors.New("unexpected target command")
+		}}, nil
+	}}
+	executor, err := e.ForHost(plan.Host{Name: "remote", Transport: "ssh", Connection: &plan.Connection{Host: "not-resolved-alias", Sudo: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = executor.Resolve(plan.Task{Operation: "file", File: &plan.FileChange{Path: "/etc/richt-test", State: "present", Owner: "target-only", Group: "target-only", SELinux: "system_u:object_r:etc_t:s0", Write: true}})
+	if err != nil || calls != 0 {
 		t.Fatal(err, calls)
 	}
 }

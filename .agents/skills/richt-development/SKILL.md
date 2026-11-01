@@ -12,8 +12,8 @@ Linux acceptance details belong to [richt-linux-validation](../richt-linux-valid
 ## Establish the contract
 
 Use the current request and the local [design and roadmap](references/design.md).
-Read its relevant sections for accepted domain rules, upcoming SSH/sudo and
-concurrency work, secret-source semantics, or later extension scope. Distinguish
+Read its relevant sections for accepted domain rules, SSH/sudo and host
+concurrency contracts, upcoming secret-source semantics, or later extension scope. Distinguish
 shipped behavior from accepted upcoming requirements and open implementation
 choices. No external project lookup is required. An explicit task or a newer
 accepted decision can extend these contracts; record intentional changes locally.
@@ -24,6 +24,8 @@ Read the guide that owns the changed contract:
   selectors, references, paths, and resource ownership.
 - [Files and saved plans](../../../docs/files.md): preparation, executable JSON,
   progress, continuation, locking, confirmation, and sensitive output.
+- [SSH](../../../docs/ssh.md): system-client configuration, noninteractive
+  authentication, sudo, target observations, and parallel host execution.
 - [Services](../../../docs/services.md): RPM requests, process reactions,
   dependency order, enablement, removal, and shared command/wait timeouts.
 

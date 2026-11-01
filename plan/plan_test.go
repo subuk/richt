@@ -6,12 +6,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/subuk/richt/plan"
 )
 
 type executor struct {
+	mu    sync.Mutex
 	calls []string
 	fail  string
 }
@@ -20,6 +22,8 @@ func (e *executor) Resolve(t plan.Task) ([]plan.Action, error) {
 	return []plan.Action{{Kind: t.ID}}, nil
 }
 func (e *executor) Execute(_ context.Context, a plan.Action) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	e.calls = append(e.calls, a.Kind)
 	if a.Kind == e.fail {
 		return errors.New("planned failure")
@@ -33,7 +37,7 @@ func TestContinueAndHostIsolation(t *testing.T) {
 	p := sample()
 	e := &executor{fail: "two"}
 	saved := 0
-	r, err := plan.Apply(context.Background(), p, e, func(*plan.Plan) error { saved++; return nil })
+	r, err := plan.Apply(context.Background(), p, e, func(*plan.Plan) error { saved++; return nil }, plan.ApplyOptions{HostConcurrency: 1})
 	if err == nil {
 		t.Fatal("expected failure")
 	}
@@ -64,7 +68,7 @@ func TestPersistenceFailureStopsEverything(t *testing.T) {
 				return errors.New("disk full")
 			}
 			return nil
-		})
+		}, plan.ApplyOptions{HostConcurrency: 1})
 		if err == nil {
 			t.Fatal("expected failure")
 		}

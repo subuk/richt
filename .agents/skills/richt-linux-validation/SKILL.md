@@ -46,7 +46,24 @@ python3 tests/integration/files.py --binary ./bin/richt-linux-amd64 --work-root 
 python3 examples/rpm-systemd/verify.py ./bin/richt-linux-amd64 /root/richt-service-test
 ```
 
-Run the suite relevant to the change; run both for shared preparation, plan,
+For SSH/sudo changes, also use two isolated targets with their own filesystem,
+RPM database, and systemd instance. The controller needs the system SSH client,
+trusted host keys, and noninteractive credentials; non-root target users need
+`sudo -n` access. See [SSH acceptance](../../../docs/ssh.md) and run:
+
+```sh
+python3 tests/integration/ssh.py --binary ./bin/richt \
+  --host-a richt-test-a --host-b richt-test-b \
+  --work-root /tmp/richt-ssh-acceptance
+```
+
+The harness uses the existing RPM repository fixture, retains artifacts, and
+creates/removes a unique test user/group to verify changed IDs between diff and
+apply. It does not provision targets or grant access to them. Isolated system
+containers can supply separate SSH/systemd targets on an authorized disposable
+host; do not represent two aliases to the same OS instance as isolated targets.
+
+Run the suite relevant to the change; run both local suites for shared preparation, plan,
 execution, or progress changes. The file suite allocates unique directories
 under existing roots. `--keep` preserves them for diagnosis; without it, its
 `finally` block removes them even after failure. Capture stdout/stderr and the

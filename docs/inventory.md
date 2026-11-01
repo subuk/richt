@@ -11,8 +11,9 @@ go run . inventory show -i examples/inventory/richt.yaml --tag hypervisor --serv
 `validate` resolves the selected scope and reports errors. `show` performs the
 same checks and writes the resolved inventory as indented JSON. Neither command
 contacts hosts, opens templates, reads secret source values, or changes host
-state. The example describes a local host and an illustrative SSH host; inventory
-accepts both transport descriptions.
+state. The example describes a local host and an illustrative SSH host; execution
+supports both transport descriptions. See [SSH and parallel apply](ssh.md) for
+connection settings and noninteractive authentication.
 
 The example resolves `gena.vmango.cloud_name` to `Home` and
 `lanst.vmango.cloud_name` to `Net`. Both retain `listen = 127.0.0.1:8080` and

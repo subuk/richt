@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
 var namePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
@@ -116,8 +117,14 @@ func validateTransport(t Transport) error {
 	if t.Port < 0 || t.Port > 65535 {
 		return fmt.Errorf("port: expected 1..65535 or omitted")
 	}
-	if t.Type == "ssh" && strings.TrimSpace(t.Host) == "" {
-		return fmt.Errorf("host: required for ssh")
+	if t.Type == "ssh" {
+		invalid := func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }
+		if t.Host == "" || strings.HasPrefix(t.Host, "-") || strings.ContainsAny(t.Host, "/@") || strings.IndexFunc(t.Host, invalid) >= 0 {
+			return fmt.Errorf("host: expected a hostname, address, or SSH alias; specify user separately")
+		}
+		if strings.HasPrefix(t.User, "-") || strings.IndexFunc(t.User, invalid) >= 0 {
+			return fmt.Errorf("user: invalid SSH user")
+		}
 	}
 	if t.Type == "local" && (t.Host != "" || t.User != "" || t.Port != 0) {
 		return fmt.Errorf("local transport cannot set host, user or port")

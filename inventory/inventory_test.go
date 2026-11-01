@@ -276,3 +276,40 @@ func TestProcessDefaultsAndValidGraph(t *testing.T) {
 		t.Fatal("defaults mutated inventory")
 	}
 }
+
+func TestSSHTransportConnectionSyntax(t *testing.T) {
+	for _, host := range []string{"server.example", "deployment-alias", "192.0.2.1", "2001:db8::1", "[2001:db8::1]"} {
+		in := fixture()
+		in.Hosts[1].Transport = Transport{Type: "ssh", Host: host, User: "deploy", Port: 2222, Sudo: true}
+		if _, err := in.Resolve(Selectors{}); err != nil {
+			t.Errorf("host %q: %v", host, err)
+		}
+	}
+	for _, host := range []string{"", "user@server", "ssh://server", "server/path", "-option", "a b", "a\tb", "a\nb", "a\x00b", "a\u00a0b", "a\x7fb"} {
+		in := fixture()
+		in.Hosts[1].Transport = Transport{Type: "ssh", Host: host}
+		if err := in.Validate(); err == nil {
+			t.Errorf("accepted host %q", host)
+		}
+	}
+	for _, user := range []string{"-option", "a b", "a\tb", "a\nb", "a\x00b", "a\u00a0b", "a\x7fb"} {
+		in := fixture()
+		in.Hosts[1].Transport = Transport{Type: "ssh", Host: "alias", User: user}
+		if err := in.Validate(); err == nil {
+			t.Errorf("accepted user %q", user)
+		}
+	}
+}
+
+func TestSSHInspectionDoesNotOpenTemplatesOrSecrets(t *testing.T) {
+	in := fixture()
+	in.SecretSources = map[string]SecretSource{"example": {Type: "yaml", File: "/does-not-exist/richt-secret.yaml"}}
+	s := in.Services["app"]
+	c := s.Configs["main"]
+	c.Template = Template{File: "/does-not-exist/richt-template"}
+	s.Configs["main"] = c
+	in.Services["app"] = s
+	if _, err := in.Resolve(Selectors{Hosts: []string{"lanst"}}); err != nil {
+		t.Fatal(err)
+	}
+}

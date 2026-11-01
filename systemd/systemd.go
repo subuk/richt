@@ -18,7 +18,11 @@ import (
 	"github.com/subuk/richt/rpm"
 )
 
-type Backend struct{ Run rpm.Runner }
+type Backend struct {
+	Run      rpm.Runner
+	ReadFile func(context.Context, string) ([]byte, error)
+	Glob     func(context.Context, string) ([]string, error)
+}
 
 func (b Backend) run(ctx context.Context, args ...string) ([]byte, error) {
 	if b.Run != nil {
@@ -298,6 +302,22 @@ func ReloadSetting(content string, current bool) (bool, error) {
 // ReloadSupported evaluates the final fragment and effective drop-ins. Matching
 // basenames replace existing drop-ins; all drop-ins then apply lexicographically.
 func ReloadSupported(unitName string, status Status, files []*plan.FileChange) (bool, error) {
+	return (Backend{}).ReloadSupported(context.Background(), unitName, status, files)
+}
+
+func (b Backend) ReloadSupported(ctx context.Context, unitName string, status Status, files []*plan.FileChange) (bool, error) {
+	readFile := func(path string) ([]byte, error) {
+		if b.ReadFile != nil {
+			return b.ReadFile(ctx, path)
+		}
+		return os.ReadFile(path)
+	}
+	glob := func(pattern string) ([]string, error) {
+		if b.Glob != nil {
+			return b.Glob(ctx, pattern)
+		}
+		return filepath.Glob(pattern)
+	}
 	type capabilities struct {
 		execReload   bool
 		notifyReload bool
@@ -328,7 +348,7 @@ func ReloadSupported(unitName string, status Status, files []*plan.FileChange) (
 	}
 	// This also discovers drop-ins for a unit not installed at diff time.
 	for _, directory := range []string{"/usr/lib/systemd/system/", "/run/systemd/system/", "/etc/systemd/system/"} {
-		matches, err := filepath.Glob(directory + unitName + ".d/*.conf")
+		matches, err := glob(directory + unitName + ".d/*.conf")
 		if err != nil {
 			return false, err
 		}
@@ -351,7 +371,7 @@ func ReloadSupported(unitName string, status Status, files []*plan.FileChange) (
 			return false, err
 		}
 	} else if status.Fragment != "" {
-		content, err := os.ReadFile(status.Fragment)
+		content, err := readFile(status.Fragment)
 		if err != nil {
 			return false, err
 		}
@@ -372,7 +392,7 @@ func ReloadSupported(unitName string, status Status, files []*plan.FileChange) (
 			}
 			continue
 		}
-		content, err := os.ReadFile(dropins[name])
+		content, err := readFile(dropins[name])
 		if err != nil {
 			return false, err
 		}

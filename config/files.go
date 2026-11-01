@@ -70,7 +70,7 @@ func Diff(r *inventory.Resolved) (*plan.Plan, error) {
 	return p, nil
 }
 
-// Prepare freezes rendered content and numeric ownership for a file task.
+// Prepare freezes rendered content and requested ownership names for a file task.
 func Prepare(c inventory.Config, state string, vars map[string]any) (*plan.FileChange, error) {
 	if state == "" {
 		state = "present"
@@ -82,28 +82,7 @@ func Prepare(c inventory.Config, state string, vars map[string]any) (*plan.FileC
 		return nil, errors.New("file path must be absolute and identify a file")
 	}
 	f := &plan.FileChange{Path: filepath.Clean(c.Path), State: state, Sensitive: c.Sensitive, SELinux: c.SELinux}
-	if c.Owner != "" {
-		u, err := user.Lookup(c.Owner)
-		if err != nil {
-			return nil, fmt.Errorf("owner %q does not exist", c.Owner)
-		}
-		id, err := strconv.Atoi(u.Uid)
-		if err != nil {
-			return nil, err
-		}
-		f.UID = &id
-	}
-	if c.Group != "" {
-		g, err := user.LookupGroup(c.Group)
-		if err != nil {
-			return nil, fmt.Errorf("group %q does not exist", c.Group)
-		}
-		id, err := strconv.Atoi(g.Gid)
-		if err != nil {
-			return nil, err
-		}
-		f.GID = &id
-	}
+	f.Owner, f.Group = c.Owner, c.Group
 	if c.Mode != "" {
 		m, err := strconv.ParseUint(c.Mode, 8, 12)
 		if err != nil {
@@ -113,7 +92,7 @@ func Prepare(c inventory.Config, state string, vars map[string]any) (*plan.FileC
 		f.Mode = &mode
 	}
 	if c.SELinux != "" {
-		if err := validateLabel(c.SELinux); err != nil {
+		if err := validateLabelSyntax(c.SELinux); err != nil {
 			return nil, err
 		}
 	}
@@ -155,32 +134,45 @@ func Prepare(c inventory.Config, state string, vars map[string]any) (*plan.FileC
 
 // Observe computes the final patch; apply never invokes it.
 func Observe(f *plan.FileChange) (bool, error) {
-	parent, name, err := openParent(f.Path, false)
-	if os.IsNotExist(err) {
-		if f.State == "absent" {
+	uid, gid, err := ownership(f)
+	if err != nil {
+		return false, err
+	}
+	if f.SELinux != "" {
+		if err := validateLabel(f.SELinux); err != nil {
+			return false, err
+		}
+	}
+	if f.State == "absent" {
+		info, err := os.Lstat(f.Path)
+		if os.IsNotExist(err) {
 			return false, nil
 		}
+		if err != nil {
+			return false, err
+		}
+		if !info.Mode().IsRegular() && info.Mode()&os.ModeSymlink == 0 {
+			return false, errors.New("target is not a regular file")
+		}
+		old := []byte(nil)
+		if info.Mode().IsRegular() {
+			old, err = os.ReadFile(f.Path)
+		}
+		if err != nil {
+			return false, err
+		}
+		f.Patch = udiff.Unified(f.Path, "/dev/null", string(old), "")
+		return true, nil
+	}
+	file, err := os.OpenFile(f.Path, os.O_RDONLY|unix.O_NONBLOCK, 0)
+	if os.IsNotExist(err) {
 		f.Write = true
-		f.Patch = udiff.Unified("/dev/null", f.Path, "", string(f.Content))
+		f.Patch = udiff.Unified("/dev/null", f.Path, "", f.Content)
 		return true, nil
 	}
 	if err != nil {
 		return false, err
 	}
-	defer unix.Close(parent)
-	fd, err := unix.Openat(parent, name, unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_NONBLOCK|unix.O_CLOEXEC, 0)
-	if errors.Is(err, unix.ENOENT) {
-		if f.State == "absent" {
-			return false, nil
-		}
-		f.Write = true
-		f.Patch = udiff.Unified("/dev/null", f.Path, "", string(f.Content))
-		return true, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("open target without following symlinks: %w", err)
-	}
-	file := os.NewFile(uintptr(fd), f.Path)
 	defer file.Close()
 	info, err := file.Stat()
 	if err != nil {
@@ -193,19 +185,16 @@ func Observe(f *plan.FileChange) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if f.State == "absent" {
-		f.Patch = udiff.Unified(f.Path, "/dev/null", string(old), "")
-		return true, nil
-	}
 	f.Write = !bytes.Equal(old, []byte(f.Content))
+	f.Patch = ""
 	if f.Write {
-		f.Patch = udiff.Unified(f.Path, f.Path, string(old), string(f.Content))
+		f.Patch = udiff.Unified(f.Path, f.Path, string(old), f.Content)
 	}
 	var st unix.Stat_t
-	if err = unix.Fstat(fd, &st); err != nil {
+	if err = unix.Fstat(int(file.Fd()), &st); err != nil {
 		return false, err
 	}
-	changed := f.Write || (f.Mode != nil && uint32(st.Mode)&07777 != *f.Mode) || (f.UID != nil && int(st.Uid) != *f.UID) || (f.GID != nil && int(st.Gid) != *f.GID)
+	changed := f.Write || f.Mode != nil && uint32(st.Mode)&07777 != *f.Mode || uid != -1 && int(st.Uid) != uid || gid != -1 && int(st.Gid) != gid
 	if f.SELinux != "" {
 		label, err := readLabel(file)
 		if err != nil {
@@ -214,6 +203,51 @@ func Observe(f *plan.FileChange) (bool, error) {
 		changed = changed || label != f.SELinux
 	}
 	return changed, nil
+}
+
+func validateLabelSyntax(label string) error {
+	parts := strings.SplitN(label, ":", 4)
+	if len(parts) < 3 || strings.ContainsAny(label, " \t\n\r\x00") {
+		return errors.New("invalid SELinux context")
+	}
+	for _, part := range parts {
+		if part == "" {
+			return errors.New("invalid SELinux context")
+		}
+	}
+	return nil
+}
+
+// Names are resolved on the managed host each time, rather than saved as IDs.
+func ownership(f *plan.FileChange) (int, int, error) {
+	uid, gid := -1, -1
+	if f.UID != nil {
+		uid = *f.UID
+	}
+	if f.GID != nil {
+		gid = *f.GID
+	}
+	if f.Owner != "" {
+		u, err := user.Lookup(f.Owner)
+		if err != nil {
+			return 0, 0, fmt.Errorf("owner %q does not exist", f.Owner)
+		}
+		uid, err = strconv.Atoi(u.Uid)
+		if err != nil {
+			return 0, 0, err
+		}
+	}
+	if f.Group != "" {
+		g, err := user.LookupGroup(f.Group)
+		if err != nil {
+			return 0, 0, fmt.Errorf("group %q does not exist", f.Group)
+		}
+		gid, err = strconv.Atoi(g.Gid)
+		if err != nil {
+			return 0, 0, err
+		}
+	}
+	return uid, gid, nil
 }
 
 type Local struct{}
@@ -236,7 +270,7 @@ func (Local) Resolve(t plan.Task) ([]plan.Action, error) {
 		return nil, errors.New("invalid file state in plan")
 	}
 	if f.SELinux != "" {
-		if err := validateLabel(f.SELinux); err != nil {
+		if err := validateLabelSyntax(f.SELinux); err != nil {
 			return nil, err
 		}
 	}
@@ -244,7 +278,7 @@ func (Local) Resolve(t plan.Task) ([]plan.Action, error) {
 	if f.Write {
 		actions = append(actions, plan.Action{Kind: "overwrite-file", File: f})
 	}
-	if f.UID != nil || f.GID != nil || f.Mode != nil || f.SELinux != "" {
+	if f.Owner != "" || f.Group != "" || f.UID != nil || f.GID != nil || f.Mode != nil || f.SELinux != "" {
 		actions = append(actions, plan.Action{Kind: "set-file-attributes", File: f})
 	}
 	return actions, nil
@@ -258,42 +292,35 @@ func (Local) Execute(ctx context.Context, a plan.Action) error {
 	if f == nil {
 		return errors.New("missing file action inputs")
 	}
-	create := a.Kind == "create-parent-directories"
-	parent, name, err := openParent(f.Path, create)
-	if a.Kind == "remove-file" && os.IsNotExist(err) {
-		return nil
-	}
-	if err != nil {
+	if _, err := (Local{}).Resolve(plan.Task{Operation: "file", File: f}); err != nil {
 		return err
 	}
-	defer unix.Close(parent)
-	if create {
-		return nil
+	if a.Kind == "create-parent-directories" {
+		return os.MkdirAll(filepath.Dir(f.Path), 0755)
 	}
 	if a.Kind == "remove-file" {
-		var st unix.Stat_t
-		if err = unix.Fstatat(parent, name, &st, unix.AT_SYMLINK_NOFOLLOW); errors.Is(err, unix.ENOENT) {
+		info, err := os.Lstat(f.Path)
+		if os.IsNotExist(err) {
 			return nil
 		}
 		if err != nil {
 			return err
 		}
-		if st.Mode&unix.S_IFMT != unix.S_IFREG {
-			return errors.New("target is not a regular file (symlinks are forbidden)")
+		if !info.Mode().IsRegular() && info.Mode()&os.ModeSymlink == 0 {
+			return errors.New("target is not a regular file")
 		}
-		return unix.Unlinkat(parent, name, 0)
+		return os.Remove(f.Path)
 	}
-	flags := unix.O_WRONLY | unix.O_NOFOLLOW | unix.O_NONBLOCK | unix.O_CLOEXEC
+	flags := os.O_WRONLY | unix.O_NONBLOCK
 	if a.Kind == "overwrite-file" {
-		flags |= unix.O_CREAT
+		flags |= os.O_CREATE
 	} else if a.Kind != "set-file-attributes" {
 		return fmt.Errorf("unsupported action %q", a.Kind)
 	}
-	fd, err := unix.Openat(parent, name, flags, 0644)
+	file, err := os.OpenFile(f.Path, flags, 0644)
 	if err != nil {
 		return err
 	}
-	file := os.NewFile(uintptr(fd), f.Path)
 	defer file.Close()
 	info, err := file.Stat()
 	if err != nil {
@@ -311,12 +338,9 @@ func (Local) Execute(ctx context.Context, a plan.Action) error {
 		}
 		return file.Sync()
 	}
-	uid, gid := -1, -1
-	if f.UID != nil {
-		uid = *f.UID
-	}
-	if f.GID != nil {
-		gid = *f.GID
+	uid, gid, err := ownership(f)
+	if err != nil {
+		return err
 	}
 	if uid != -1 || gid != -1 {
 		if err = file.Chown(uid, gid); err != nil {
@@ -324,40 +348,17 @@ func (Local) Execute(ctx context.Context, a plan.Action) error {
 		}
 	}
 	if f.Mode != nil {
-		if err = unix.Fchmod(fd, *f.Mode); err != nil {
+		if err = unix.Fchmod(int(file.Fd()), *f.Mode); err != nil {
 			return err
 		}
 	}
 	if f.SELinux != "" {
+		if err = validateLabel(f.SELinux); err != nil {
+			return err
+		}
 		if err = writeLabel(file, f.SELinux); err != nil {
 			return err
 		}
 	}
 	return file.Sync()
-}
-
-// Anchor every component with O_NOFOLLOW. This also rejects symlink parents.
-func openParent(path string, create bool) (int, string, error) {
-	if !filepath.IsAbs(path) || filepath.Clean(path) != path || path == "/" {
-		return -1, "", errors.New("invalid absolute file path")
-	}
-	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
-	fd, err := unix.Open("/", unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
-	if err != nil {
-		return -1, "", err
-	}
-	for _, part := range parts[:len(parts)-1] {
-		next, err := unix.Openat(fd, part, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
-		if errors.Is(err, unix.ENOENT) && create {
-			if err = unix.Mkdirat(fd, part, 0755); err == nil || errors.Is(err, unix.EEXIST) {
-				next, err = unix.Openat(fd, part, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
-			}
-		}
-		unix.Close(fd)
-		if err != nil {
-			return -1, "", err
-		}
-		fd = next
-	}
-	return fd, parts[len(parts)-1], nil
 }

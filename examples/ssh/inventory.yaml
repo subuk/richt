@@ -1,0 +1,61 @@
+# Run only on disposable DNF 4/systemd targets with non-root SSH aliases and
+# passwordless sudo. Build examples/rpm-systemd/build-repository.sh on each
+# target first. Replace the SSH aliases with entries from your ssh_config.
+services:
+  repository:
+    configs:
+      repo:
+        path: /etc/yum.repos.d/richt-demo.repo
+        owner: root
+        group: root
+        mode: "0644"
+        template:
+          inline: |
+            [richt-demo]
+            name=Richt demonstration repository
+            baseurl=file:///var/lib/richt-demo-fixture/repo
+            enabled=1
+            gpgcheck=0
+  demo:
+    binaries:
+      app:
+        type: rpm
+        manager: dnf
+        package: richt-demo
+        version: 0:1.0-1.noarch
+    configs:
+      main:
+        path: /etc/richt-demo.conf
+        owner: root
+        group: root
+        mode: "0644"
+        template:
+          inline: |
+            message=hello over SSH
+    processes:
+      main:
+        type: systemd
+        unit: richt-demo.service
+        state: running
+        enabled: true
+        timeout: 5s
+        restart_on: [binary.app]
+        reload_on: [config.main]
+        overrides:
+          20-reload.conf:
+            template:
+              inline: |
+                [Service]
+                ExecReload=
+                ExecReload=/bin/kill -HUP $MAINPID
+hosts:
+  - name: first
+    transport: {type: ssh, host: richt-test-a, sudo: true}
+    services:
+      - {name: repository, order: 10}
+      - {name: demo, order: 20}
+  - name: second
+    transport: {type: ssh, host: richt-test-b, sudo: true}
+    services:
+      - {name: repository, order: 10}
+      - {name: demo, order: 20}

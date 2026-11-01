@@ -54,7 +54,7 @@ func TestCLIInventoryAndSavedApply(t *testing.T) {
 		t.Fatalf("filters accepted: %d %s", code, err)
 	}
 	os.Remove(inventory)
-	code, out, err = run(t, "apply", "-y", saved)
+	code, out, err = run(t, "apply", "-y", "--parallelism", "1", saved)
 	if code != 0 {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func TestCLIInventoryAndSavedApply(t *testing.T) {
 	if string(content) != "example content" {
 		t.Fatal(string(content))
 	}
-	code, out, err = run(t, "apply", "-y", saved)
+	code, out, err = run(t, "apply", "-y", "--parallelism", "1", saved)
 	if code != 0 || !strings.Contains(out, "previously completed") {
 		t.Fatalf("resume: %d %s %s", code, out, err)
 	}
@@ -80,6 +80,7 @@ func TestNoTerminalRequiresYesAndNoAutosave(t *testing.T) {
 	write.Close()
 	var out bytes.Buffer
 	f := arguments{}
+	f.Apply.Parallelism = 20
 	f.Apply.Inventory = inventory
 	if err := execute("apply", f, pipe, &out); err == nil || !strings.Contains(err.Error(), "use -y") {
 		t.Fatalf("expected no TTY rejection: %v", err)
@@ -105,5 +106,14 @@ func TestCLIHelpVersionAndBadArguments(t *testing.T) {
 	}
 	if code, _, _ := run(t, "diff", "--unknown"); code == 0 {
 		t.Fatal("accepted unknown flag")
+	}
+}
+
+func TestParallelismValidation(t *testing.T) {
+	for _, n := range []string{"0", "-1"} {
+		code, _, err := run(t, "apply", "-y", "--parallelism="+n, "missing-plan.json")
+		if code == 0 || !strings.Contains(err, "parallelism must be positive") {
+			t.Fatal(code, err)
+		}
 	}
 }

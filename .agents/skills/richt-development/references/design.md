@@ -9,7 +9,7 @@ that a later extension is permanently forbidden.
 
 Contents: [architecture](#architecture-and-domain),
 [shipped baseline](#shipped-baseline), [plans](#executable-plans-and-progress),
-[SSH and concurrency](#upcoming-ssh-sudo-and-host-concurrency),
+[SSH and concurrency](#ssh-sudo-and-host-concurrency),
 [secrets](#upcoming-secret-source-execution),
 [release documentation](#upcoming-first-version-documentation), and
 [later scope](#later-scope).
@@ -58,9 +58,9 @@ extension processes.
 ## Shipped baseline
 
 The working CLI includes build/install/help/version, strict YAML inventory,
-side-effect-free inventory inspection, local files and saved plans, and local
-DNF4/YUM4 plus systemd services. SSH/sudo and secret execution are explicitly
-unsupported; host execution is currently sequential. First-version completion
+side-effect-free inventory inspection, files and saved plans, DNF4/YUM4 plus systemd services, local/SSH transports,
+noninteractive sudo, and bounded host concurrency. Secret execution remains
+explicitly unsupported. First-version completion
 still includes the upcoming work below. The verified Linux platform and real
 acceptance harnesses are recorded in the guides and
 [Linux validation skill](../../richt-linux-validation/SKILL.md).
@@ -108,10 +108,12 @@ Important invariants across those contracts:
   plan fixes the package request, not repository metadata, dependencies, complete
   transaction, scriptlet effects, or RPM checksums; target DNF resolves those at
   apply. RPMs are fetched then and are not embedded as large plan artifacts.
-- Files create necessary parents, require existing named owners/groups, reject
-  symlink targets/parents, and support owner/group/mode and full SELinux labels.
-  Managed content overwrites the inode; atomic replacement of target configs is
-  not the model. Missing template variables fail preparation. Application config
+- Files create necessary parents, require existing named owners/groups on the
+  target, and support owner/group/mode and full SELinux labels. Ordinary file
+  operations follow target and parent symlinks; removal unlinks the named entry.
+  New plans retain owner/group names and resolve them again on apply; numeric
+  IDs may change between preparation and execution. No special inode identity
+  or symlink protection contract is imposed. Missing template variables fail preparation. Application config
   validation before writing remains later scope.
 - `absent` stops and verifies processes in reverse dependency order, disables
   them before removing owned units/drop-ins and configs, then removes packages.
@@ -124,21 +126,23 @@ Important invariants across those contracts:
 ## Executable plans and progress
 
 Preparation and diff do not change managed resources. A plan fixes host targets,
-task order, operations, ready file contents/patches and attributes, required
-connection inputs, and allowed process branches. Show real actions, parameters,
+task order, operations, ready file contents/patches and attributes, explicit
+inventory connection inputs, and allowed process branches. Show real actions, parameters,
 targets, order, checks, and branches through the same deterministic resolution
 contract used for execution; a separate serialized copy of resolved commands is
 not required. A future transport without shell shows its actual API operations.
 Secrets must be hidden in every Richt-controlled display.
 
 Apply executes prepared inputs without rereading inventory/templates/secrets,
-rendering again, recalculating diff, or checking resources for drift. Display
-and execution must not silently change actions due to different external inputs
-or incompatible backend semantics. Process state reads for planned branches and
+rendering again, recalculating diff, or checking resources for drift. Rendered content and task composition remain fixed. Current system SSH
+configuration may change between preparation and apply, and named ownership is
+resolved again on the target. These are explicit exceptions to frozen inputs,
+not reasons to recalculate tasks. Other incompatible backend semantics fail. Process state reads for planned branches and
 result verification remain execution operations. Successful tasks are not
 rechecked during continuation.
 
-The current saved format is strict, indented JSON schema version `1.0` with
+The current saved format is strict, indented JSON schema version `1.1` (with legacy local
+`1.0` plans still accepted) with
 validation of operations and progress. Its compatibility rules, task shapes,
 atomic writes, same-plan locking, and restrictive plan/lock permissions are
 implemented contracts, not undecided design. Extend them deliberately when new
@@ -166,24 +170,29 @@ previously completed tasks, failures, blocked tasks and reasons; include the
 saved path and manual continuation instruction when applicable. Any failures
 produce a nonzero exit. Forced termination may prevent a final report.
 
-## Upcoming SSH, sudo, and host concurrency
+## SSH, sudo, and host concurrency
 
-These are accepted first-version requirements, not shipped support:
+These are implemented first-version contracts:
 
 - Reuse the existing domain operations and planner/executor for SSH; support
   mixed local/SSH plans without a second remote execution model.
 - Preserve normal SSH-client behavior: `ssh_config`, aliases, connection
   settings, keys, SSH agent, and normal host-key/`known_hosts` verification.
   Users should not have to copy established SSH settings into Richt.
-- Honor the existing host connection `sudo` flag; never enable escalation
-  implicitly. Support both privileged commands and file writes for non-root
-  users. A system client or library may be chosen only if it preserves required
-  compatibility. Define precedence of explicit settings versus `ssh_config`,
-  interactive/noninteractive authentication, and sudo prompts during this work.
-- Fix every connection input affecting concrete action resolution before
-  confirmation. Saved-plan execution must preserve the deterministic plan rules;
-  define compatibility handling for remote parameters without reloading inventory
-  or silently selecting new actions from changing client configuration.
+- Use the system OpenSSH client with current `ssh_config`, keys, agent, aliases,
+  proxy settings, and normal host-key verification. Explicit inventory host,
+  user, and port override corresponding client defaults; unspecified values use
+  client configuration. Effective SSH configuration is not frozen in plans and
+  may change between preparation and apply.
+- Honor the existing host connection `sudo` flag; never escalate implicitly.
+  Both privileged commands and file writes work for non-root users. SSH always
+  uses batch mode without a TTY; sudo always uses `-n`. Password/passphrase and
+  host-key confirmation prompts are not supported. Set up keys/agent, host trust,
+  and noninteractive sudo before running Richt. `-y` skips only plan confirmation.
+- Saved plans retain explicit connection inputs and prepared file bytes, not SSH
+  credentials or snapshots of client configuration. Display the selected alias,
+  explicit overrides, privilege mode, and current-client-config policy. Applying
+  a saved plan does not reload inventory or rerender content.
 - Bound simultaneous hosts to 20 by default, with a per-apply override including
   saved plans; 1 means sequential. The limit is executor configuration, never a
   selector or a reason to rebuild/change hosts, tasks, inputs, or progress.
