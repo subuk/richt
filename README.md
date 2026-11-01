@@ -106,3 +106,7 @@ packages separate inventory rules, YAML loading, executable plans, file
 operations, RPM operations, systemd operations, and service orchestration.
 Packages contain implemented behavior; the repository has no `internal`
 directories or empty future implementation layers.
+
+Contributor and agent guidance is in [AGENTS.md](AGENTS.md). Repository-local
+skills cover [feature and bugfix development](.agents/skills/richt-development/SKILL.md)
+and [Linux acceptance validation](.agents/skills/richt-linux-validation/SKILL.md).
