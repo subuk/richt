@@ -8,7 +8,7 @@ output in English.
 
 - Start from the current task and the repository's
   [design and roadmap](.agents/skills/richt-development/references/design.md).
-  It records accepted rules, the shipped baseline, upcoming first-version work,
+  It records accepted rules, the completed first-version baseline,
   and later scope. Use the focused guides below for implemented syntax and
   behavior. These local sources are sufficient for development; no external
   project context is required. A newer accepted decision or explicit task can

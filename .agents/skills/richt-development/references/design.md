@@ -2,16 +2,16 @@
 
 This is the repository's consolidated accepted design context. Use the current
 request with the relevant sections here and the focused guides linked below.
-The guides define implemented syntax and behavior; this reference also records
-accepted work that is not implemented yet. Update both when a task intentionally
-changes a contract. Do not infer that an upcoming capability already works, or
-that a later extension is permanently forbidden.
+The guides define implemented syntax and behavior; this reference records the
+completed first-version baseline and later scope. Update both when a task
+intentionally changes a contract. Later extensions are not shipped capabilities
+or unfinished first-version requirements, nor are they permanently forbidden.
 
 Contents: [architecture](#architecture-and-domain),
 [shipped baseline](#shipped-baseline), [plans](#executable-plans-and-progress),
 [SSH and concurrency](#ssh-sudo-and-host-concurrency),
 [secrets](#secret-source-execution),
-[release documentation](#upcoming-first-version-documentation), and
+[first-version completion](#first-version-completion-and-documentation), and
 [later scope](#later-scope).
 
 ## Architecture and domain
@@ -58,11 +58,12 @@ extension processes.
 ## Shipped baseline
 
 The working CLI includes build/install/help/version, strict YAML inventory,
-side-effect-free inventory inspection, files and saved plans, DNF4/YUM4 plus systemd services, local/SSH transports,
-noninteractive sudo, bounded host concurrency, and local YAML secret sources.
-First-version completion
-still includes the upcoming work below. The verified Linux platform and real
-acceptance harnesses are recorded in the guides and
+side-effect-free inventory inspection, files and saved plans, DNF4/YUM4 plus
+systemd services, local/SSH transports, noninteractive sudo, bounded host
+concurrency, and local YAML secret sources. The agreed first-version scope is
+complete: KRG-69 through KRG-75 are Done in Linear as of 2026-11-01, including
+documentation, executable examples, and the published documentation site.
+The verified Linux platform and real acceptance harnesses are recorded in the guides and
 [Linux validation skill](../../richt-linux-validation/SKILL.md).
 
 Read these contracts instead of reconstructing syntax from older proposals:
@@ -272,18 +273,31 @@ old/new/multiline/transformed-value redaction in every output path, and explicit
 sensitivity when removing a secret from a template. Verify local and SSH/sudo
 execution and saved-plan continuation.
 
-## Upcoming first-version documentation
+## First-version completion and documentation
 
-Each implementation ships a reproducible example and short usage/verification
-instructions, plus relevant tests. Final documentation consolidates verified
-build/install/privilege requirements, local/SSH use, final schema, selections,
+The agreed first version was completed on 2026-11-01. KRG-69 through KRG-74
+delivered the CLI, inventory, files and plans, RPM/systemd, SSH/sudo and host
+concurrency, and YAML secret sources. KRG-75 completed documentation and verified
+usage scenarios in commit `d33accc`. The [documentation index](../../../../docs/_index.md)
+covers build/install/privilege requirements, local/SSH use, schema, selections,
 templates/paths, processes/timeouts/removal, plan confirmation/progress and
-continuation, concurrency, secrets, and limitations. Keep help, examples, and
-guides synchronized. Include tested config-only and full local examples, two
-SSH hosts, failure/continuation, and two YAML secret sources. Use fictional
-addresses and dummy values; distinguish verified scenarios from illustrations.
-Validate quickstart on a clean disposable environment with no hidden steps.
-Do not defer implementation testing to a documentation-only completion step.
+continuation, concurrency, secrets, and limitations. The
+[documentation site](https://subuk.github.io/richt/) is published; a custom domain
+was explicitly deferred and is not a first-version blocker.
+
+The [validation report](../../../../docs/validation.md) records passed checks on
+two disposable AlmaLinux 10.2 hosts, including files/SELinux, published Vmango
+RPMs, systemd, SSH/sudo, secrets, and failure/continuation. The accepted final
+validation scope used published RPMs only; custom fixture RPM suites were
+excluded by explicit scope decision. The report's coverage limits describe
+what was verified, not outstanding first-version tasks.
+
+For subsequent changes, keep help, examples, and guides synchronized. Ship
+reproducible examples, short usage/verification instructions, and relevant tests
+with each implementation. Use fictional addresses and dummy values, distinguish
+verified scenarios from illustrations, and validate walkthroughs on a clean
+disposable environment without hidden steps. Do not defer implementation testing
+to documentation work.
 
 ## Later scope
 
