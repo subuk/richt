@@ -11,11 +11,12 @@ Linux acceptance details belong to [richt-linux-validation](../richt-linux-valid
 
 ## Establish the contract
 
-Use the current request and relevant accepted ADR or issue when supplied or
-needed to resolve design. Fully specified local tasks do not require a Linear
-lookup. Distinguish implemented behavior from a proposal; ADR-0007 and ADR-0008
-override older overlapping proposals, while newer accepted decisions can extend
-them.
+Use the current request and the local [design and roadmap](references/design.md).
+Read its relevant sections for accepted domain rules, upcoming SSH/sudo and
+concurrency work, secret-source semantics, or later extension scope. Distinguish
+shipped behavior from accepted upcoming requirements and open implementation
+choices. No external project lookup is required. An explicit task or a newer
+accepted decision can extend these contracts; record intentional changes locally.
 
 Read the guide that owns the changed contract:
 

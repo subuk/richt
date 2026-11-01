@@ -110,3 +110,6 @@ directories or empty future implementation layers.
 Contributor and agent guidance is in [AGENTS.md](AGENTS.md). Repository-local
 skills cover [feature and bugfix development](.agents/skills/richt-development/SKILL.md)
 and [Linux acceptance validation](.agents/skills/richt-linux-validation/SKILL.md).
+The [design and roadmap](.agents/skills/richt-development/references/design.md)
+records accepted architecture, upcoming first-version requirements, and later
+scope without requiring external project context.

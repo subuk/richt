@@ -6,12 +6,13 @@ output in English.
 
 ## Design and scope
 
-- Start from the current task and relevant accepted decisions. In Linear,
-  [ADR-0007: plan progress, failures, timeouts, and scope](https://linear.app/krglv/document/adr-0007-progress-plana-oshibki-tajm-auty-i-granicy-pervogo-etapa-3942656a795f)
-  and [ADR-0008: services, files, secrets, and JSON plans](https://linear.app/krglv/document/adr-0008-opisanie-servisov-fajly-sekrety-i-json-plan-06b47b8afa2d)
-  supersede older proposals on overlapping decisions. KRG-69 through KRG-72 are
-  completed baseline work. A newer accepted decision or explicit task can extend
-  that baseline; do not treat deferred features as permanent prohibitions.
+- Start from the current task and the repository's
+  [design and roadmap](.agents/skills/richt-development/references/design.md).
+  It records accepted rules, the shipped baseline, upcoming first-version work,
+  and later scope. Use the focused guides below for implemented syntax and
+  behavior. These local sources are sufficient for development; no external
+  project context is required. A newer accepted decision or explicit task can
+  extend the baseline; do not treat deferred features as permanent prohibitions.
 - Use **Kong** for CLI parsing. Prefer the standard library and maintained
   dependencies already in `go.mod`; justify additions with a concrete need.
 - Keep domain rules separate from YAML, CLI, filesystem, RPM, and systemd
@@ -19,9 +20,9 @@ output in English.
   empty future layers, or speculative interfaces. Add abstractions when an
   implemented boundary needs them.
 - Current execution supports local transport, DNF4/YUM4, files, and systemd.
-  SSH, sudo, and real secret fetching require their own implementation tasks.
-  Preserve explicit unsupported-capability errors until those tasks implement
-  the behavior.
+  SSH/sudo, bounded host parallelism, and real secret fetching are accepted
+  upcoming work, with requirements in the local design reference. Preserve
+  explicit unsupported-capability errors until the relevant implementation.
 
 ## Behavioral contracts
 
