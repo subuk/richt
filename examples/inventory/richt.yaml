@@ -1,0 +1,60 @@
+tags:
+  hypervisor:
+    weight: 10
+    vars:
+      vmango:
+        listen: "127.0.0.1:8080"
+        libvirt_uri: "qemu:///system"
+        cloud_name: Local
+      vmango_repository:
+        target: rhel-10
+  home:
+    weight: 20
+    vars:
+      vmango:
+        cloud_name: Home
+  net:
+    weight: 20
+    vars:
+      vmango:
+        cloud_name: Net
+
+# These declarations are displayed, but their files are never read by inventory
+# validate or show. The files need not exist for these commands.
+secret_sources:
+  default:
+    type: yaml
+    file: secrets/default.yaml
+  production:
+    type: yaml
+    file: secrets/production.yaml
+
+services:
+  vmango-repository:
+    file: services/vmango-repository.yaml
+  vmango:
+    file: services/vmango.yaml
+
+hosts:
+  - name: gena
+    tags: [hypervisor, home]
+    transport:
+      type: local
+    services:
+      - name: vmango
+        order: 20
+      - name: vmango-repository
+        order: 10
+  - name: lanst
+    tags: [net, hypervisor]
+    transport:
+      type: ssh
+      host: lanst.example.invalid
+      user: root
+      sudo: true
+    services:
+      - name: vmango-repository
+        order: 10
+      - name: vmango
+        order: 20
+        state: present

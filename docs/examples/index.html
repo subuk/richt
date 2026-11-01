@@ -1,0 +1,323 @@
+<!doctype html>
+<html itemscope itemtype="http://schema.org/WebPage" lang="en" class="no-js" data-theme-init>
+  <head>
+    
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
+<meta name="theme-color" media="(prefers-color-scheme: dark)"  content="#000000">
+
+<style>
+  html { background: Canvas; color: CanvasText; }
+  @media (prefers-color-scheme: dark) {
+    html { background: #0b0d12; color: #e6e6e6; }
+  }
+  html[data-theme-init] * { transition: none !important; }
+</style>
+
+<script>
+  (function() {
+    const themeKey = 'td-color-theme';
+    const storedTheme = localStorage.getItem(themeKey);
+    let theme = storedTheme || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+
+    if (theme === 'auto') {
+      theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+
+    document.documentElement.setAttribute('data-bs-theme', theme);
+  })();
+</script>
+<meta name="robots" content="index, follow">
+<link rel="icon" href="/richt/favicon.svg" type="image/svg+xml" />
+
+<title>Examples and walkthroughs | Richt</title>
+<meta name="description" content="Choose a config-only, ready-package, SSH, secrets, or continuation scenario.">
+<meta property="og:url" content="https://subuk.github.io/richt/docs/examples/">
+	<meta property="og:site_name" content="Richt">
+	<meta property="og:title" content="Examples and walkthroughs">
+	<meta property="og:description" content="Choose a config-only, ready-package, SSH, secrets, or continuation scenario.">
+	<meta property="og:locale" content="en">
+	<meta property="og:type" content="article">
+		<meta property="article:section" content="docs">
+
+	<meta itemprop="name" content="Examples and walkthroughs">
+	<meta itemprop="description" content="Choose a config-only, ready-package, SSH, secrets, or continuation scenario.">
+	<meta itemprop="wordCount" content="331">
+	<meta name="twitter:card" content="summary">
+	<meta name="twitter:title" content="Examples and walkthroughs">
+	<meta name="twitter:description" content="Choose a config-only, ready-package, SSH, secrets, or continuation scenario.">
+<link rel="preload" href="/richt/scss/main.min.837bcd9ee43b630b69cf51ae131dacbb236c33fcf3728473bc3771c47aa4bf9b.css" as="style" integrity="sha256-g3vNnuQ7Ywtpz1GuEx2suyNsM/zzcoRzvDdxxHqkv5s=" crossorigin="anonymous">
+<link href="/richt/scss/main.min.837bcd9ee43b630b69cf51ae131dacbb236c33fcf3728473bc3771c47aa4bf9b.css" rel="stylesheet" integrity="sha256-g3vNnuQ7Ywtpz1GuEx2suyNsM/zzcoRzvDdxxHqkv5s=" crossorigin="anonymous">
+<script defer
+  src="/richt/vendor/lunr.min.js"></script>
+<link rel="icon" href="/richt/favicon.svg" type="image/svg+xml">
+<script src="/richt/landing/theme.js"></script>
+
+  </head>
+  <body class="td-page">
+    <header>
+      <nav class="td-navbar js-navbar-scroll">
+<div class="td-navbar-container container-fluid flex-column flex-md-row">
+  <a class="navbar-brand" href="/richt/"><span class="navbar-brand__logo navbar-logo"></span><span class="navbar-brand__name">Richt</span></a>
+  <div class="td-navbar__main td-navbar-nav-scroll td-navbar-nav-scroll--indicator" id="main_navbar">
+    <div class="scroll-indicator scroll-left"></div>
+    <ul class="navbar-nav">
+      <li class="nav-item">
+        <a class="nav-link active" href="/richt/docs/"><span>Documentation</span></a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="https://github.com/subuk/richt" target="_blank" rel="noopener"><span>GitHub</span></a>
+      </li>
+      <li class="nav-item td-navbar__light-dark-menu">
+        <button id="theme-mode" class="btn btn-link nav-link d-flex align-items-center" type="button" aria-label="Color theme: System. Switch to Light" title="Theme: System">◐</button>
+
+      </li>
+      </ul>
+    <div class="scroll-indicator scroll-right"></div>
+  </div>
+  <div class="td-navbar__search d-none d-lg-block">
+    <div class="td-search td-search--offline">
+  <div class="td-search__icon" aria-hidden="true"></div>
+  <input
+    type="search"
+    name="q"
+    class="td-search__input form-control"
+    placeholder='Search this site…'
+    aria-label='Search this site…'
+    autocomplete="off"
+    
+    data-offline-search-index-json-src="/richt/offline-search-index.e536e48567cb8d376fe4d24e5b916221.json"
+    data-offline-search-base-href="/"
+    data-offline-search-max-results="12"
+  >
+</div>
+  </div>
+</div>
+</nav>
+    </header>
+    <div class="container-fluid td-outer">
+      <div class="td-main" data-bs-spy="scroll" data-bs-target=".td-toc" data-bs-root-margin="0px 0px -10%">
+        <div class="row flex-xl-nowrap">
+          <aside class="col-12 col-md-3 col-xl-2 td-sidebar d-print-none">
+            <div id="td-sidebar-menu" class="td-sidebar__inner">
+  <form class="td-sidebar__search d-flex align-items-center">
+    <div class="td-search td-search--offline">
+  <div class="td-search__icon" aria-hidden="true"></div>
+  <input
+    type="search"
+    name="q"
+    class="td-search__input form-control"
+    placeholder='Search this site…'
+    aria-label='Search this site…'
+    autocomplete="off"
+    
+    data-offline-search-index-json-src="/richt/offline-search-index.e536e48567cb8d376fe4d24e5b916221.json"
+    data-offline-search-base-href="/"
+    data-offline-search-max-results="12"
+  >
+</div>
+    <button class="btn btn-link td-sidebar__toggle" type="button" data-bs-toggle="collapse" data-bs-target="#td-section-nav" aria-controls="td-section-nav" aria-expanded="false" aria-label="Toggle section navigation">
+    </button>
+  </form>
+  <nav class="td-sidebar-nav collapse" id="td-section-nav">
+    <ul class="td-sidebar-nav__section pe-md-3 ul-0">
+      <li class="td-sidebar-nav__section-title td-sidebar-nav__section with-child active-path" id="m-richtdocs-li">
+    <a href="/richt/docs/" class="align-left ps-0 td-sidebar-link td-sidebar-link__section tree-root" id="m-richtdocs"><span class="">Documentation</span></a>
+    <ul class="ul-1">
+      <li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocsquickstart-li">
+    <a href="/richt/docs/quickstart/" title="Config-only quickstart" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocsquickstart"><span class="">Quickstart</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocsinstallation-li">
+    <a href="/richt/docs/installation/" title="Installation and requirements" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocsinstallation"><span class="">Installation</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocscli-li">
+    <a href="/richt/docs/cli/" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocscli"><span class="">CLI reference</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocsinventory-li">
+    <a href="/richt/docs/inventory/" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocsinventory"><span class="">YAML inventory</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocsfiles-li">
+    <a href="/richt/docs/files/" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocsfiles"><span class="">Files and saved plans</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocsservices-li">
+    <a href="/richt/docs/services/" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocsservices"><span class="">RPM and systemd services</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocsssh-li">
+    <a href="/richt/docs/ssh/" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocsssh"><span class="">SSH, sudo, and parallel apply</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocssecrets-li">
+    <a href="/richt/docs/secrets/" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocssecrets"><span class="">YAML secrets and sensitive files</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocscontinuation-li">
+    <a href="/richt/docs/continuation/" title="Progress and manual continuation" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocscontinuation"><span class="">Continuation</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child active-path" id="m-richtdocsexamples-li">
+    <a href="/richt/docs/examples/" title="Examples and walkthroughs" class="align-left ps-0 active td-sidebar-link td-sidebar-link__page" id="m-richtdocsexamples"><span class="td-sidebar-nav-active-item">Examples</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section with-child" id="m-richtdocswalkthroughs-li">
+    <a href="/richt/docs/walkthroughs/" class="align-left ps-0 td-sidebar-link td-sidebar-link__section" id="m-richtdocswalkthroughs"><span class="">Example walkthroughs</span></a>
+    <ul class="ul-2 foldable">
+      <li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocswalkthroughsfiles-li">
+    <a href="/richt/docs/walkthroughs/files/" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocswalkthroughsfiles"><span class="">Local files</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocswalkthroughsinventory-li">
+    <a href="/richt/docs/walkthroughs/inventory/" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocswalkthroughsinventory"><span class="">Inventory and variables</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocswalkthroughsvmango-li">
+    <a href="/richt/docs/walkthroughs/vmango/" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocswalkthroughsvmango"><span class="">Vmango RPM and systemd</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocswalkthroughsssh-li">
+    <a href="/richt/docs/walkthroughs/ssh/" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocswalkthroughsssh"><span class="">Two hosts over SSH</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocswalkthroughssecrets-li">
+    <a href="/richt/docs/walkthroughs/secrets/" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocswalkthroughssecrets"><span class="">Two YAML secret sources</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocswalkthroughscontinuation-li">
+    <a href="/richt/docs/walkthroughs/continuation/" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocswalkthroughscontinuation"><span class="">Failure and continuation</span></a>
+  </li>
+    </ul>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocslimitations-li">
+    <a href="/richt/docs/limitations/" title="Limitations and plan boundaries" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocslimitations"><span class="">Limitations</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocsvalidation-li">
+    <a href="/richt/docs/validation/" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocsvalidation"><span class="">Linux validation</span></a>
+  </li>
+    </ul>
+  </li>
+    </ul>
+  </nav>
+</div>
+          </aside>
+          <aside class="td-sidebar-toc">
+            <div class="td-page-meta ms-2 pb-1 pt-2 mb-0"><a href="https://github.com/subuk/richt/blob/main/docs/examples.md" class="td-page-meta__view">View source on GitHub</a><a href="https://github.com/subuk/richt/issues" class="td-page-meta__issue">Report a documentation issue</a>
+</div>
+
+            <div class="td-toc" data-proofer-ignore>
+<div class="td-toc-title">
+      <span class="td-toc-title__text">On this page</span>
+      <a class="td-toc-title__link" title="Top of page" href="#"></a>
+    </div>
+    <nav id="TableOfContents">
+  <ul>
+    <li><a href="#choose-the-appropriate-workflow">Choose the appropriate workflow</a></li>
+  </ul>
+</nav>
+  </div>
+
+            
+
+          </aside>
+          <main class="col-12 col-md-9 col-xl-8 ps-md-5" role="main">
+            
+            <nav aria-label="breadcrumb" class="td-breadcrumbs">
+  <ol class="td-breadcrumbs__list">
+  <li class="td-breadcrumbs__item">
+    <a href="/richt/docs/">Documentation</a></li>
+  <li class="td-breadcrumbs__item" aria-current="page">
+    Examples</li>
+  </ol>
+</nav>
+<div class="td-content">
+	<h1>Examples and walkthroughs</h1>
+	<div class="lead">Choose a config-only, ready-package, SSH, secrets, or continuation scenario.</div>
+	<header class="article-meta">
+		
+</header>
+	<p>Run source examples from the repository root after <code>make build</code>. The commands
+and requirements in each example&rsquo;s README are part of the walkthrough. Use
+fictional values only; replace illustrative addresses and credentials before
+execution. Recorded results and their limits live in <a href="/richt/docs/validation/">validation</a>
+.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Scenario</th>
+					<th>Source</th>
+					<th>Scope and prerequisites</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>First local file</td>
+					<td><a href="/richt/docs/quickstart/">Quickstart</a>
+</td>
+					<td>A fresh temporary directory; no root, RPM, or systemd. Create/update/no changes/explicit removal.</td>
+			</tr>
+			<tr>
+					<td>Split inventory and service files</td>
+					<td><a href="/richt/examples/files/inventory.yaml">File inventory</a>
+ and <a href="/richt/examples/files/service.yaml">service</a>
+</td>
+					<td>Local <code>/var/tmp/richt-example/greeting.conf</code>; template path relative to the service file.</td>
+			</tr>
+			<tr>
+					<td>Weighted variables and selection</td>
+					<td><a href="/richt/examples/inventory/richt.yaml">Two-host inventory</a>
+</td>
+					<td>Safe to inspect with <code>inventory validate/show</code>; one local and one illustrative SSH host. Execution changes host configuration.</td>
+			</tr>
+			<tr>
+					<td>Full package/config/process lifecycle</td>
+					<td><a href="/richt/docs/walkthroughs/vmango/">Ready vmango package</a>
+</td>
+					<td>Disposable DNF 4/systemd Linux target, ready repository RPMs, required privileges. No custom RPM build.</td>
+			</tr>
+			<tr>
+					<td>Failure and manual continuation</td>
+					<td><a href="/richt/docs/walkthroughs/continuation/">Continuation example</a>
+</td>
+					<td>Config-only deliberate partial failure, repair, and saved-plan resume.</td>
+			</tr>
+			<tr>
+					<td>Two independent secret sources</td>
+					<td><a href="/richt/docs/walkthroughs/secrets/">Secrets example</a>
+</td>
+					<td>Python 3 verifier and local Richt; dummy values, private temporary targets, frozen saved bytes, and automatic cleanup.</td>
+			</tr>
+			<tr>
+					<td>Two SSH hosts</td>
+					<td><a href="/richt/docs/walkthroughs/ssh/">SSH walkthrough</a>
+ and <a href="/richt/examples/ssh/inventory.yaml">inventory</a>
+</td>
+					<td>Ready vmango RPMs on two disposable Linux targets; replace illustrative client aliases and configure noninteractive sudo.</td>
+			</tr>
+	</tbody>
+</table>
+<h2 id="choose-the-appropriate-workflow">Choose the appropriate workflow</h2>
+<p>Inventory commands are suitable for inspecting the supplied two-host example
+before any SSH or host setup:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-sh" data-lang="sh"><span class="line"><span class="cl">./bin/richt inventory validate -i examples/inventory/richt.yaml
+</span></span><span class="line"><span class="cl">./bin/richt inventory show -i examples/inventory/richt.yaml --tag hypervisor --service vmango
+</span></span></code></pre></div><p>They validate definitions and resolve merged variables without opening
+referenced templates or secret source files. Inspecting successfully does not
+prove target privileges, repository availability, application configuration, or
+reload capability.</p>
+<p>For a persistent reviewed run, use <code>diff -o</code> followed by <code>apply</code> on the JSON
+path. For a one-off run with no saved progress, <code>apply -i</code> prepares and applies
+in memory. See <a href="/richt/docs/cli/">CLI</a>
+ and <a href="/richt/docs/continuation/">continuation</a>
+.</p>
+<p>The <a href="/richt/examples/rpm-systemd/verify.py">RPM/systemd fixture harness</a>
+ and
+<a href="https://github.com/subuk/richt/blob/main/tests/integration/ssh.py">SSH harness</a>
+ remain developer regression tools.
+They create custom fixture RPMs and require their documented isolated setup;
+they are separate from the ready-vmango walkthrough and current package
+acceptance. Do not install build tools or create a fixture repository to follow
+the vmango example.</p>
+
+	
+</div>
+
+
+          </main>
+        </div>
+      </div>
+      <footer class="td-footer row d-print-none">
+  <div class="container-fluid">
+    <div class="row mx-md-2">
+      <div class="td-footer__left col-6 col-sm-4 order-sm-1">
+        
+      </div><div class="td-footer__right col-6 col-sm-4 order-sm-3">
+        
+      </div><div class="td-footer__center col-12 col-sm-4 py-2 order-sm-2">
+        <span class="td-footer__copyright">&copy;
+    2026
+    <span class="td-footer__authors">Richt contributors</span></span><span class="td-footer__all_rights_reserved">All Rights Reserved</span>
+      </div>
+    </div>
+  </div>
+</footer>
+    </div>
+    <script src="/richt/js/main.min.f7e7c07ce9ce4d617cd4071c813c2c2a8eed7a591251b58a13d52b0f5b2417b5.js" integrity="sha256-9&#43;fAfOnOTWF81AccgTwsKo7telkSUbWKE9UrD1skF7U=" crossorigin="anonymous"></script>
+<script src="/richt/landing/copy.js" defer></script>
+
+  </body>
+</html>

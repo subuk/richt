@@ -1,0 +1,401 @@
+<!doctype html>
+<html itemscope itemtype="http://schema.org/WebPage" lang="en" class="no-js" data-theme-init>
+  <head>
+    
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
+<meta name="theme-color" media="(prefers-color-scheme: dark)"  content="#000000">
+
+<style>
+  html { background: Canvas; color: CanvasText; }
+  @media (prefers-color-scheme: dark) {
+    html { background: #0b0d12; color: #e6e6e6; }
+  }
+  html[data-theme-init] * { transition: none !important; }
+</style>
+
+<script>
+  (function() {
+    const themeKey = 'td-color-theme';
+    const storedTheme = localStorage.getItem(themeKey);
+    let theme = storedTheme || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+
+    if (theme === 'auto') {
+      theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+
+    document.documentElement.setAttribute('data-bs-theme', theme);
+  })();
+</script>
+<meta name="robots" content="index, follow">
+<link rel="icon" href="/richt/favicon.svg" type="image/svg+xml" />
+
+<title>Linux validation | Richt</title>
+<meta name="description" content="Recorded Linux acceptance results, environment, commands, and limits.">
+<meta property="og:url" content="https://subuk.github.io/richt/docs/validation/">
+	<meta property="og:site_name" content="Richt">
+	<meta property="og:title" content="Linux validation">
+	<meta property="og:description" content="Recorded Linux acceptance results, environment, commands, and limits.">
+	<meta property="og:locale" content="en">
+	<meta property="og:type" content="article">
+		<meta property="article:section" content="docs">
+
+	<meta itemprop="name" content="Linux validation">
+	<meta itemprop="description" content="Recorded Linux acceptance results, environment, commands, and limits.">
+	<meta itemprop="wordCount" content="918">
+	<meta name="twitter:card" content="summary">
+	<meta name="twitter:title" content="Linux validation">
+	<meta name="twitter:description" content="Recorded Linux acceptance results, environment, commands, and limits.">
+<link rel="preload" href="/richt/scss/main.min.837bcd9ee43b630b69cf51ae131dacbb236c33fcf3728473bc3771c47aa4bf9b.css" as="style" integrity="sha256-g3vNnuQ7Ywtpz1GuEx2suyNsM/zzcoRzvDdxxHqkv5s=" crossorigin="anonymous">
+<link href="/richt/scss/main.min.837bcd9ee43b630b69cf51ae131dacbb236c33fcf3728473bc3771c47aa4bf9b.css" rel="stylesheet" integrity="sha256-g3vNnuQ7Ywtpz1GuEx2suyNsM/zzcoRzvDdxxHqkv5s=" crossorigin="anonymous">
+<script defer
+  src="/richt/vendor/lunr.min.js"></script>
+<link rel="icon" href="/richt/favicon.svg" type="image/svg+xml">
+<script src="/richt/landing/theme.js"></script>
+
+  </head>
+  <body class="td-page">
+    <header>
+      <nav class="td-navbar js-navbar-scroll">
+<div class="td-navbar-container container-fluid flex-column flex-md-row">
+  <a class="navbar-brand" href="/richt/"><span class="navbar-brand__logo navbar-logo"></span><span class="navbar-brand__name">Richt</span></a>
+  <div class="td-navbar__main td-navbar-nav-scroll td-navbar-nav-scroll--indicator" id="main_navbar">
+    <div class="scroll-indicator scroll-left"></div>
+    <ul class="navbar-nav">
+      <li class="nav-item">
+        <a class="nav-link active" href="/richt/docs/"><span>Documentation</span></a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="https://github.com/subuk/richt" target="_blank" rel="noopener"><span>GitHub</span></a>
+      </li>
+      <li class="nav-item td-navbar__light-dark-menu">
+        <button id="theme-mode" class="btn btn-link nav-link d-flex align-items-center" type="button" aria-label="Color theme: System. Switch to Light" title="Theme: System">◐</button>
+
+      </li>
+      </ul>
+    <div class="scroll-indicator scroll-right"></div>
+  </div>
+  <div class="td-navbar__search d-none d-lg-block">
+    <div class="td-search td-search--offline">
+  <div class="td-search__icon" aria-hidden="true"></div>
+  <input
+    type="search"
+    name="q"
+    class="td-search__input form-control"
+    placeholder='Search this site…'
+    aria-label='Search this site…'
+    autocomplete="off"
+    
+    data-offline-search-index-json-src="/richt/offline-search-index.e536e48567cb8d376fe4d24e5b916221.json"
+    data-offline-search-base-href="/"
+    data-offline-search-max-results="12"
+  >
+</div>
+  </div>
+</div>
+</nav>
+    </header>
+    <div class="container-fluid td-outer">
+      <div class="td-main" data-bs-spy="scroll" data-bs-target=".td-toc" data-bs-root-margin="0px 0px -10%">
+        <div class="row flex-xl-nowrap">
+          <aside class="col-12 col-md-3 col-xl-2 td-sidebar d-print-none">
+            <div id="td-sidebar-menu" class="td-sidebar__inner">
+  <form class="td-sidebar__search d-flex align-items-center">
+    <div class="td-search td-search--offline">
+  <div class="td-search__icon" aria-hidden="true"></div>
+  <input
+    type="search"
+    name="q"
+    class="td-search__input form-control"
+    placeholder='Search this site…'
+    aria-label='Search this site…'
+    autocomplete="off"
+    
+    data-offline-search-index-json-src="/richt/offline-search-index.e536e48567cb8d376fe4d24e5b916221.json"
+    data-offline-search-base-href="/"
+    data-offline-search-max-results="12"
+  >
+</div>
+    <button class="btn btn-link td-sidebar__toggle" type="button" data-bs-toggle="collapse" data-bs-target="#td-section-nav" aria-controls="td-section-nav" aria-expanded="false" aria-label="Toggle section navigation">
+    </button>
+  </form>
+  <nav class="td-sidebar-nav collapse" id="td-section-nav">
+    <ul class="td-sidebar-nav__section pe-md-3 ul-0">
+      <li class="td-sidebar-nav__section-title td-sidebar-nav__section with-child active-path" id="m-richtdocs-li">
+    <a href="/richt/docs/" class="align-left ps-0 td-sidebar-link td-sidebar-link__section tree-root" id="m-richtdocs"><span class="">Documentation</span></a>
+    <ul class="ul-1">
+      <li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocsquickstart-li">
+    <a href="/richt/docs/quickstart/" title="Config-only quickstart" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocsquickstart"><span class="">Quickstart</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocsinstallation-li">
+    <a href="/richt/docs/installation/" title="Installation and requirements" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocsinstallation"><span class="">Installation</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocscli-li">
+    <a href="/richt/docs/cli/" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocscli"><span class="">CLI reference</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocsinventory-li">
+    <a href="/richt/docs/inventory/" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocsinventory"><span class="">YAML inventory</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocsfiles-li">
+    <a href="/richt/docs/files/" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocsfiles"><span class="">Files and saved plans</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocsservices-li">
+    <a href="/richt/docs/services/" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocsservices"><span class="">RPM and systemd services</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocsssh-li">
+    <a href="/richt/docs/ssh/" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocsssh"><span class="">SSH, sudo, and parallel apply</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocssecrets-li">
+    <a href="/richt/docs/secrets/" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocssecrets"><span class="">YAML secrets and sensitive files</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocscontinuation-li">
+    <a href="/richt/docs/continuation/" title="Progress and manual continuation" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocscontinuation"><span class="">Continuation</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocsexamples-li">
+    <a href="/richt/docs/examples/" title="Examples and walkthroughs" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocsexamples"><span class="">Examples</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section with-child" id="m-richtdocswalkthroughs-li">
+    <a href="/richt/docs/walkthroughs/" class="align-left ps-0 td-sidebar-link td-sidebar-link__section" id="m-richtdocswalkthroughs"><span class="">Example walkthroughs</span></a>
+    <ul class="ul-2 foldable">
+      <li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocswalkthroughsfiles-li">
+    <a href="/richt/docs/walkthroughs/files/" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocswalkthroughsfiles"><span class="">Local files</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocswalkthroughsinventory-li">
+    <a href="/richt/docs/walkthroughs/inventory/" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocswalkthroughsinventory"><span class="">Inventory and variables</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocswalkthroughsvmango-li">
+    <a href="/richt/docs/walkthroughs/vmango/" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocswalkthroughsvmango"><span class="">Vmango RPM and systemd</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocswalkthroughsssh-li">
+    <a href="/richt/docs/walkthroughs/ssh/" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocswalkthroughsssh"><span class="">Two hosts over SSH</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocswalkthroughssecrets-li">
+    <a href="/richt/docs/walkthroughs/secrets/" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocswalkthroughssecrets"><span class="">Two YAML secret sources</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocswalkthroughscontinuation-li">
+    <a href="/richt/docs/walkthroughs/continuation/" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocswalkthroughscontinuation"><span class="">Failure and continuation</span></a>
+  </li>
+    </ul>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocslimitations-li">
+    <a href="/richt/docs/limitations/" title="Limitations and plan boundaries" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocslimitations"><span class="">Limitations</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child active-path" id="m-richtdocsvalidation-li">
+    <a href="/richt/docs/validation/" class="align-left ps-0 active td-sidebar-link td-sidebar-link__page" id="m-richtdocsvalidation"><span class="td-sidebar-nav-active-item">Linux validation</span></a>
+  </li>
+    </ul>
+  </li>
+    </ul>
+  </nav>
+</div>
+          </aside>
+          <aside class="td-sidebar-toc">
+            <div class="td-page-meta ms-2 pb-1 pt-2 mb-0"><a href="https://github.com/subuk/richt/blob/main/docs/validation.md" class="td-page-meta__view">View source on GitHub</a><a href="https://github.com/subuk/richt/issues" class="td-page-meta__issue">Report a documentation issue</a>
+</div>
+
+            <div class="td-toc" data-proofer-ignore>
+<div class="td-toc-title">
+      <span class="td-toc-title__text">On this page</span>
+      <a class="td-toc-title__link" title="Top of page" href="#"></a>
+    </div>
+    <nav id="TableOfContents">
+  <ul>
+    <li><a href="#files-secrets-and-saved-plans">Files, secrets and saved plans</a></li>
+    <li><a href="#published-rpm-and-local-systemd-lifecycle">Published RPM and local systemd lifecycle</a></li>
+    <li><a href="#two-real-ssh-targets">Two real SSH targets</a></li>
+    <li><a href="#cleanup-and-limits">Cleanup and limits</a></li>
+  </ul>
+</nav>
+  </div>
+
+            
+
+          </aside>
+          <main class="col-12 col-md-9 col-xl-8 ps-md-5" role="main">
+            
+            <nav aria-label="breadcrumb" class="td-breadcrumbs">
+  <ol class="td-breadcrumbs__list">
+  <li class="td-breadcrumbs__item">
+    <a href="/richt/docs/">Documentation</a></li>
+  <li class="td-breadcrumbs__item" aria-current="page">
+    Linux validation</li>
+  </ol>
+</nav>
+<div class="td-content">
+	<h1>Linux validation</h1>
+	<div class="lead">Recorded Linux acceptance results, environment, commands, and limits.</div>
+	<header class="article-meta">
+		
+</header>
+	<p>Acceptance on 2026-11-01 passed on two authorized disposable AlmaLinux 10.2
+x86_64 hosts with DNF 4.20.0, systemd 257, Python 3.12.13 and SELinux
+Enforcing. The controller was macOS with the system OpenSSH client; remote
+execution used a non-root account with explicit passwordless <code>sudo -n</code>.
+Both targets had independent RPM databases, filesystems and systemd instances.</p>
+<p>The tested source was revision
+<code>187f67a62a09179e0f5e2c01c918e3341aeb102d</code> plus the current documentation and
+example changes. The coordinator&rsquo;s <code>make check</code> passed before transfer. Both
+binaries reported <code>richt dev</code>. Binary SHA-256 identities were:</p>
+<table>
+	<thead>
+			<tr>
+					<th>Binary</th>
+					<th>SHA-256</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>macOS controller</td>
+					<td><code>d07ed96789b60d4c8aee7bbca1185c30cecc2b8c314be8fd35273db6a77fc225</code></td>
+			</tr>
+			<tr>
+					<td>Linux amd64 target</td>
+					<td><code>40335cbccfa7e4dc51604d1ef6e579d94e7292f8a8c6aa278859613a4b2e6feb</code></td>
+			</tr>
+	</tbody>
+</table>
+<p>The Linux binary was cross-built and transferred with the example sources.
+It was executed on Linux; a Go installation or target-side build was not tested.</p>
+<h2 id="files-secrets-and-saved-plans">Files, secrets and saved plans</h2>
+<p>These commands passed on host A as root:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-sh" data-lang="sh"><span class="line"><span class="cl">python3 tests/integration/files.py --binary ./bin/richt --work-root /root --target-root /var/lib
+</span></span><span class="line"><span class="cl">python3 examples/secrets/verify.py ./bin/richt
+</span></span></code></pre></div><p>The file suite passed all <strong>17 checks</strong>: create/update/no-op/explicit absence,
+root ownership, requested modes and SELinux labels, symlink behavior, missing
+owner/group rejection, frozen saved inputs, inode preservation, sensitive
+displays, partial failure and manual continuation, terminal confirmation, and
+same-plan apply locking. Its secret checks cover independent YAML sources,
+multiline bytes, private plans and continuation without source files.</p>
+<p>The standalone secret example passed all four verification groups, including
+source/template/inventory deletion before apply and explicit-sensitive removal.
+Its private temporary files and the file suite&rsquo;s allocated directories were
+removed automatically.</p>
+<p>The <a href="/richt/docs/quickstart/">quickstart</a>
+ shell commands passed on Linux using the transferred
+binary in place of <code>make build</code> and explicit <code>apply -y</code> for noninteractive
+execution: create, no-op, update and removal all succeeded. The
+<a href="/richt/docs/walkthroughs/continuation/">continuation walkthrough</a>
+ produced the expected
+second-service failure, blocked later work and successful explicit continuation.
+Its inventory was deleted before continuation to additionally verify frozen inputs.
+The separate file suite exercised actual terminal agreement and cancellation.</p>
+<h2 id="published-rpm-and-local-systemd-lifecycle">Published RPM and local systemd lifecycle</h2>
+<p>The <a href="/richt/docs/walkthroughs/vmango/">Vmango walkthrough</a>
+ used published signed RPMs
+from the COPR <code>rhel-10-x86_64</code> repository, with signature checking enabled.
+The repository and Vmango were absent before preparation. CRB was already
+enabled. The first apply wrote the repository file, then failed dependency
+resolution because <code>genisoimage</code> was unavailable without EPEL. After:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-sh" data-lang="sh"><span class="line"><span class="cl">dnf install -y epel-release
+</span></span></code></pre></div><p>an explicit apply of the <strong>same saved plan</strong> skipped the successful repository
+write and installed Vmango. The examples now document CRB and EPEL prerequisites.
+No package was rebuilt to work around this dependency.</p>
+<p>Private copies of the example were used for the following passed scenarios:</p>
+<table>
+	<thead>
+			<tr>
+					<th>Scenario</th>
+					<th>Observed result</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Install <code>0:0.16.0-1.el10.x86_64</code></td>
+					<td>RPM version matched; unit active and enabled; loopback HTTP request succeeded</td>
+			</tr>
+			<tr>
+					<td>Repeat diff</td>
+					<td>No changes</td>
+			</tr>
+			<tr>
+					<td>Omit <code>version</code> while 0.17 was available</td>
+					<td>No changes; installed version remained 0.16</td>
+			</tr>
+			<tr>
+					<td>Exact upgrade to <code>0:0.17.0-1.el10.x86_64</code></td>
+					<td>RPM version matched; active/enabled and HTTP checks passed</td>
+			</tr>
+			<tr>
+					<td>Exact downgrade to <code>0:0.16.0-1.el10.x86_64</code></td>
+					<td>RPM version matched; active/enabled and HTTP checks passed</td>
+			</tr>
+			<tr>
+					<td>Change <code>log_level</code> from info to debug</td>
+					<td>Restart branch applied; systemd <code>InvocationID</code> changed; HTTP and subsequent no-op checks passed</td>
+			</tr>
+			<tr>
+					<td>Request stopped and enabled</td>
+					<td>Process inactive while enablement remained enabled</td>
+			</tr>
+			<tr>
+					<td>Request running and disabled</td>
+					<td>Process active while enablement was disabled</td>
+			</tr>
+			<tr>
+					<td>Restore enabled, then declare both services absent</td>
+					<td>Stop/disable completed; managed config, repository and RPM removed; subsequent diff had no changes</td>
+			</tr>
+	</tbody>
+</table>
+<p>Each mutation used <code>bin/richt diff -i INVENTORY -o PLAN</code> followed by
+<code>bin/richt apply -y PLAN</code>. Runtime checks used <code>rpm -q</code>, <code>systemctl is-active</code>,
+<code>systemctl is-enabled</code>, <code>systemctl show -p InvocationID</code> and
+<code>curl --fail --silent --output /dev/null http://127.0.0.1:18080/</code>.
+The HTTP check confirms an HTTP response, not hypervisor functionality or an
+authenticated application deployment. No clouds, login users or hypervisors
+were configured.</p>
+<h2 id="two-real-ssh-targets">Two real SSH targets</h2>
+<p>The <a href="/richt/docs/walkthroughs/ssh/">SSH example</a>
+ was copied with explicit target
+addresses, <code>user: almalinux</code> and <code>sudo: true</code>. On the macOS controller:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-sh" data-lang="sh"><span class="line"><span class="cl">bin/richt diff -i INVENTORY -o PLAN
+</span></span><span class="line"><span class="cl">bin/richt apply -y --parallelism <span class="m">2</span> PLAN
+</span></span><span class="line"><span class="cl">bin/richt diff -i INVENTORY
+</span></span></code></pre></div><p>Both hosts installed published Vmango 0.16, reached active/enabled state,
+served loopback HTTP and then produced a no-op diff. A separate absent plan,
+also applied with parallelism 2, stopped/disabled and removed the package,
+managed config and repository on both targets.</p>
+<p>A separate temporary config-only inventory exercised two independent local
+YAML secret sources across the same SSH targets. Its sources, template and
+inventory were deleted after diff and before apply. A deliberate parent-path
+obstruction on host A caused its second service to fail after the first
+succeeded; its third service was blocked. Host B completed all three services.
+After removing the obstruction, explicit continuation of that same plan
+completed host A and skipped all successful tasks on both hosts. Deliberate
+external edits to already successful files remained untouched, proving those
+writes were skipped. Frozen secret bytes, target mode 0600, private plan/lock
+modes and redacted CLI displays were verified. All six tasks ultimately had
+saved success status. Temporary remote targets were then removed.</p>
+<h2 id="cleanup-and-limits">Cleanup and limits</h2>
+<p>Final checks on both hosts found no installed Vmango package, no managed
+<code>/etc/vmango.conf</code> or repository file, and a not-found/inactive Vmango unit.
+SELinux remained Enforcing. Neither <code>rpm-build</code> nor <code>createrepo_c</code> was installed
+at preflight or completion.</p>
+<p>Package removal left about 12 KiB of generated application state under
+<code>/var/lib/vmango</code> on each host, including generated signing material. Host A
+also retained a package-generated <code>/etc/vmango.conf.rpmnew</code> after the version
+changes. EPEL release/policy packages, imported RPM signing keys and package
+manager caches were retained; DNF removed the <code>genisoimage</code> dependency during
+package removal. Private source copies, command captures and executable plans
+remain outside the tracked repository for review. They are not published with
+this documentation.</p>
+<p>No custom RPM was built. The custom <code>richt-demo</code> suites
+(<code>examples/rpm-systemd/verify.py</code> and the full <code>tests/integration/ssh.py</code>) were
+deliberately excluded from this run. Their fixture-specific reload, timeout,
+changed-identity and YUM scenarios are not established by this report. This run
+also does not establish behavior on other distributions or DNF versions.</p>
+
+	
+</div>
+
+
+          </main>
+        </div>
+      </div>
+      <footer class="td-footer row d-print-none">
+  <div class="container-fluid">
+    <div class="row mx-md-2">
+      <div class="td-footer__left col-6 col-sm-4 order-sm-1">
+        
+      </div><div class="td-footer__right col-6 col-sm-4 order-sm-3">
+        
+      </div><div class="td-footer__center col-12 col-sm-4 py-2 order-sm-2">
+        <span class="td-footer__copyright">&copy;
+    2026
+    <span class="td-footer__authors">Richt contributors</span></span><span class="td-footer__all_rights_reserved">All Rights Reserved</span>
+      </div>
+    </div>
+  </div>
+</footer>
+    </div>
+    <script src="/richt/js/main.min.f7e7c07ce9ce4d617cd4071c813c2c2a8eed7a591251b58a13d52b0f5b2417b5.js" integrity="sha256-9&#43;fAfOnOTWF81AccgTwsKo7telkSUbWKE9UrD1skF7U=" crossorigin="anonymous"></script>
+<script src="/richt/landing/copy.js" defer></script>
+
+  </body>
+</html>

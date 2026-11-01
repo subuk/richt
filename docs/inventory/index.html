@@ -1,0 +1,415 @@
+<!doctype html>
+<html itemscope itemtype="http://schema.org/WebPage" lang="en" class="no-js" data-theme-init>
+  <head>
+    
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
+<meta name="theme-color" media="(prefers-color-scheme: dark)"  content="#000000">
+
+<style>
+  html { background: Canvas; color: CanvasText; }
+  @media (prefers-color-scheme: dark) {
+    html { background: #0b0d12; color: #e6e6e6; }
+  }
+  html[data-theme-init] * { transition: none !important; }
+</style>
+
+<script>
+  (function() {
+    const themeKey = 'td-color-theme';
+    const storedTheme = localStorage.getItem(themeKey);
+    let theme = storedTheme || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+
+    if (theme === 'auto') {
+      theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+
+    document.documentElement.setAttribute('data-bs-theme', theme);
+  })();
+</script>
+<meta name="robots" content="index, follow">
+<link rel="icon" href="/richt/favicon.svg" type="image/svg+xml" />
+
+<title>YAML inventory | Richt</title>
+<meta name="description" content="Define services and hosts, merge tag variables, resolve paths, and select assignments.">
+<meta property="og:url" content="https://subuk.github.io/richt/docs/inventory/">
+	<meta property="og:site_name" content="Richt">
+	<meta property="og:title" content="YAML inventory">
+	<meta property="og:description" content="Define services and hosts, merge tag variables, resolve paths, and select assignments.">
+	<meta property="og:locale" content="en">
+	<meta property="og:type" content="article">
+		<meta property="article:section" content="docs">
+
+	<meta itemprop="name" content="YAML inventory">
+	<meta itemprop="description" content="Define services and hosts, merge tag variables, resolve paths, and select assignments.">
+	<meta itemprop="wordCount" content="1183">
+	<meta name="twitter:card" content="summary">
+	<meta name="twitter:title" content="YAML inventory">
+	<meta name="twitter:description" content="Define services and hosts, merge tag variables, resolve paths, and select assignments.">
+<link rel="preload" href="/richt/scss/main.min.837bcd9ee43b630b69cf51ae131dacbb236c33fcf3728473bc3771c47aa4bf9b.css" as="style" integrity="sha256-g3vNnuQ7Ywtpz1GuEx2suyNsM/zzcoRzvDdxxHqkv5s=" crossorigin="anonymous">
+<link href="/richt/scss/main.min.837bcd9ee43b630b69cf51ae131dacbb236c33fcf3728473bc3771c47aa4bf9b.css" rel="stylesheet" integrity="sha256-g3vNnuQ7Ywtpz1GuEx2suyNsM/zzcoRzvDdxxHqkv5s=" crossorigin="anonymous">
+<script defer
+  src="/richt/vendor/lunr.min.js"></script>
+<link rel="icon" href="/richt/favicon.svg" type="image/svg+xml">
+<script src="/richt/landing/theme.js"></script>
+
+  </head>
+  <body class="td-page">
+    <header>
+      <nav class="td-navbar js-navbar-scroll">
+<div class="td-navbar-container container-fluid flex-column flex-md-row">
+  <a class="navbar-brand" href="/richt/"><span class="navbar-brand__logo navbar-logo"></span><span class="navbar-brand__name">Richt</span></a>
+  <div class="td-navbar__main td-navbar-nav-scroll td-navbar-nav-scroll--indicator" id="main_navbar">
+    <div class="scroll-indicator scroll-left"></div>
+    <ul class="navbar-nav">
+      <li class="nav-item">
+        <a class="nav-link active" href="/richt/docs/"><span>Documentation</span></a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="https://github.com/subuk/richt" target="_blank" rel="noopener"><span>GitHub</span></a>
+      </li>
+      <li class="nav-item td-navbar__light-dark-menu">
+        <button id="theme-mode" class="btn btn-link nav-link d-flex align-items-center" type="button" aria-label="Color theme: System. Switch to Light" title="Theme: System">◐</button>
+
+      </li>
+      </ul>
+    <div class="scroll-indicator scroll-right"></div>
+  </div>
+  <div class="td-navbar__search d-none d-lg-block">
+    <div class="td-search td-search--offline">
+  <div class="td-search__icon" aria-hidden="true"></div>
+  <input
+    type="search"
+    name="q"
+    class="td-search__input form-control"
+    placeholder='Search this site…'
+    aria-label='Search this site…'
+    autocomplete="off"
+    
+    data-offline-search-index-json-src="/richt/offline-search-index.e536e48567cb8d376fe4d24e5b916221.json"
+    data-offline-search-base-href="/"
+    data-offline-search-max-results="12"
+  >
+</div>
+  </div>
+</div>
+</nav>
+    </header>
+    <div class="container-fluid td-outer">
+      <div class="td-main" data-bs-spy="scroll" data-bs-target=".td-toc" data-bs-root-margin="0px 0px -10%">
+        <div class="row flex-xl-nowrap">
+          <aside class="col-12 col-md-3 col-xl-2 td-sidebar d-print-none">
+            <div id="td-sidebar-menu" class="td-sidebar__inner">
+  <form class="td-sidebar__search d-flex align-items-center">
+    <div class="td-search td-search--offline">
+  <div class="td-search__icon" aria-hidden="true"></div>
+  <input
+    type="search"
+    name="q"
+    class="td-search__input form-control"
+    placeholder='Search this site…'
+    aria-label='Search this site…'
+    autocomplete="off"
+    
+    data-offline-search-index-json-src="/richt/offline-search-index.e536e48567cb8d376fe4d24e5b916221.json"
+    data-offline-search-base-href="/"
+    data-offline-search-max-results="12"
+  >
+</div>
+    <button class="btn btn-link td-sidebar__toggle" type="button" data-bs-toggle="collapse" data-bs-target="#td-section-nav" aria-controls="td-section-nav" aria-expanded="false" aria-label="Toggle section navigation">
+    </button>
+  </form>
+  <nav class="td-sidebar-nav collapse" id="td-section-nav">
+    <ul class="td-sidebar-nav__section pe-md-3 ul-0">
+      <li class="td-sidebar-nav__section-title td-sidebar-nav__section with-child active-path" id="m-richtdocs-li">
+    <a href="/richt/docs/" class="align-left ps-0 td-sidebar-link td-sidebar-link__section tree-root" id="m-richtdocs"><span class="">Documentation</span></a>
+    <ul class="ul-1">
+      <li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocsquickstart-li">
+    <a href="/richt/docs/quickstart/" title="Config-only quickstart" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocsquickstart"><span class="">Quickstart</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocsinstallation-li">
+    <a href="/richt/docs/installation/" title="Installation and requirements" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocsinstallation"><span class="">Installation</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocscli-li">
+    <a href="/richt/docs/cli/" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocscli"><span class="">CLI reference</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child active-path" id="m-richtdocsinventory-li">
+    <a href="/richt/docs/inventory/" class="align-left ps-0 active td-sidebar-link td-sidebar-link__page" id="m-richtdocsinventory"><span class="td-sidebar-nav-active-item">YAML inventory</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocsfiles-li">
+    <a href="/richt/docs/files/" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocsfiles"><span class="">Files and saved plans</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocsservices-li">
+    <a href="/richt/docs/services/" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocsservices"><span class="">RPM and systemd services</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocsssh-li">
+    <a href="/richt/docs/ssh/" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocsssh"><span class="">SSH, sudo, and parallel apply</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocssecrets-li">
+    <a href="/richt/docs/secrets/" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocssecrets"><span class="">YAML secrets and sensitive files</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocscontinuation-li">
+    <a href="/richt/docs/continuation/" title="Progress and manual continuation" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocscontinuation"><span class="">Continuation</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocsexamples-li">
+    <a href="/richt/docs/examples/" title="Examples and walkthroughs" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocsexamples"><span class="">Examples</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section with-child" id="m-richtdocswalkthroughs-li">
+    <a href="/richt/docs/walkthroughs/" class="align-left ps-0 td-sidebar-link td-sidebar-link__section" id="m-richtdocswalkthroughs"><span class="">Example walkthroughs</span></a>
+    <ul class="ul-2 foldable">
+      <li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocswalkthroughsfiles-li">
+    <a href="/richt/docs/walkthroughs/files/" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocswalkthroughsfiles"><span class="">Local files</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocswalkthroughsinventory-li">
+    <a href="/richt/docs/walkthroughs/inventory/" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocswalkthroughsinventory"><span class="">Inventory and variables</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocswalkthroughsvmango-li">
+    <a href="/richt/docs/walkthroughs/vmango/" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocswalkthroughsvmango"><span class="">Vmango RPM and systemd</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocswalkthroughsssh-li">
+    <a href="/richt/docs/walkthroughs/ssh/" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocswalkthroughsssh"><span class="">Two hosts over SSH</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocswalkthroughssecrets-li">
+    <a href="/richt/docs/walkthroughs/secrets/" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocswalkthroughssecrets"><span class="">Two YAML secret sources</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocswalkthroughscontinuation-li">
+    <a href="/richt/docs/walkthroughs/continuation/" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocswalkthroughscontinuation"><span class="">Failure and continuation</span></a>
+  </li>
+    </ul>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocslimitations-li">
+    <a href="/richt/docs/limitations/" title="Limitations and plan boundaries" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocslimitations"><span class="">Limitations</span></a>
+  </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-richtdocsvalidation-li">
+    <a href="/richt/docs/validation/" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id="m-richtdocsvalidation"><span class="">Linux validation</span></a>
+  </li>
+    </ul>
+  </li>
+    </ul>
+  </nav>
+</div>
+          </aside>
+          <aside class="td-sidebar-toc">
+            <div class="td-page-meta ms-2 pb-1 pt-2 mb-0"><a href="https://github.com/subuk/richt/blob/main/docs/inventory.md" class="td-page-meta__view">View source on GitHub</a><a href="https://github.com/subuk/richt/issues" class="td-page-meta__issue">Report a documentation issue</a>
+</div>
+
+            <div class="td-toc" data-proofer-ignore>
+<div class="td-toc-title">
+      <span class="td-toc-title__text">On this page</span>
+      <a class="td-toc-title__link" title="Top of page" href="#"></a>
+    </div>
+    <nav id="TableOfContents">
+  <ul>
+    <li><a href="#schema-and-file-references">Schema and file references</a></li>
+    <li><a href="#components">Components</a></li>
+    <li><a href="#variable-merging">Variable merging</a></li>
+    <li><a href="#resource-ownership">Resource ownership</a></li>
+    <li><a href="#selection">Selection</a></li>
+    <li><a href="#secret-declarations">Secret declarations</a></li>
+  </ul>
+</nav>
+  </div>
+
+            
+
+          </aside>
+          <main class="col-12 col-md-9 col-xl-8 ps-md-5" role="main">
+            
+            <nav aria-label="breadcrumb" class="td-breadcrumbs">
+  <ol class="td-breadcrumbs__list">
+  <li class="td-breadcrumbs__item">
+    <a href="/richt/docs/">Documentation</a></li>
+  <li class="td-breadcrumbs__item" aria-current="page">
+    YAML inventory</li>
+  </ol>
+</nav>
+<div class="td-content">
+	<h1>YAML inventory</h1>
+	<div class="lead">Define services and hosts, merge tag variables, resolve paths, and select assignments.</div>
+	<header class="article-meta">
+		
+</header>
+	<p>Validate and view the supplied two-host example without network access:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-sh" data-lang="sh"><span class="line"><span class="cl">go run . inventory validate -i examples/inventory/richt.yaml
+</span></span><span class="line"><span class="cl">go run . inventory show -i examples/inventory/richt.yaml
+</span></span><span class="line"><span class="cl">go run . inventory show -i examples/inventory/richt.yaml --tag hypervisor --service vmango
+</span></span></code></pre></div><p><code>validate</code> resolves the selected scope and reports errors. <code>show</code> performs the
+same checks and writes the resolved inventory as indented JSON. Neither command
+contacts hosts, opens templates, reads secret source values, or changes host
+state. The example describes a local host and an illustrative SSH host; execution
+supports both transport descriptions. See <a href="/richt/docs/ssh/">SSH and parallel apply</a>
+ for
+connection settings and noninteractive authentication.</p>
+<p>The example resolves <code>gena.vmango.cloud_name</code> to <code>Home</code> and
+<code>lanst.vmango.cloud_name</code> to <code>Net</code>. Both retain <code>listen = 127.0.0.1:8080</code> and
+<code>libvirt_uri = qemu:///system</code>. Each host&rsquo;s services are ordered
+<code>vmango-repository</code> (10), then <code>vmango</code> (20), independent of YAML listing order.</p>
+<h2 id="schema-and-file-references">Schema and file references</h2>
+<p>Inventory contains <code>tags</code>, <code>services</code>, <code>hosts</code>, and optional <code>secret_sources</code>.
+Names of hosts, tags, services and components start with a letter or number and
+contain only letters, numbers, hyphens and underscores. Component names are
+stable keys, independent of resource paths, package names and unit names.
+Unknown fields, duplicate YAML keys, non-string mapping keys, and multiple YAML
+documents are errors. All definitions and references are validated, including
+definitions outside the selected scope.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-yaml" data-lang="yaml"><span class="line"><span class="cl"><span class="nt">tags</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">shared</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">weight</span><span class="p">:</span><span class="w"> </span><span class="m">10</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">vars</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="nt">app</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="nt">listen</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;127.0.0.1:8080&#34;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">services</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">app</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l">services/app.yaml</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">hosts</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l">example</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">tags</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="l">shared]</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">transport</span><span class="p">:</span><span class="w"> </span>{<span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l">local}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">services</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span>- {<span class="nt">name: app, order: 10, state</span><span class="p">:</span><span class="w"> </span><span class="l">present}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">secret_sources</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">default</span><span class="p">:</span><span class="w"> </span>{<span class="nt">type: yaml, file</span><span class="p">:</span><span class="w"> </span><span class="l">secrets/default.yaml}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">production</span><span class="p">:</span><span class="w"> </span>{<span class="nt">type: yaml, file</span><span class="p">:</span><span class="w"> </span><span class="l">secrets/production.yaml}</span><span class="w">
+</span></span></span></code></pre></div><p>A service can be defined inline or by <code>file</code>, exclusively. Referenced files
+contain one bare service definition (<code>binaries</code>, <code>configs</code>, <code>processes</code>), without
+another <code>services</code> wrapper or recursive file references. Service file paths are
+relative to the inventory file. Template paths are relative to the service file
+declaring them; inline services use the inventory file as their base. Absolute
+local file paths are also accepted. URL sources are unsupported. Resolved JSON
+includes absolute source/template paths and normalized absolute target paths.</p>
+<p>A service must contain at least one component; binary-only, config-only and
+process-only services are accepted. An assignment has only <code>name</code>, <code>order</code> and
+<code>state</code>. State defaults to <code>present</code>; <code>absent</code> declares removal. Each assigned
+service and each order must be unique on its host. A missing assignment does not
+request removal. Tags supply variables and never assign services. Component
+parameters belong to the service definition, with no assignment overrides.</p>
+<h2 id="components">Components</h2>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-yaml" data-lang="yaml"><span class="line"><span class="cl"><span class="nt">binaries</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">package</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l">rpm</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">manager</span><span class="p">:</span><span class="w"> </span><span class="l">dnf             </span><span class="w"> </span><span class="c"># dnf (default) or yum</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">package</span><span class="p">:</span><span class="w"> </span><span class="l">app</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;0:1.2-3.noarch&#34;</span><span class="w"> </span><span class="c"># optional exact epoch:version-release.arch</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">configs</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">main</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l">/etc/app.conf</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">owner</span><span class="p">:</span><span class="w"> </span><span class="l">root</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">group</span><span class="p">:</span><span class="w"> </span><span class="l">root</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;0644&#34;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">selinux</span><span class="p">:</span><span class="w"> </span><span class="l">system_u:object_r:etc_t:s0</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">sensitive</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">template</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l">templates/app.gotmpl</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">processes</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">web</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l">systemd</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">unit</span><span class="p">:</span><span class="w"> </span><span class="l">app.service</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">state</span><span class="p">:</span><span class="w"> </span><span class="l">running          </span><span class="w"> </span><span class="c"># running (default) or stopped</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="w">            </span><span class="c"># optional</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l">5s             </span><span class="w"> </span><span class="c"># positive Go duration; default 5s</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">restart_on</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="l">binary.package]</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">reload_on</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="l">config.main]</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">after</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span><span class="w">
+</span></span></span></code></pre></div><p>Configuration targets must be absolute file paths. <code>mode</code> is an octal string.
+<code>template</code> requires exactly one of <code>file</code> or <code>inline</code>; an empty inline string is
+valid. Templates receive the complete merged host variables. Missing variables,
+file permissions, actual owners/groups and SELinux application are checked when
+preparing or executing a plan, beyond inventory-only validation.</p>
+<p><code>restart_on</code> and <code>reload_on</code> reference <code>binary.&lt;name&gt;</code> or <code>config.&lt;name&gt;</code> in the
+same service. <code>after</code> references process names in the same service. Unknown,
+duplicate or cross-service references and cycles are errors. Processes use
+systemd <code>.service</code> unit names. Reload support depends on host capabilities and
+is checked during plan preparation.</p>
+<p>An optional process <code>unit_file</code> and named <code>overrides</code> use the same fields as
+configs. Their target paths may be omitted and are then derived as shown:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-yaml" data-lang="yaml"><span class="line"><span class="cl"><span class="nt">processes</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">web</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l">systemd</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">unit</span><span class="p">:</span><span class="w"> </span><span class="l">app.service</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">unit_file</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="nt">template</span><span class="p">:</span><span class="w"> </span>{<span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l">templates/app.service.gotmpl}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">overrides</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="nt">10-runtime.conf</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="nt">template</span><span class="p">:</span><span class="w"> </span>{<span class="nt">inline</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;[Service]\nRestart=always\n&#34;</span>}<span class="w">
+</span></span></span></code></pre></div><p>The unit target is <code>/etc/systemd/system/app.service</code>; the override target is
+<code>/etc/systemd/system/app.service.d/10-runtime.conf</code>. Explicit paths must match
+these locations. Override names are plain <code>.conf</code> filenames. Template paths
+still use the declaring service file as their base.</p>
+<h2 id="variable-merging">Variable merging</h2>
+<p>Weights increase in priority. All tags of a weight are checked as a group
+before that group is merged with earlier weights. YAML tag order has no effect.</p>
+<ul>
+<li>Scalars and lists replace the lower-weight value completely.</li>
+<li>Maps merge recursively; a map and a non-map replace each other at higher weight.</li>
+<li>At equal weight, different keys and compatible nested maps merge. Identical
+values are accepted. Different scalar/list values or incompatible types on
+the same path fail, even when a higher-weight tag would replace that path.</li>
+<li>Errors identify the host, variable path, both tag names and common weight.</li>
+</ul>
+<p>For a reproducible conflict, add <code>home</code> to <code>lanst.tags</code> in a copy of the example:
+<code>home</code> and <code>net</code> both set <code>vmango.cloud_name</code> at weight 20. Validation fails at
+<code>vars.vmango.cloud_name</code>, including when <code>--service vmango-repository</code> is used.</p>
+<h2 id="resource-ownership">Resource ownership</h2>
+<p>Before service filtering, every assignment of each selected host is checked.
+Different services cannot own the same explicitly declared RPM package,
+normalized absolute file path, or systemd unit, even with identical settings or
+different <code>present</code>/<code>absent</code> states. DNF and YUM share the RPM package namespace.
+Managed unit files and drop-ins also claim their unit, including ordinary
+configs under standard systemd system directories. Exact duplicate file/package
+components within one service and two processes managing the same unit are
+also rejected. A process may own its unit file and multiple drop-ins.</p>
+<p>For a reproducible file conflict, change the repository config target to
+<code>/etc/vmango.conf</code> in a copy of the example. Validation identifies the host and
+both <code>vmango-repository/config.repository</code> and <code>vmango/config.main</code>, including
+with <code>--service vmango</code>.</p>
+<h2 id="selection">Selection</h2>
+<p><code>--host</code>, <code>--tag</code>, and <code>--service</code> can each repeat. Matching is exact and case
+sensitive. Unknown names produce errors; repeated selectors are harmless.</p>
+<ul>
+<li>Within the host group, host names and tags form a union: <code>--host gena --tag net</code>
+selects <code>gena</code> plus every host tagged <code>net</code>.</li>
+<li>Repeated service names form a union of already assigned services.</li>
+<li>The host group and service group intersect. With no selectors in a group,
+that group selects everything.</li>
+<li>Selecting a service never assigns it to new hosts or adds dependencies.
+Selected hosts with no matching assignments remain visible with an empty
+services list.</li>
+<li>Hosts are displayed by name; their assignments are displayed by increasing
+order. Ownership and tag conflicts on unselected hosts are outside the scope;
+service selection cannot hide those conflicts on selected hosts.</li>
+</ul>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-sh" data-lang="sh"><span class="line"><span class="cl"><span class="c1"># All services on one host</span>
+</span></span><span class="line"><span class="cl">go run . inventory show -i examples/inventory/richt.yaml --host gena
+</span></span><span class="line"><span class="cl"><span class="c1"># One service on every host</span>
+</span></span><span class="line"><span class="cl">go run . inventory show -i examples/inventory/richt.yaml --service vmango
+</span></span><span class="line"><span class="cl"><span class="c1"># A union of hosts, intersected with a union of services</span>
+</span></span><span class="line"><span class="cl">go run . inventory show -i examples/inventory/richt.yaml <span class="se">\
+</span></span></span><span class="line"><span class="cl">  --host gena --tag net --service vmango-repository --service vmango
+</span></span></code></pre></div><h2 id="secret-declarations">Secret declarations</h2>
+<p>Named sources currently accept only <code>{type: yaml, file: &lt;local path&gt;}</code>. Paths
+are relative to the inventory file. Multiple independent YAML sources are
+allowed. A <code>default</code> source is required only when a template calls <code>secret</code>
+without naming a source. Inventory commands show
+declarations and never read the files or their values, even if a file exists;
+missing source files therefore do not fail inventory validation. Secret lookup
+and template <code>secret</code> evaluation belong to plan preparation. Sources are read
+locally on the machine running diff, including for SSH targets. An absent
+service does not render templates or read secret sources. See
+<a href="/richt/docs/secrets/">YAML secrets and sensitive files</a>
+ for the value schema, function
+arguments, caching, diagnostics, and saved-plan behavior.</p>
+
+	
+</div>
+
+
+          </main>
+        </div>
+      </div>
+      <footer class="td-footer row d-print-none">
+  <div class="container-fluid">
+    <div class="row mx-md-2">
+      <div class="td-footer__left col-6 col-sm-4 order-sm-1">
+        
+      </div><div class="td-footer__right col-6 col-sm-4 order-sm-3">
+        
+      </div><div class="td-footer__center col-12 col-sm-4 py-2 order-sm-2">
+        <span class="td-footer__copyright">&copy;
+    2026
+    <span class="td-footer__authors">Richt contributors</span></span><span class="td-footer__all_rights_reserved">All Rights Reserved</span>
+      </div>
+    </div>
+  </div>
+</footer>
+    </div>
+    <script src="/richt/js/main.min.f7e7c07ce9ce4d617cd4071c813c2c2a8eed7a591251b58a13d52b0f5b2417b5.js" integrity="sha256-9&#43;fAfOnOTWF81AccgTwsKo7telkSUbWKE9UrD1skF7U=" crossorigin="anonymous"></script>
+<script src="/richt/landing/copy.js" defer></script>
+
+  </body>
+</html>

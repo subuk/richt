@@ -1,0 +1,8 @@
+configs:
+  repository:
+    path: /etc/yum.repos.d/richt-vmango.repo
+    owner: root
+    group: root
+    mode: "0644"
+    template:
+      file: ../templates/vmango.repo.gotmpl
