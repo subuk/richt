@@ -294,8 +294,9 @@ usage scenarios in commit `d33accc`. The [documentation index](../../../../docs/
 covers build/install/privilege requirements, local/SSH use, schema, selections,
 templates/paths, processes/timeouts/removal, plan confirmation/progress and
 continuation, concurrency, secrets, and limitations. The
-[documentation site](https://subuk.github.io/richt/) is published; a custom domain
-was explicitly deferred and is not a first-version blocker.
+[documentation site](https://richt.dev/) is published. The custom domain was
+initially deferred from the first version; subsequent deployment uses GitHub
+Actions to build, validate, and publish the site from `main` to GitHub Pages.
 
 The [validation report](../../../../docs/validation.md) records passed checks on
 two disposable AlmaLinux 10.2 hosts, including files/SELinux, published Vmango

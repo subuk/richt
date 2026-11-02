@@ -31,5 +31,5 @@ docs-serve:
 	npm --prefix website run serve
 
 docs-check: docs-build
-	python3 scripts/check-docs.py website/public
+	python3 scripts/check-docs.py website/public --base-url https://richt.dev/
 	npm --prefix website run check

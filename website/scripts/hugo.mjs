@@ -18,5 +18,7 @@ const run = (args) => {
   if (result.status !== 0) process.exit(result.status ?? 1);
 };
 // Building first also creates the fingerprinted local-search index for preview.
-run(['--cleanDestinationDir', '--environment', command === 'serve' ? 'development' : 'production', ...(command === 'build' ? process.argv.slice(3) : [])]);
-if (command === 'serve') run(['server', '--bind', '127.0.0.1', '--port', '1313', '--renderToMemory', '--disableFastRender', ...process.argv.slice(3)]);
+// Override the production origin for both the index and preview pages.
+const previewArgs = ['--baseURL', 'http://localhost:1313/'];
+run(['--cleanDestinationDir', '--environment', command === 'serve' ? 'development' : 'production', ...(command === 'serve' ? previewArgs : process.argv.slice(3))]);
+if (command === 'serve') run(['server', '--bind', '127.0.0.1', '--port', '1313', '--renderToMemory', '--disableFastRender', ...previewArgs, ...process.argv.slice(3)]);

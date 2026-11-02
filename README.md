@@ -11,8 +11,8 @@ noninteractive sudo, bounded host concurrency, and local YAML secret sources.
 
 If you are reading this README in an unpacked release archive, run
 `./richt --help` or `./richt --version`. Follow the
-[online installation guide](https://subuk.github.io/richt/docs/installation/)
-and [quickstart](https://subuk.github.io/richt/docs/quickstart/) for setup and
+[online installation guide](https://richt.dev/docs/installation/)
+and [quickstart](https://richt.dev/docs/quickstart/) for setup and
 usage; SSH execution also needs the system OpenSSH client.
 
 Use a [release archive](docs/installation.md#install-a-release-archive) for Linux
@@ -72,7 +72,10 @@ make docs-check
 ```
 
 Site dependencies and setup are documented in [website/README.md](website/README.md).
-These commands build or serve local files; they do not publish a site.
+The [documentation site](https://richt.dev/) publishes automatically through
+GitHub Actions after a validated push to `main`. Pull requests validate the
+production build without deploying it. Local build and preview commands do not
+publish a site.
 
 ## Development
 
