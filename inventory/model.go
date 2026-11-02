@@ -88,8 +88,10 @@ type Validator struct {
 type Process struct {
 	Name      string            `json:"name,omitempty" yaml:"name"`
 	Type      string            `json:"type" yaml:"type"`
-	Unit      string            `json:"unit" yaml:"unit"`
-	State     string            `json:"state" yaml:"state"`
+	Command   []string          `json:"command,omitempty" yaml:"command"`
+	RunOn     []string          `json:"run_on,omitempty" yaml:"run_on"`
+	Unit      string            `json:"unit,omitempty" yaml:"unit"`
+	State     string            `json:"state,omitempty" yaml:"state"`
 	Enabled   *bool             `json:"enabled,omitempty" yaml:"enabled"`
 	Masked    *bool             `json:"masked,omitempty" yaml:"masked"`
 	Timeout   string            `json:"timeout" yaml:"timeout"`

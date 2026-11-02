@@ -57,9 +57,8 @@ func (c *Client) Run(ctx context.Context, name string, args ...string) ([]byte, 
 	return c.RunInput(ctx, nil, name, args...)
 }
 
-// RunInput delivers bytes through stdin, never through the command line. Neither
-// SSH authentication nor sudo may prompt, and no terminal is allocated.
-func (c *Client) RunInput(ctx context.Context, input []byte, name string, args ...string) ([]byte, error) {
+// command resolves explicit transport inputs without executing the target.
+func (c *Client) command(ctx context.Context, input []byte, name string, args ...string) (*exec.Cmd, error) {
 	if c == nil {
 		return nil, errors.New("missing transport client")
 	}
@@ -91,7 +90,7 @@ func (c *Client) RunInput(ctx context.Context, input []byte, name string, args .
 		for i := range remote {
 			remote[i] = quote(remote[i])
 		}
-		arguments = append(arguments, "--", c.Connection.Host, strings.Join(remote, " "))
+		arguments = append(arguments, "--", c.Connection.Host, "exec "+strings.Join(remote, " "))
 		command = "ssh"
 	}
 	cmd := exec.CommandContext(ctx, command, arguments...)
@@ -101,6 +100,16 @@ func (c *Client) RunInput(ctx context.Context, input []byte, name string, args .
 	cmd.WaitDelay = time.Second
 	if c.Connection.Type == "ssh" {
 		cmd.Env = append(os.Environ(), "SSH_ASKPASS_REQUIRE=never")
+	}
+	return cmd, nil
+}
+
+// RunInput delivers bytes through stdin, never through the command line. Neither
+// SSH authentication nor sudo may prompt, and no terminal is allocated.
+func (c *Client) RunInput(ctx context.Context, input []byte, name string, args ...string) ([]byte, error) {
+	cmd, err := c.command(ctx, input, name, args...)
+	if err != nil {
+		return nil, err
 	}
 	out, err := cmd.Output()
 	if err != nil {
@@ -115,9 +124,30 @@ func (c *Client) RunInput(ctx context.Context, input []byte, name string, args .
 				return nil, fmt.Errorf("%s: %w", diagnostic, err)
 			}
 		}
-		return nil, fmt.Errorf("%s command failed: %w", command, err)
+		return nil, fmt.Errorf("%s command failed: %w", cmd.Args[0], err)
 	}
 	return out, nil
+}
+
+// RunDiscard executes a command with closed stdin and discards both output streams.
+// Arbitrary command output is never buffered or retained in returned errors.
+func (c *Client) RunDiscard(ctx context.Context, name string, args ...string) error {
+	cmd, err := c.command(ctx, nil, name, args...)
+	if err != nil {
+		return err
+	}
+	// Nil streams connect directly to the null device, without output copy pipes.
+	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		var exit *exec.ExitError
+		if errors.As(err, &exit) {
+			return &exec.ExitError{ProcessState: exit.ProcessState}
+		}
+		return errors.New("target command could not execute")
+	}
+	return nil
 }
 
 // Classify only familiar transport failures, returning fixed text. Never retain

@@ -4,6 +4,56 @@ description: "Recorded Linux acceptance results, environment, commands, and limi
 weight: 120
 ---
 
+## Change-triggered oneshots — 2026-11-03
+
+KRG-97 passed on three independent authorized AlmaLinux 10.2 x86_64 hosts
+with SELinux Enforcing, DNF 4.20.0, RPM 4.19.1.1, systemd 257, and Python
+3.12.13. One target ran the Linux binary locally as root; two targets used
+the macOS controller over SSH with non-root logins and explicit `sudo -n`.
+
+| Suite | Local Linux | SSH/sudo |
+| --- | ---: | ---: |
+| Oneshot triggers, execution, and saved continuation | 33 passed | 34 passed on each of two hosts |
+| Files, SELinux, locking, and saved-plan regression | 17 passed | — |
+| Systemd masks and ordered lifecycle | 24 passed | 24 passed |
+| Config validators and ordered continuation | — | 19 passed |
+| Secret-source example | 4 groups passed | — |
+
+The [oneshot harness](#oneshot-process-acceptance) covered config creation,
+content and attribute changes, merged references, unrelated and unchanged
+inputs, literal argv, named and unnamed tasks, mixed systemd execution order,
+and absence. Published `tree` RPM installation triggered a command without a
+systemd daemon reload; matching installed state and package removal did not.
+The sysctl check changed `vm.swappiness` from 30 to 10 through a prepared config
+and native oneshot, then restored 30. No custom RPM fixtures were built.
+
+A deliberate command failure after successful file and command tasks blocked
+later work. Continuing the same saved plan after deleting inventory skipped
+successful named and unnamed commands, preserved an external edit to the
+completed config, retried the failed command, and unblocked the next service.
+A fresh diff after the original config write scheduled no oneshot. Nonzero
+exit, missing executable, timeout, and stdout/stderr canary checks passed.
+
+Local `make check`, `make docs-check`, and race tests for `plan`, `engine`,
+`oneshot`, and `transport` passed. Go tests also cover interrupted side-effect
+repetition after progress persistence fails, malformed saved argv, strict
+backend fields, SSH executable lookup without shell builtin/function dispatch,
+and inspection with unavailable executables, templates, and secret sources.
+
+The tested source was `93df8583f8d3` plus the KRG-97 working-tree changes.
+Binary SHA-256 identities were:
+
+| Binary | SHA-256 |
+| --- | --- |
+| Linux amd64 | `cf2c34dfc8c581166e078dd64afba5f4004cb605f565e8471ec9feee77d76c04` |
+| macOS controller | `3aa6b91da099fb3085f1cc012fc613b1a3a74af6164cf20fb3d2adf2e937af4b` |
+
+Private logs, executable plans, source snapshots, and JSON reports were retained
+outside the tracked repository. Postflight confirmed restored sysctl values,
+removed `tree` packages and temporary oneshot/mask units and files, SELinux
+Enforcing, and unchanged prior PostgreSQL/exporter service state. Command
+timeout coverage does not establish termination of all remote descendants.
+
 ## Ordered component lists — 2026-11-03
 
 KRG-98 was verified on three independent authorized AlmaLinux 10.2 x86_64
@@ -480,3 +530,46 @@ sh examples/rpm-systemd/build-repository.sh
 Change `version` between `0:1.0-1.noarch` and `0:2.0-1.noarch`, or change the
 config inline content, to inspect the resulting exact package and process
 branches. Set the demo assignment to `absent` to remove it.
+
+## Oneshot process acceptance
+
+The focused [oneshot driver](../tests/integration/oneshot.py) exercises the native
+command backend rather than expressing the command as a systemd unit. It uses
+the existing Python standard-library acceptance pattern, private controller
+artifacts, unique target paths, and one uniquely named systemd ordering probe.
+Run only on an authorized disposable Linux target with root privileges,
+Python 3, GNU coreutils, systemd, SELinux tooling, and a writable
+`vm.swappiness` sysctl:
+
+```sh
+python3 tests/integration/oneshot.py --binary ./bin/richt-linux-amd64 \
+  --work-root /root/richt-oneshot
+# Or from a controller with trusted host keys and noninteractive sudo:
+python3 tests/integration/oneshot.py --binary ./bin/richt \
+  --host deploy@oneshot-test.example --work-root /tmp/richt-oneshot
+```
+
+It checks inspection and diff without execution; config creation, content and
+attribute triggers; unrelated and unchanged inputs; merged actual trigger
+references; mixed systemd/oneshot declaration order; no command on absence;
+frozen argv after inventory removal; successful named and unnamed task skipping;
+failure after config write; saved continuation versus a fresh diff; missing
+executables; bounded timeout; and omission of stdout/stderr canaries from CLI
+output and saved errors. A real sysctl command applies a unique config containing
+a changed kernel value. The driver removes that file and restores the
+original value in `finally`, including after failure.
+
+Add `--package tree` to verify a real `binary.package` trigger using a published
+RPM from the target's existing DNF 4 repositories. That package must be absent
+before the run. The driver installs it, checks no-op behavior, removes it without
+running the command during absence, and attempts package cleanup on failure.
+It builds no fixture RPM. Omit this flag for file/command coverage only; the
+JSON report records whether binary triggers were exercised.
+
+`--work-root` retains inventories, executable plans/progress, captured displays,
+platform facts, and `acceptance.json`. Keep that directory private. Without it,
+the controller's temporary artifacts are removed. Fixtures are removed on exit;
+an SSH timeout still does not guarantee remote process termination. This driver
+is separate from the custom RPM fixture suites and does not require rpm-build
+or createrepo_c. Running it establishes only the reported target and selected
+checks; cross-compiling its binary alone does not establish runtime coverage.

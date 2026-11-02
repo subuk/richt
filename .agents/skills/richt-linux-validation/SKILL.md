@@ -15,10 +15,14 @@ This skill does not grant host access or authority to install packages.
 
 ## Local test-host context
 
-When present, read `references/hosts.local.md` before asking for a test host.
-It records this workspace owner's reusable disposable hosts, authorization
-scope, and retained fixtures. The file is local and gitignored; keep host
-addresses out of public examples and acceptance reports.
+Read [local test hosts](references/hosts.local.md), when present, before asking
+for a test host. It records this workspace owner's reusable disposable hosts,
+SSH destinations, authorization scope, and retained fixtures. When the user
+says to use the same test boxes, use those recorded hosts within the current
+task's authorization; do not ask for their addresses again. Keep renewed host
+instructions in that reference without treating them as a fresh live check.
+The file is local and gitignored; keep host addresses out of public examples
+and acceptance reports.
 
 ## Prepare the environment
 

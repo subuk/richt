@@ -20,8 +20,8 @@ output in English.
   empty future layers, or speculative interfaces. Add abstractions when an
   implemented boundary needs them.
 - Current execution supports local/SSH transports, explicit noninteractive sudo,
-  bounded host parallelism, DNF4/YUM4, files, systemd, and local YAML secret
-  sources. Read [SSH rules](docs/ssh.md) for live client settings and authentication
+  bounded host parallelism, DNF4/YUM4, files, systemd and oneshot processes, and
+  local YAML secret sources. Read [SSH rules](docs/ssh.md) for live client settings and authentication
   and [secret rules](docs/secrets.md) for lookup, sensitivity, and safe diagnostics.
   External secret stores remain later scope.
 

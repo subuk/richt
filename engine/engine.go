@@ -11,6 +11,7 @@ import (
 
 	"github.com/subuk/richt/config"
 	"github.com/subuk/richt/inventory"
+	"github.com/subuk/richt/oneshot"
 	"github.com/subuk/richt/plan"
 	"github.com/subuk/richt/rpm"
 	"github.com/subuk/richt/secrets"
@@ -21,6 +22,7 @@ import (
 type Local struct {
 	RPM     rpm.Backend
 	Systemd systemd.Backend
+	Oneshot oneshot.Backend
 	Files   *config.Target
 	// Connect optionally supplies a target command boundary for SSH and sudo.
 	Connect func(inventory.Transport) (config.Target, error)
@@ -51,6 +53,16 @@ func (e Local) ForHost(h plan.Host) (plan.Executor, error) {
 			return nil, err
 		}
 		target = config.Target{Run: client.Run, RunInput: client.RunInput}
+		e.Oneshot = oneshot.Backend{Run: client.RunDiscard}
+	}
+	if e.Connect != nil {
+		e.Oneshot = oneshot.Backend{Run: func(ctx context.Context, name string, args ...string) error {
+			if target.Run == nil {
+				return errors.New("missing target command runner")
+			}
+			_, err := target.Run(ctx, name, args...)
+			return err
+		}}
 	}
 	e.Files = &target
 	e.RPM = rpm.Backend{Run: target.Run}
@@ -68,12 +80,17 @@ func host(h inventory.ResolvedHost) plan.Host {
 }
 
 func (e Local) Resolve(t plan.Task) ([]plan.Action, error) {
-	if t.Operation == "daemon-reload" && (t.File != nil || t.RPM != nil || t.Process != nil) {
+	if t.Operation == "daemon-reload" && (t.File != nil || t.RPM != nil || t.Process != nil || t.Oneshot != nil) {
 		return nil, errors.New("daemon-reload task must not contain a resource payload")
+	}
+	if t.Oneshot != nil && t.Operation != "oneshot" {
+		return nil, errors.New("unexpected oneshot payload")
 	}
 	switch t.Operation {
 	case "file":
 		return (config.Local{}).Resolve(t)
+	case "oneshot":
+		return e.Oneshot.Resolve(t)
 	case "rpm":
 		return e.RPM.Resolve(t)
 	case "systemd", "systemd-enable", "systemd-mask", "daemon-reload":
@@ -84,6 +101,8 @@ func (e Local) Resolve(t plan.Task) ([]plan.Action, error) {
 }
 func (e Local) Execute(ctx context.Context, a plan.Action) error {
 	switch a.Kind {
+	case "oneshot":
+		return e.Oneshot.Execute(ctx, a)
 	case "rpm":
 		return e.RPM.Execute(ctx, a)
 	case "systemd", "systemd-enable", "systemd-mask", "daemon-reload":
@@ -161,6 +180,9 @@ func (e Local) Diff(ctx context.Context, r *inventory.Resolved) (*plan.Plan, err
 				}
 				if process == "" {
 					for key, value := range s.Definition.Processes {
+						if value.Type == "oneshot" {
+							continue
+						}
 						unitPath := "/etc/systemd/system/" + value.Unit
 						if f.Path == unitPath || strings.HasPrefix(f.Path, unitPath+".d/") {
 							process = strconv.Itoa(key)
@@ -197,6 +219,9 @@ func (e Local) Diff(ctx context.Context, r *inventory.Resolved) (*plan.Plan, err
 			}
 			for _, index := range positions(len(s.Definition.Processes), s.State == "absent") {
 				p := s.Definition.Processes[index]
+				if p.Type == "oneshot" {
+					continue
+				}
 				id, component := "process/"+strconv.Itoa(index), "process/"+label(p.Name, index)
 				if p.UnitFile != nil {
 					if err := add(id+"/unit", component+"/unit", "", strconv.Itoa(index), *p.UnitFile); err != nil {
@@ -275,11 +300,16 @@ func (e Local) observe(ctx context.Context, ps preparedService) ([]plan.Task, er
 	for index, process := range s.Definition.Processes {
 		processLabels[strconv.Itoa(index)] = label(process.Name, index)
 	}
+	hasSystemd := false
 	statuses := map[string]systemd.Status{}
 	processChanges := map[string]*plan.ProcessChange{}
 	for _, index := range order {
 		name := strconv.Itoa(index)
 		v := s.Definition.Processes[index]
+		if v.Type == "oneshot" {
+			continue
+		}
+		hasSystemd = true
 		state, timeout := v.State, v.Timeout
 		if state == "" {
 			state = "running"
@@ -356,6 +386,30 @@ func (e Local) observe(ctx context.Context, ps preparedService) ([]plan.Task, er
 	for _, index := range order {
 		name := strconv.Itoa(index)
 		v := s.Definition.Processes[index]
+		if v.Type == "oneshot" {
+			if absent {
+				continue
+			}
+			var triggers []string
+			for _, ref := range v.RunOn {
+				if changed[ref] {
+					triggers = append(triggers, ref)
+				}
+			}
+			if len(triggers) != 0 {
+				timeout := v.Timeout
+				if timeout == "" {
+					timeout = "5s"
+				}
+				t := task(s.Name, "process/"+name, "process/"+label(v.Name, index), "oneshot")
+				t.Oneshot = &plan.OneshotChange{Command: append([]string(nil), v.Command...), Timeout: timeout, Triggers: triggers}
+				if _, err := e.Oneshot.Resolve(t); err != nil {
+					return nil, err
+				}
+				processes = append(processes, t)
+			}
+			continue
+		}
 		var unitFiles []*plan.FileChange
 		hasFullUnit := false
 		for _, f := range ps.files {
@@ -446,7 +500,7 @@ func (e Local) observe(ctx context.Context, ps preparedService) ([]plan.Task, er
 		out = append(out, unmasks...)
 		out = append(out, files...)
 	}
-	if daemonReload || len(unitChanged) > 0 || (len(binaries) > 0 && len(s.Definition.Processes) > 0) {
+	if daemonReload || len(unitChanged) > 0 || (len(binaries) > 0 && hasSystemd) {
 		out = append(out, task(s.Name, "systemd/daemon-reload", "systemd/daemon-reload", "daemon-reload"))
 	}
 	if !absent {

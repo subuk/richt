@@ -157,7 +157,7 @@ func Arguments(c *plan.RPMChange) []string {
 	return []string{"-y", "install-n", "--", c.Package}
 }
 func (b Backend) Resolve(t plan.Task) ([]plan.Action, error) {
-	if t.File != nil || t.Process != nil {
+	if t.File != nil || t.Process != nil || t.Oneshot != nil {
 		return nil, errors.New("RPM task contains another operation payload")
 	}
 	if t.Operation != "rpm" {

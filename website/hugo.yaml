@@ -88,6 +88,8 @@ module:
         - inventory/services/vmango-repository.yaml
         - inventory/templates/vmango.conf.gotmpl
         - inventory/templates/vmango.repo.gotmpl
+        - oneshot/README.md
+        - oneshot/inventory.yaml
         - rpm-versions/README.md
         - rpm-versions/inventory.yaml
         - rpm-versions/verify.py

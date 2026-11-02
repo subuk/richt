@@ -32,7 +32,8 @@ processes:
 
 [Reactions](../reactions.md) owns reference semantics and lifecycle branches;
 [lifecycle](../lifecycle.md) owns list declaration order and service phases. Other
-process managers and arbitrary script backends are unsupported. See
+persistent process managers are unsupported. The independent
+[oneshot backend](oneshot.md) runs change-triggered commands without a unit. See
 [platform requirements](../../installation.md) and [validation](../../validation.md)
 for the verified systemd environment.
 

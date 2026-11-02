@@ -4,7 +4,8 @@ description: "Link actual component changes to one process lifecycle action."
 weight: 20
 ---
 
-A process's `restart_on` and `reload_on` list `binary.<name>` or `config.<name>`
+A systemd process's `restart_on` and `reload_on`, or a oneshot process's
+`run_on`, list `binary.<name>` or `config.<name>`
 references in the same service. These names are explicit optional `name` labels
 on binary and config list items, independent of package names and file paths.
 Unnamed items cannot be referenced. Names must be unique within their collection;
@@ -22,7 +23,12 @@ processes:
 
 Only linked components whose diff actually changes contribute a reaction,
 including config attribute changes. Unrelated changes do not trigger one.
-Multiple reload inputs merge into one reload; any restart input wins over reload.
+A oneshot merges all its changed `run_on` inputs into one command task; no
+changed linked input means no command. See the [oneshot reference](processes/oneshot.md)
+for argv, absence, and continuation semantics.
+
+For systemd, multiple reload inputs merge into one reload; any restart input
+wins over reload.
 Changes to a process's owned unit or drop-ins also request its restart. Sensitive
 files compare real bytes, so hiding their display does not suppress reactions.
 
@@ -30,7 +36,7 @@ Declaration order controls component execution independently of change
 subscriptions. A preceding component does not imply a reaction. See
 [lifecycle and ordering](lifecycle.md).
 
-## Prepared lifecycle branches
+## Prepared systemd lifecycle branches
 
 Apply reads the process state immediately before executing a prepared lifecycle
 task and chooses an already displayed branch:
@@ -54,7 +60,7 @@ command and its result check form one task with a shared timeout. See the
 [systemd reference](processes/systemd.md#states-enablement-and-timeouts) for exact
 states, missing-unit handling, and verification limits.
 
-## Reload capability
+## Systemd reload capability
 
 For a present assignment, declaring `reload_on` requires supported reload
 capability during preparation, even if none of its inputs currently changes or

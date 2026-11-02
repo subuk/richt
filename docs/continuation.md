@@ -48,8 +48,12 @@ inventory after a failure does not change a saved task. Fix an external
 prerequisite and continue, or deliberately prepare a new plan when the desired
 inputs have changed; review that new plan separately.
 
-Process state reads for a prepared branch and result verification still happen
-during execution. Owner/group names are resolved again on the target. SSH uses
+If a oneshot fails after its linked config was written, a fresh diff may have
+no changes and therefore no command task. Continue the saved plan to retry the
+prepared command. Its successful named and unnamed tasks remain skipped.
+
+Systemd process state reads for a prepared branch and result verification still
+happen during execution. Owner/group names are resolved again on the target. SSH uses
 the system client's current configuration, including an alias's current address.
 The saved explicit connection inputs remain fixed. DNF resolves dependencies
 and repository transactions when its prepared package request executes. These

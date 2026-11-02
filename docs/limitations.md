@@ -6,8 +6,8 @@ weight: 110
 ---
 
 Richt currently implements local/SSH transport, explicit noninteractive sudo,
-strict local YAML inventory, RPM through DNF 4/YUM 4, systemd, local templates,
-and local YAML secret sources. See [installation](installation.md) and
+strict local YAML inventory, RPM through DNF 4/YUM 4, systemd and oneshot
+processes, local templates, and local YAML secret sources. See [installation](installation.md) and
 [validation](validation.md) for requirements and verified platforms. YUM 3,
 DNF 5, APT, non-systemd managers, URL inventory/templates, direct binary
 URL downloads, and external secret stores are unsupported.
@@ -15,8 +15,9 @@ URL downloads, and external secret stores are unsupported.
 ## Executable plans are prepared inputs
 
 A [saved plan](files.md) fixes selected hosts, explicit connection inputs,
-task order, operations, file bytes/patches/attributes, package requests, and allowed process
-branches. Apply does not reread inventory/templates/secrets, compute a new diff,
+task order, operations, file bytes/patches/attributes, package requests, allowed
+systemd process branches, and oneshot argv/timeouts/changed triggers. Apply does
+not reread inventory/templates/secrets, compute a new diff,
 or check for drift. A file changed by another actor after diff can be overwritten
 by the prepared write. Completed tasks are skipped without rechecking them on
 continuation. Reprepare and review when you want current observations.
@@ -31,8 +32,10 @@ These inputs retain defined execution-time dependencies:
   A pinned NEVRA fixes the explicit package request, not RPM checksums,
   scriptlets, every dependency, or repository trust configuration. RPM artifacts
   are not embedded in the plan.
-- Process tasks read current state to select a prepared branch and verify the
+- Systemd process tasks read current state to select a prepared branch and verify the
   result. Running means systemd active, not application readiness.
+- Oneshot executables and their dependencies must exist at apply time. Commands
+  run only for prepared changed inputs, with no runtime-state convergence check.
 
 Ordinary file operations follow target and parent symlinks; removal unlinks the
 named entry. There is no special symlink prohibition or inode identity contract.
@@ -47,10 +50,11 @@ before its success was saved, and explicit continuation can execute it again.
 A failed host blocks its remaining tasks while other hosts continue. See
 [continuation](continuation.md).
 
-Process command and verification polling share a positive duration, default
+Systemd command and verification polling share a positive duration, default
 **5s**. Timeouts fail the task; an accepted systemd job may continue after the
-client times out. Unsupported reload is an error and never falls back to
-restart. Services follow service-definition order, and components follow their
+client times out. Oneshot commands have their own positive timeout, default 5s;
+an SSH timeout does not guarantee remote termination. Unsupported reload is an
+error and never falls back to restart. Services follow service-definition order, and components follow their
 list declaration order within each phase. There is no dependency graph or
 automatic dependency selection.
 

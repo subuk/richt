@@ -153,6 +153,11 @@ func serviceSchema(root *yaml.Node) error {
 						return err
 					}
 				}
+				if field == "processes" {
+					if err := processSchema(item); err != nil {
+						return err
+					}
+				}
 				if err := mappingFields(item, func(key string, value *yaml.Node) error {
 					if field == "processes" {
 						switch key {
@@ -180,6 +185,55 @@ func serviceSchema(root *yaml.Node) error {
 		}
 		return nil
 	})
+}
+
+// Process backends have disjoint fields, even when supplied values are empty.
+func processSchema(node *yaml.Node) error {
+	fields := map[string]*yaml.Node{}
+	if err := mappingFields(node, func(key string, value *yaml.Node) error {
+		fields[key] = value
+		return nil
+	}); err != nil {
+		return err
+	}
+	typ := ""
+	if value := fields["type"]; value != nil {
+		typ = dereference(value).Value
+	}
+	var forbidden []string
+	switch typ {
+	case "oneshot":
+		forbidden = []string{"unit", "state", "enabled", "masked", "restart_on", "reload_on", "unit_file", "overrides"}
+	case "systemd":
+		forbidden = []string{"command", "run_on"}
+	}
+	for _, key := range forbidden {
+		if value := fields[key]; value != nil {
+			return fmt.Errorf("line %d: %s process cannot set %s", value.Line, typ, key)
+		}
+	}
+	for _, key := range []string{"command", "run_on"} {
+		if value := fields[key]; value != nil {
+			if err := stringList(value, "process "+key); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func stringList(node *yaml.Node, context string) error {
+	node = dereference(node)
+	if node.Kind != yaml.SequenceNode {
+		return fmt.Errorf("line %d: %s must be a list of strings", node.Line, context)
+	}
+	for _, item := range node.Content {
+		item = dereference(item)
+		if item.Kind != yaml.ScalarNode || item.Tag != "!!str" {
+			return fmt.Errorf("line %d: %s must be a list of strings", item.Line, context)
+		}
+	}
+	return nil
 }
 
 // Omitted type selects the template backend. Explicit values must name it.

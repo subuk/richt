@@ -125,7 +125,7 @@ func normalizedService(s Service) Service {
 		if p.Timeout == "" {
 			p.Timeout = "5s"
 		}
-		if p.State == "" {
+		if p.Type == "systemd" && p.State == "" {
 			p.State = "running"
 		}
 		processes[k] = p

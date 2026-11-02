@@ -16,7 +16,8 @@ prepare changes against the targets, review the executable plan, and explicitly
 `apply` it. The [config-only quickstart](quickstart.md) walks through that flow
 without root privileges. Use [installation and platform requirements](installation.md)
 and the [CLI reference](cli.md) for your environment. The [examples](examples.md)
-include ready-package vmango, SSH, local secrets, and failure/continuation.
+include ready-package vmango, SSH, local secrets, failure/continuation, and
+change-triggered [oneshot commands](services/processes/oneshot.md).
 [Validation](validation.md) records Linux acceptance and its coverage limits.
 
 The focused guides are:
@@ -28,7 +29,7 @@ The focused guides are:
 - [Binaries](services/binaries/_index.md), [configs](services/configs/_index.md),
   and [processes](services/processes/_index.md): component concepts and the
   current [RPM](services/binaries/rpm.md), [file](services/configs/files.md),
-  and [systemd](services/processes/systemd.md) backends.
+  [systemd](services/processes/systemd.md), and [oneshot](services/processes/oneshot.md) backends.
 - [Saved plans and apply](files.md): frozen executable inputs, review,
   confirmation, protected JSON, and locking.
 - [Continuation](continuation.md): task progress, partial failure, and explicit

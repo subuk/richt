@@ -18,6 +18,7 @@ execution. Recorded results and their limits live in [validation](validation.md)
 | Full package/config/process lifecycle | [Ready vmango package](../examples/vmango/README.md) | Disposable DNF 4/systemd Linux target, ready repository RPMs, required privileges. No custom RPM build. |
 | Failure and manual continuation | [Continuation example](../examples/continuation/README.md) | Config-only deliberate partial failure, repair, and saved-plan resume. |
 | Two independent secret sources | [Secrets example](../examples/secrets/README.md) | Python 3 verifier and local Richt; dummy values, private temporary targets, frozen saved bytes, and automatic cleanup. |
+| Change-triggered command | [Oneshot sysctl](../examples/oneshot/README.md) | Disposable Linux target with sysctl and root privileges; writes one sysctl config and applies it without a systemd unit. |
 | Two SSH hosts | [SSH walkthrough](../examples/ssh/README.md) and [inventory](../examples/ssh/inventory.yaml) | Ready vmango RPMs on two disposable Linux targets; replace illustrative client aliases and configure noninteractive sudo. |
 
 ## Choose the appropriate workflow

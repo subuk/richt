@@ -30,15 +30,16 @@ Read the guide that owns the changed contract:
   [lifecycle](../../../docs/services/lifecycle.md),
   [reactions](../../../docs/services/reactions.md), and component references for
   [RPM](../../../docs/services/binaries/rpm.md),
-  [files](../../../docs/services/configs/files.md), and
-  [systemd](../../../docs/services/processes/systemd.md).
+  [files](../../../docs/services/configs/files.md),
+  [systemd](../../../docs/services/processes/systemd.md), and
+  [oneshot](../../../docs/services/processes/oneshot.md).
 - [Secrets](../../../docs/secrets.md): YAML source lookup, template sensitivity,
   safe diagnostics, and protection of prepared secret-bearing files.
 
 Trace the behavior through existing packages before choosing an extension:
 `inventory` owns domain validation/resolution, `inventoryyaml` loads YAML,
-`plan` owns executable operations and persisted progress, `config`, `rpm`, and
-`systemd` implement resources, `engine` composes services, and `cli` owns Kong
+`plan` owns executable operations and persisted progress, `config`, `rpm`,
+`systemd`, and `oneshot` implement resources, `engine` composes services, and `cli` owns Kong
 arguments, confirmation, and output. Keep changes at the boundary that owns the
 rule. Add an interface only when an implemented dependency needs one.
 

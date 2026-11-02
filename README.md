@@ -8,8 +8,8 @@ Tags assign service target states to hosts; service definitions set execution or
 
 Inspect the inventory, prepare changes with `diff`, review the executable plan,
 and explicitly `apply` it. Current backends provide RPM packages, templated
-files, and systemd processes over local or SSH transport, with explicit
-noninteractive sudo, bounded host concurrency, and local YAML secret sources.
+files, and systemd or change-triggered oneshot processes over local or SSH
+transport, with explicit noninteractive sudo, bounded host concurrency, and local YAML secret sources.
 
 ## Start here
 
@@ -63,8 +63,9 @@ The [documentation index](docs/_index.md) links the complete first-version guide
 - [CLI commands and flags](docs/cli.md), [SSH/sudo and concurrency](docs/ssh.md).
 - [Secrets and sensitive output](docs/secrets.md), [limitations](docs/limitations.md).
 - [Examples](docs/examples.md): [ready vmango RPMs](examples/vmango/README.md),
-  [two YAML secret sources](examples/secrets/README.md), and
-  [deliberate failure/continuation](examples/continuation/README.md).
+  [two YAML secret sources](examples/secrets/README.md),
+  [deliberate failure/continuation](examples/continuation/README.md), and
+  [oneshot sysctl changes](examples/oneshot/README.md).
 
 To preview the Hugo/Docsy documentation site locally, install Node.js 22 or
 newer with npm, then run:
@@ -100,7 +101,8 @@ prove runtime RPM, systemd, root, or SELinux behavior. [Linux validation](docs/v
 describes the separate disposable-host acceptance workflows.
 
 Public Go packages separate inventory/domain validation, YAML loading, executable
-plans, files, RPM, systemd, transport, and orchestration. The CLI uses Kong.
+plans, files, RPM, systemd, oneshot commands, transport, and orchestration.
+The CLI uses Kong.
 Contributor guidance is in [AGENTS.md](AGENTS.md); the local
 [development workflow](.agents/skills/richt-development/SKILL.md) and
 [design and roadmap](.agents/skills/richt-development/references/design.md)

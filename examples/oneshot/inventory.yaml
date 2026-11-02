@@ -1,0 +1,25 @@
+tags:
+  tuning:
+    services:
+      sysctl: {}
+services:
+  sysctl:
+    order: 10
+    configs:
+      - name: tuning
+        path: /etc/sysctl.d/90-richt-oneshot-example.conf
+        owner: root
+        group: root
+        mode: "0644"
+        template:
+          inline: "vm.swappiness = 10\n"
+    processes:
+      - name: apply-tuning
+        type: oneshot
+        command: [/usr/sbin/sysctl, -p, /etc/sysctl.d/90-richt-oneshot-example.conf]
+        run_on: [config.tuning]
+        timeout: 5s
+hosts:
+  - name: example
+    tags: [tuning]
+    transport: {type: local}

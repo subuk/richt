@@ -157,8 +157,40 @@ func validateService(s Service) error {
 			return err
 		}
 		name := componentLabel(p.Name, i)
+		if p.Timeout != "" {
+			d, err := time.ParseDuration(p.Timeout)
+			if err != nil || d <= 0 {
+				return fmt.Errorf("process.%s timeout: expected a positive duration such as 5s", name)
+			}
+		}
+		if p.Type == "oneshot" {
+			if p.Unit != "" || p.State != "" || p.Enabled != nil || p.Masked != nil || p.RestartOn != nil || p.ReloadOn != nil || p.UnitFile != nil || p.Overrides != nil {
+				return fmt.Errorf("process.%s: oneshot cannot set unit, state, enabled, masked, restart_on, reload_on, unit_file or overrides", name)
+			}
+			if len(p.Command) == 0 || strings.TrimSpace(p.Command[0]) == "" {
+				return fmt.Errorf("process.%s command: expected a nonempty executable argument list", name)
+			}
+			if strings.HasPrefix(p.Command[0], "-") {
+				return fmt.Errorf("process.%s command: executable cannot begin with a hyphen; use an explicit path such as ./-name", name)
+			}
+			for _, arg := range p.Command {
+				if strings.ContainsRune(arg, 0) {
+					return fmt.Errorf("process.%s command: arguments cannot contain NUL", name)
+				}
+			}
+			if len(p.RunOn) == 0 {
+				return fmt.Errorf("process.%s run_on: at least one binary or config reference is required", name)
+			}
+			if err := validateProcessReferences(name, "run_on", p.RunOn, binaryNames, configNames); err != nil {
+				return err
+			}
+			continue
+		}
 		if p.Type != "systemd" {
-			return fmt.Errorf("process.%s type: expected systemd", name)
+			return fmt.Errorf("process.%s type: expected systemd or oneshot", name)
+		}
+		if p.Command != nil || p.RunOn != nil {
+			return fmt.Errorf("process.%s: systemd cannot set command or run_on", name)
 		}
 		if !unitPattern.MatchString(p.Unit) {
 			return fmt.Errorf("process.%s unit: expected a systemd .service unit name", name)
@@ -179,35 +211,12 @@ func validateService(s Service) error {
 				}
 			}
 		}
-		if p.Timeout != "" {
-			d, err := time.ParseDuration(p.Timeout)
-			if err != nil || d <= 0 {
-				return fmt.Errorf("process.%s timeout: expected a positive duration such as 5s", name)
-			}
-		}
 		for _, field := range []struct {
 			name string
 			refs []string
 		}{{"restart_on", p.RestartOn}, {"reload_on", p.ReloadOn}} {
-			seen := map[string]bool{}
-			for _, ref := range field.refs {
-				kind, key, ok := strings.Cut(ref, ".")
-				exists := false
-				if ok {
-					switch kind {
-					case "binary":
-						exists = key != "" && binaryNames[key]
-					case "config":
-						exists = key != "" && configNames[key]
-					}
-				}
-				if !exists {
-					return fmt.Errorf("process.%s %s: unknown component %q; expected binary.<name> or config.<name> in this service", name, field.name, ref)
-				}
-				if seen[ref] {
-					return fmt.Errorf("process.%s %s: duplicate component %q", name, field.name, ref)
-				}
-				seen[ref] = true
+			if err := validateProcessReferences(name, field.name, field.refs, binaryNames, configNames); err != nil {
+				return err
 			}
 		}
 		if p.UnitFile != nil {
@@ -230,6 +239,30 @@ func validateService(s Service) error {
 				return fmt.Errorf("process.%s overrides %q path: expected /etc/systemd/system/%s.d/%s", name, key, p.Unit, key)
 			}
 		}
+	}
+	return nil
+}
+
+func validateProcessReferences(name, field string, refs []string, binaryNames, configNames map[string]bool) error {
+	seen := map[string]bool{}
+	for _, ref := range refs {
+		kind, key, ok := strings.Cut(ref, ".")
+		exists := false
+		if ok {
+			switch kind {
+			case "binary":
+				exists = key != "" && binaryNames[key]
+			case "config":
+				exists = key != "" && configNames[key]
+			}
+		}
+		if !exists {
+			return fmt.Errorf("process.%s %s: unknown component %q; expected binary.<name> or config.<name> in this service", name, field, ref)
+		}
+		if seen[ref] {
+			return fmt.Errorf("process.%s %s: duplicate component %q", name, field, ref)
+		}
+		seen[ref] = true
 	}
 	return nil
 }

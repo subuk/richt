@@ -114,7 +114,8 @@ agent, central server, NetBox, or Argo CD.
 | SSH controller | Richt and system OpenSSH `ssh` in `PATH`; local template and secret files for preparation. macOS has been used as a controller. |
 | SSH target | Linux shell and standard GNU coreutils/findutils, `getent`, plus the utilities needed by selected resources. No Go toolchain or Richt binary is needed there. |
 | RPM resources | DNF 4, or YUM 4 backed by DNF 4, and an RPM database. Repository/network access is needed when DNF executes the transaction. |
-| Processes | systemd with `systemctl`; declared units or packages that supply them. |
+| Systemd processes | systemd with `systemctl`; declared units or packages that supply them. |
+| Oneshot processes | The declared executable and its dependencies on the target; no systemd requirement. |
 | SELinux attributes | An SELinux-enabled Linux target whose kernel accepts the requested full label. Requests fail explicitly on other systems. |
 
 The recorded full-stack platform is AlmaLinux 10.2 x86_64, DNF 4.20.0,
@@ -135,7 +136,7 @@ acceptance harnesses; it is not required by the Richt CLI.
 Run inventory commands as an ordinary user. Diff observes targets, so it needs
 read and observation access; it may fail on protected resources without suitable
 privileges. Apply needs permission to create parents, write/remove the managed
-files, set requested attributes, and run selected package/systemd operations.
+files, set requested attributes, and run selected package and process operations.
 System configuration and RPM transactions normally require root.
 
 Choose privileges explicitly in inventory:

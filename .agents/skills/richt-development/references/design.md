@@ -10,7 +10,7 @@ or unfinished first-version requirements, nor are they permanently forbidden.
 Contents: [architecture](#architecture-and-domain),
 [shipped baseline](#shipped-baseline), [plans](#executable-plans-and-progress),
 [SSH and concurrency](#ssh-sudo-and-host-concurrency),
-[secrets](#secret-source-execution),
+[oneshot processes](#oneshot-processes), [secrets](#secret-source-execution),
 [first-version completion](#first-version-completion-and-documentation), and
 [later scope](#later-scope).
 
@@ -69,7 +69,7 @@ extension processes.
 
 The working CLI includes build/install/help/version, strict YAML inventory,
 side-effect-free inventory inspection, files and saved plans, DNF4/YUM4 plus
-systemd services, local/SSH transports, noninteractive sudo, bounded host
+systemd and change-triggered oneshot processes, local/SSH transports, noninteractive sudo, bounded host
 concurrency, and local YAML secret sources. The agreed first-version scope is
 complete: KRG-69 through KRG-75 are Done in Linear as of 2026-11-01, including
 documentation, executable examples, and the published documentation site.
@@ -109,7 +109,7 @@ Important invariants across those contracts:
   neither assigns it nor automatically includes other services. Filters apply
   only during plan construction and are argument errors for saved-plan apply.
 - Services run in service-definition order; present phases are binary, config, process.
-  Each collection executes in declaration order. `restart_on`/`reload_on` refer
+  Each collection executes in declaration order. `restart_on`/`reload_on`/`run_on` refer
   to explicitly named `binary.<name>` or `config.<name>` in the same service.
   Unknown/duplicate references fail validation. There is no component dependency
   graph or cross-service link.
@@ -147,7 +147,7 @@ Important invariants across those contracts:
   Validation and writing share one task, and failure preserves the destination
   and blocks later reactions. Matching content, attribute-only changes, and
   removal do not run validation. Validator output is never included in diagnostics.
-- `absent` traverses processes in reverse declaration order, stopping and
+- `absent` skips oneshots and traverses systemd processes in reverse declaration order, stopping and
   verifying each before disabling it. These tasks precede removal of owned
   units/drop-ins and configs. Configs use reverse config-list order, then
   packages use reverse binary-list order.
@@ -175,7 +175,7 @@ not reasons to recalculate tasks. Other incompatible backend semantics fail. Pro
 result verification remain execution operations. Successful tasks are not
 rechecked during continuation.
 
-The current saved format is strict, indented JSON schema version `1.3`; only
+The current saved format is strict, indented JSON schema version `1.4`; only
 that version is accepted, with validation of operations and progress. Task IDs
 use original zero-based list positions and operations, never optional name
 labels, and remain stable within a saved plan rather than across inventory
@@ -245,6 +245,38 @@ order, and race-free progress. Fail one host deliberately and confirm queued
 hosts finish; reapply its saved plan to skip successes and retry unfinished work.
 Use Go race checking for concurrency/progress changes and authorize test hosts
 according to the current task.
+
+## Oneshot processes
+
+A `type: oneshot` process executes a fixed nonempty `command` argument vector
+without implicit shell interpretation. Its nonempty `run_on` list references
+explicitly named binaries/configs in the same service. Creating a config,
+changing its content or attributes, or changing a referenced binary schedules
+one execution per process; multiple changed references coalesce. Unchanged
+inputs do not schedule a command. Oneshots have no systemd state, enablement,
+mask, unit files, or restart/reload operations, and reject those fields.
+
+Mixed systemd/oneshot processes run in list order in the present process phase,
+after binaries and configs. Subscriptions do not establish order. Absence skips
+oneshots, with no removal hooks. Oneshot execution requires no systemd backend;
+package changes only schedule systemd daemon reload when systemd processes are
+present (changed systemd definition files retain their existing reload rule).
+
+Preparation never executes the command. Plans freeze its argv, positive timeout
+(default 5s), changed trigger references, position-based identity, and task order.
+Display the actual command, triggering components, and exit-zero success check.
+Apply uses the target's current executable; executable bytes are not embedded.
+Local and SSH transports retain explicit noninteractive sudo behavior. Stdout
+and stderr are discarded for all oneshots; errors retain safe categories and
+exit status. Timeout fails the task and does not promise remote termination.
+
+Successful commands are skipped on saved-plan continuation; unfinished commands
+are retried and may repeat effects after interruption. If a config succeeded
+before its oneshot failed, continue that saved plan to retry the command. A new
+diff may see an unchanged config and schedule nothing. There is no persistent
+trigger state, autosave, automatic retry, rollback, or exactly-once guarantee.
+The [oneshot reference](../../../../docs/services/processes/oneshot.md) and
+[sysctl example](../../../../examples/oneshot/README.md) own usage details.
 
 ## Secret-source execution
 
@@ -332,8 +364,8 @@ what was verified, not outstanding first-version tasks.
 Inventory and Services are the central documentation concepts. Inventory
 describes hosts, tags, assignments, variables, and selection; Services explains
 reusable component composition, execution order, and reactions before the
-implementation references. RPM and systemd are current implementations of
-binary and process components. Configs use templated files with an optional
+implementation references. RPM implements binary components; systemd and oneshot implement process
+components. Configs use templated files with an optional
 `type: template` discriminator, which is also the default when omitted. New
 implementations extend their component reference lists; the documentation must not advertise them before they are supported.
 
@@ -347,8 +379,8 @@ to documentation work.
 ## Later scope
 
 NetBox inventory/plugin/rendering, URL inventory and template sources, direct
-URL binary downloads/integrity/unpacking, other package managers, script-based
-process backends, external secret stores, multi-file configuration validation
+URL binary downloads/integrity/unpacking, other package managers, additional persistent
+process managers, external secret stores, multi-file configuration validation
 transactions, agents, and fleet rollout orchestration are later work. Preserve useful domain boundaries
 without building empty layers or advertising unsupported implementations.
 

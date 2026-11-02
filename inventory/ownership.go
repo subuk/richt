@@ -45,6 +45,9 @@ func (in *Inventory) validateOwnership(host string, assignments []Assignment) er
 			}
 		}
 		for i, p := range s.Processes {
+			if p.Type != "systemd" {
+				continue
+			}
 			name := componentLabel(p.Name, i)
 			component := "process." + name
 			if previous, ok := processUnits[p.Unit]; ok {

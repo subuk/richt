@@ -79,7 +79,7 @@ confirmation, and progress; [SSH and sudo](../ssh.md) covers remote targets and
 explicit noninteractive privilege escalation.
 
 Read [lifecycle and ordering](lifecycle.md) for execution phases and removal, and
-[change reactions](reactions.md) for `restart_on`, `reload_on`, and process
+[change reactions](reactions.md) for `restart_on`, `reload_on`, `run_on`, and process
 branches. The component references own their fields and backend limits.
 
 ## Package requests
@@ -91,7 +91,8 @@ at apply.
 
 ## Process lifecycle
 
-[Processes](processes/_index.md) manage runtime state and independent enablement.
+[Processes](processes/_index.md) manage systemd runtime state and independent
+enablement, or run [oneshot commands](processes/oneshot.md) when linked components change.
 [Reactions](reactions.md) combine actual component changes into one action;
 [systemd](processes/systemd.md) defines state verification and timeouts.
 

@@ -125,10 +125,12 @@ also hide validator arguments. Normal success, failure, and validator timeout
 clean up candidates; abrupt process or host termination can leave a private
 temporary directory behind. See [file validation](services/configs/files.md).
 
-Local RPM/systemd and SSH/sudo command failures retain safe failure categories
+Local RPM/systemd/oneshot and SSH/sudo command failures retain safe failure categories
 and exit status, but omit command output that could contain secret-bearing
 application diagnostics. Temporary plan files are cleaned up on completion or
 handled failures; forced termination can leave a private temporary file behind.
+Oneshot argv is visible in the plan and its display; command output suppression
+does not make arguments sensitive. Keep secret values out of argv.
 
 The [two-source example](../examples/secrets/README.md) verifies lookup,
 redaction, private files, and frozen saved inputs without printing their

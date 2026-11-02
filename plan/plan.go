@@ -2,16 +2,20 @@
 package plan
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"regexp"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 )
 
-const Version = "1.3"
+const Version = "1.4"
 
 type Plan struct {
 	Version string `json:"version"`
@@ -40,6 +44,7 @@ type Task struct {
 	File      *FileChange    `json:"file,omitempty"`
 	RPM       *RPMChange     `json:"rpm,omitempty"`
 	Process   *ProcessChange `json:"process,omitempty"`
+	Oneshot   *OneshotChange `json:"oneshot,omitempty"`
 	Progress  Progress       `json:"progress"`
 }
 type FileChange struct {
@@ -85,12 +90,73 @@ type ProcessChange struct {
 	MissingOK bool   `json:"missing_ok,omitempty"`
 }
 
-// Action is a concrete file operation. Resolve is shared by display and execution.
+// OneshotChange fixes an argv command and the actual changed inputs that trigger it.
+type OneshotChange struct {
+	Command  []string `json:"command"`
+	Timeout  string   `json:"timeout"`
+	Triggers []string `json:"triggers"`
+}
+
+// UnmarshalJSON keeps argv entries strict: JSON null is not an empty argument.
+func (c *OneshotChange) UnmarshalJSON(data []byte) error {
+	var wire struct {
+		Command  []json.RawMessage `json:"command"`
+		Timeout  string            `json:"timeout"`
+		Triggers []string          `json:"triggers"`
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&wire); err != nil {
+		return errors.New("invalid oneshot JSON")
+	}
+	command := make([]string, len(wire.Command))
+	for i, raw := range wire.Command {
+		var argument *string
+		if err := json.Unmarshal(raw, &argument); err != nil || argument == nil {
+			return errors.New("oneshot command arguments must be strings")
+		}
+		command[i] = *argument
+	}
+	*c = OneshotChange{Command: command, Timeout: wire.Timeout, Triggers: wire.Triggers}
+	return nil
+}
+
+var triggerPattern = regexp.MustCompile(`^(binary|config)\.[A-Za-z0-9][A-Za-z0-9_-]*$`)
+
+// Validate checks executable oneshot inputs without executing or resolving them.
+func (c *OneshotChange) Validate() error {
+	if c == nil || len(c.Command) == 0 || strings.TrimSpace(c.Command[0]) == "" || strings.HasPrefix(c.Command[0], "-") {
+		return errors.New("oneshot command requires a nonempty executable")
+	}
+	for _, arg := range c.Command {
+		if strings.ContainsRune(arg, '\x00') {
+			return errors.New("oneshot command cannot contain NUL bytes")
+		}
+	}
+	timeout, err := time.ParseDuration(c.Timeout)
+	if err != nil || timeout <= 0 {
+		return errors.New("invalid oneshot timeout")
+	}
+	if len(c.Triggers) == 0 {
+		return errors.New("oneshot requires changed input triggers")
+	}
+	seen := map[string]bool{}
+	for _, ref := range c.Triggers {
+		if !triggerPattern.MatchString(ref) || seen[ref] {
+			return errors.New("invalid or duplicate oneshot trigger")
+		}
+		seen[ref] = true
+	}
+	return nil
+}
+
+// Action is a concrete operation. Resolve is shared by display and execution.
 type Action struct {
 	Kind        string
 	File        *FileChange
 	RPM         *RPMChange
 	Process     *ProcessChange
+	Oneshot     *OneshotChange
 	Description []string
 }
 type Executor interface {
@@ -161,8 +227,18 @@ func (p *Plan) Validate() error {
 			if t.Process != nil {
 				payloads++
 			}
+			if t.Oneshot != nil {
+				payloads++
+			}
 			if payloads > 1 {
 				return fmt.Errorf("task %s: mixed operation payloads", t.ID)
+			}
+			if t.Operation == "oneshot" {
+				if err := t.Oneshot.Validate(); err != nil {
+					return fmt.Errorf("task %s: %w", t.ID, err)
+				}
+			} else if t.Oneshot != nil {
+				return fmt.Errorf("task %s: unexpected oneshot payload", t.ID)
 			}
 			switch t.Progress.Status {
 			case "pending", "running", "success", "error":

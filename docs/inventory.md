@@ -95,7 +95,7 @@ and `processes`. List declaration order controls execution within each
 collection; component names do not sort it. Each item can omit `name`, but an
 explicit name must be a nonempty string and unique within its collection. The
 same name may appear in different collections. Only explicitly named binaries
-and configs can be referenced by `restart_on` or `reload_on`; unnamed items
+and configs can be referenced by `restart_on`, `reload_on`, or `run_on`; unnamed items
 still execute normally.
 
 This bare definition can be stored in the `services/app.yaml` referenced above:
@@ -128,10 +128,12 @@ capabilities are checked during preparation or execution.
 lifecycle. See [RPM binaries](services/binaries/rpm.md) for package requests,
 [file configs](services/configs/files.md) for templates, attributes, sensitivity,
 SELinux, and optional `validate: {args: [...], timeout: 5s}`, and [systemd processes](services/processes/systemd.md) for units,
-drop-ins, enablement, optional `masked: true|false`, and timeouts. Validator
+drop-ins, enablement, optional `masked: true|false`, and timeouts.
+[Oneshot processes](services/processes/oneshot.md) declare a direct `command` argv,
+nonempty `run_on` references, and an optional timeout. Validator
 executables are not opened or run by inventory inspection; short and exact RPM
 version syntax is checked without contacting hosts or repositories. [Reactions](services/reactions.md) defines
-`restart_on` and `reload_on` references and their validation.
+`restart_on`, `reload_on`, and `run_on` references and their validation.
 [Lifecycle and ordering](services/lifecycle.md) defines forward declaration
 order for present services and reverse traversal of each collection for absence.
 Components have no dependency graph.

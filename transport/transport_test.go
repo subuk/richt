@@ -46,7 +46,7 @@ printf 'stderr must not enter stdout' >&2
 	}
 	b, _ := os.ReadFile(argumentFile)
 	args := strings.Split(strings.TrimSuffix(string(b), "\x00"), "\x00")
-	want := []string{"-T", "-o", "BatchMode=yes", "-o", "NumberOfPasswordPrompts=0", "-o", "RequestTTY=no", "-o", "RemoteCommand=none", "-o", "SessionType=default", "-o", "StdinNull=no", "-o", "ForkAfterAuthentication=no", "-l", "explicit", "-p", "2222", "--", "alias", `'sudo' '-n' '--' 'cat' 'a'"'"'b' '$(touch bad)' ''`}
+	want := []string{"-T", "-o", "BatchMode=yes", "-o", "NumberOfPasswordPrompts=0", "-o", "RequestTTY=no", "-o", "RemoteCommand=none", "-o", "SessionType=default", "-o", "StdinNull=no", "-o", "ForkAfterAuthentication=no", "-l", "explicit", "-p", "2222", "--", "alias", `exec 'sudo' '-n' '--' 'cat' 'a'"'"'b' '$(touch bad)' ''`}
 	if !reflect.DeepEqual(args, want) {
 		t.Fatalf("arguments = %#v; want %#v", args, want)
 	}
@@ -168,5 +168,64 @@ func TestConnectionValidation(t *testing.T) {
 		if _, err := New(connection); err == nil {
 			t.Errorf("accepted %#v", connection)
 		}
+	}
+}
+
+func TestRunDiscardSSHQuotesLiteralArgvAndUsesExplicitSudo(t *testing.T) {
+	dir := fakeCommand(t, "ssh", `printf '%s\000' "$@" > "$TRANSPORT_ARGS"
+for last do :; done
+exec sh -c "$last"
+`)
+	fakeCommand(t, "sudo", `[ "$1" = -n ] && [ "$2" = -- ] || exit 90
+shift 2
+exec "$@"
+`)
+	path := filepath.Join(dir, "args")
+	t.Setenv("TRANSPORT_ARGS", path)
+	output := filepath.Join(dir, "literal")
+	c, _ := New(inventory.Transport{Type: "ssh", Host: "alias", Sudo: true})
+	if err := c.RunDiscard(context.Background(), "sh", "-c", `printf '%s' "$1" > "$2"`, "tool", "$(printf unsafe)'", output); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(output)
+	if err != nil || string(data) != "$(printf unsafe)'" {
+		t.Fatal(string(data), err)
+	}
+	args, err := os.ReadFile(path)
+	if err != nil || !bytes.Contains(args, []byte("'sudo' '-n' '--' 'sh'")) {
+		t.Fatal(string(args), err)
+	}
+}
+
+func TestRunDiscardDoesNotRetainArbitraryOutputOrDiagnosticErrors(t *testing.T) {
+	c, _ := New(inventory.Transport{Type: "local"})
+	err := c.RunDiscard(context.Background(), "sh", "-c", `i=0; while [ "$i" -lt 20000 ]; do printf 'OUTPUT_PRIVATE_CANARY_0123456789'; printf 'STDERR_PRIVATE_CANARY_0123456789' >&2; i=$((i+1)); done; exit 42`)
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) || exit.ExitCode() != 42 || len(exit.Stderr) != 0 || strings.Contains(err.Error(), "PRIVATE_CANARY") {
+		t.Fatal("output retained in error", err)
+	}
+	if err := c.RunDiscard(context.Background(), "PRIVATE_CANARY_MISSING_EXECUTABLE"); err == nil || strings.Contains(err.Error(), "PRIVATE_CANARY") {
+		t.Fatal(err)
+	}
+}
+
+func TestSSHExecBypassesShellBuiltinsAndFunctions(t *testing.T) {
+	fakeCommand(t, "ssh", `for last do :; done
+exec sh -c "$last"
+`)
+	c, _ := New(inventory.Transport{Type: "ssh", Host: "alias"})
+	// A shell builtin has no executable and must fail the same as a local argv.
+	for _, name := range []string{"exit", ":"} {
+		if err := c.RunDiscard(context.Background(), name, "0"); err == nil {
+			t.Fatal("executed a shell builtin", name)
+		}
+	}
+	fakeCommand(t, "literal_command", "printf executable\n")
+	fakeCommand(t, "ssh", `for last do :; done
+exec sh -c 'literal_command() { printf function; }; eval "$1"' ssh "$last"
+`)
+	out, err := c.Run(context.Background(), "literal_command")
+	if err != nil || string(out) != "executable" {
+		t.Fatal("shell function shadowed executable", string(out), err)
 	}
 }

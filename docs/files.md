@@ -32,8 +32,8 @@ explicit removal without rendering templates or reading secret sources.
 A saved plan fixes selected hosts, explicit connection inputs, task order,
 operations, rendered file contents and patches, requested attributes and
 owner/group names, file validators and their timeouts, package requests, masking
-targets, and allowed process branches. It contains
-progress for each task. Review its displayed actions, parameters, targets,
+targets, allowed systemd process branches, and oneshot argv, timeouts, and
+changed trigger references. It contains progress for each task. Review its displayed actions, parameters, targets,
 checks, and branches, and trust its source before applying it.
 
 ## Frozen inputs and execution boundaries
@@ -55,8 +55,11 @@ Some operations deliberately use execution-time information:
 - File validators run against the prepared candidate during apply, after earlier
   package tasks and before writing the destination. They use the target's current
   executable and supporting files; those dependencies are not embedded in JSON.
-- Process tasks read current state to select an allowed prepared branch and
-  verify its result. These checks do not rebuild the plan.
+- Systemd process tasks read current state to select an allowed prepared branch
+  and verify its result. These checks do not rebuild the plan.
+- Oneshot tasks execute their saved argv without rechecking linked changes.
+  The target executable and its supporting files are used at apply time;
+  executable bytes are not embedded in JSON.
 
 See [file configs](services/configs/files.md), [RPM binaries](services/binaries/rpm.md),
 [process lifecycle](services/lifecycle.md), and [SSH](ssh.md) for these boundaries.
@@ -113,7 +116,7 @@ partial-failure example.
 
 ## Plan format and security
 
-Saved plans use strict, indented JSON schema version `1.3`; only that version
+Saved plans use strict, indented JSON schema version `1.4`; only that version
 is accepted. Unknown fields, incompatible versions, invalid operations, and
 malformed progress are rejected.
 
@@ -124,7 +127,9 @@ config's file task. Names are display and reference labels, not identifier
 inputs. Identifiers remain fixed in a saved plan, including during continuation;
 reordering inventory items may change identifiers in a newly prepared plan.
 Unnamed components display their one-based list position, such as `[1]`.
-Services can also include orchestration tasks such as daemon reload.
+A oneshot task uses operation `oneshot`; its `oneshot` payload holds `command`,
+`timeout`, and `triggers` containing the actual changed references. Services
+can also include orchestration tasks such as daemon reload.
 
 Saved JSON contains real rendered text and patches, including old and new
 secret bytes. Sensitive display does not remove them from executable inputs.

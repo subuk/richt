@@ -25,13 +25,15 @@ A `present` assignment prepares changes in these phases:
 3. **Configs:** write changed configs in list declaration order, then owned
    units and drop-ins with their prepared contents and attributes.
 4. **Daemon reload, when required:** make changed systemd definitions visible.
-5. **Processes:** apply independent enablement, lifecycle, and mask tasks in
-   process list declaration order. For a present process, its enablement task
+5. **Processes:** execute triggered oneshot commands and apply systemd
+   enablement, lifecycle, and mask tasks in process list declaration order. For
+   a present systemd process, its enablement task
    precedes its lifecycle task; a requested persistent mask follows both. Unmask tasks run
    earlier so a full-unit file write cannot follow a mask link into `/dev/null`.
 
-Only changed resources need write or package tasks. Lifecycle tasks contain
-prepared branches, selected using runtime state during apply; a reaction can
+Only changed resources need write or package tasks. Oneshot commands need an
+actual linked change; each has one task in its process-list position.
+Systemd lifecycle tasks contain prepared branches, selected using runtime state during apply; a reaction can
 therefore become a start when the process is stopped. See [change
 reactions](reactions.md) for the branch table.
 
@@ -54,7 +56,7 @@ processes:
 Changes to owned units/drop-ins schedule daemon reload and a restart reaction
 for their process. Changed ordinary configs under `/etc/systemd/system/`,
 `/usr/lib/systemd/system/`, or `/run/systemd/system/` also schedule daemon reload.
-A changed package request in a service with processes schedules it too, allowing
+A changed package request in a service with systemd processes schedules it too, allowing
 new package units to be discovered without relying on RPM scriptlets.
 Daemon reload precedes process tasks for present services. See
 [systemd definitions](processes/systemd.md#owned-units-and-drop-ins) for file
@@ -72,7 +74,8 @@ tags:
 ```
 
 Within that service, Richt traverses the process list in reverse declaration
-order, stopping and verifying each process before disabling it. These process
+order, stopping and verifying each systemd process before disabling it.
+Oneshot processes schedule no command during absence. These process
 tasks precede removal of owned units/drop-ins and configs. Configs are removed
 in reverse config-list order, then packages in reverse binary-list order,
 followed by any required daemon reload. Thus absence reverses each collection separately and visits processes,
