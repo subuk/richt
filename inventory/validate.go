@@ -138,6 +138,9 @@ func validateService(s Service) error {
 		if strings.TrimSpace(b.Package) == "" || strings.ContainsAny(b.Package, " \t\r\n/") {
 			return fmt.Errorf("binary.%s package: expected a package name", name)
 		}
+		if err := ValidateRPMVersion(b.Version); err != nil {
+			return fmt.Errorf("binary.%s version: %w", name, err)
+		}
 	}
 	for _, name := range sortedKeys(s.Configs) {
 		if err := validName("config", name); err != nil {
@@ -160,6 +163,19 @@ func validateService(s Service) error {
 		}
 		if p.State != "" && p.State != "running" && p.State != "stopped" {
 			return fmt.Errorf("process.%s state: expected running or stopped", name)
+		}
+		if p.Masked != nil && *p.Masked {
+			if p.State != "stopped" || p.Enabled != nil && *p.Enabled {
+				return fmt.Errorf("process.%s masked: true requires state stopped and cannot enable the unit", name)
+			}
+			if p.UnitFile != nil {
+				return fmt.Errorf("process.%s masked: true conflicts with an owned full unit file", name)
+			}
+			for _, c := range s.Configs {
+				if path.Clean(c.Path) == "/etc/systemd/system/"+p.Unit {
+					return fmt.Errorf("process.%s masked: true conflicts with an owned full unit file", name)
+				}
+			}
 		}
 		if p.Timeout != "" {
 			d, err := time.ParseDuration(p.Timeout)
@@ -264,6 +280,32 @@ func validateConfig(c Config) error {
 		n, err := strconv.ParseUint(c.Mode, 8, 32)
 		if err != nil || n > 07777 {
 			return fmt.Errorf("mode: expected an octal mode such as \"0644\"")
+		}
+	}
+	if v := c.Validate; v != nil {
+		if len(v.Args) == 0 || !path.IsAbs(v.Args[0]) || v.Args[0] == "/" {
+			return fmt.Errorf("validate.args: expected an absolute executable path as the first argument")
+		}
+		candidates := 0
+		for i, arg := range v.Args {
+			if strings.ContainsRune(arg, 0) {
+				return fmt.Errorf("validate.args: arguments cannot contain NUL")
+			}
+			if strings.Contains(arg, "{candidate}") {
+				if i == 0 || arg != "{candidate}" {
+					return fmt.Errorf("validate.args: {candidate} must be a separate argument after the executable")
+				}
+				candidates++
+			}
+		}
+		if candidates != 1 {
+			return fmt.Errorf("validate.args: exactly one {candidate} argument is required")
+		}
+		if v.Timeout != "" {
+			d, err := time.ParseDuration(v.Timeout)
+			if err != nil || d <= 0 {
+				return fmt.Errorf("validate.timeout: expected a positive duration such as 5s")
+			}
 		}
 	}
 	return nil

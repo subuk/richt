@@ -118,6 +118,13 @@ continuation. This applies to new and existing files, locally and over SSH/sudo,
 without replacing the inode. Without an explicit mode, the usual default and
 preserved-permission rules still apply.
 
+Optional config validators stage candidate bytes in a private target directory
+(mode 0700), with a mode 0600 candidate file. Validator stdout and stderr are
+discarded, including for files not marked sensitive. Sensitive plan displays
+also hide validator arguments. Normal success, failure, and validator timeout
+clean up candidates; abrupt process or host termination can leave a private
+temporary directory behind. See [file validation](services/configs/files.md).
+
 Local RPM/systemd and SSH/sudo command failures retain safe failure categories
 and exit status, but omit command output that could contain secret-bearing
 application diagnostics. Temporary plan files are cleaned up on completion or

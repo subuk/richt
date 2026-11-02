@@ -1,0 +1,33 @@
+# Illustration for a disposable AlmaLinux target; configure this SSH alias first.
+tags:
+  ssh-server:
+    services:
+      ssh-server: {}
+    vars:
+      sshd:
+        log_level: INFO
+services:
+  ssh-server:
+    order: 10
+    binaries:
+      server: {type: rpm, package: openssh-server}
+    configs:
+      main:
+        path: /etc/ssh/sshd_config
+        owner: root
+        group: root
+        mode: "0600"
+        template: {file: templates/sshd_config.gotmpl}
+        validate:
+          args: [/usr/sbin/sshd, -t, -f, "{candidate}"]
+          timeout: 5s
+    processes:
+      server:
+        type: systemd
+        unit: sshd.service
+        state: running
+        reload_on: [config.main]
+hosts:
+  - name: disposable-ssh
+    tags: [ssh-server]
+    transport: {type: ssh, host: richt-validation-test, sudo: true}

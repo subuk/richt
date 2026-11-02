@@ -94,6 +94,18 @@ func Prepare(c inventory.Config, state string, vars map[string]any, lookups ...S
 	}
 	f := &plan.FileChange{Path: filepath.Clean(c.Path), State: state, Sensitive: c.Sensitive, SELinux: c.SELinux}
 	f.Owner, f.Group = c.Owner, c.Group
+	if c.Validate != nil {
+		v := &plan.FileValidator{Args: append([]string(nil), c.Validate.Args...), Timeout: c.Validate.Timeout}
+		if v.Timeout == "" {
+			v.Timeout = "5s"
+		}
+		if _, err := validatorDuration(v); err != nil {
+			return nil, err
+		}
+		if state == "present" {
+			f.Validate = v
+		}
+	}
 	if c.Mode != "" {
 		m, err := strconv.ParseUint(c.Mode, 8, 12)
 		if err != nil {
@@ -250,6 +262,33 @@ func Observe(f *plan.FileChange) (changed bool, err error) {
 	return changed, nil
 }
 
+// ObserveMissing prepares a file known to become absent before its file task,
+// such as an owned unit after its explicitly requested unmask operation.
+func ObserveMissing(f *plan.FileChange) (changed bool, err error) {
+	defer func() {
+		if err != nil && f != nil && f.Sensitive {
+			err = errors.New("sensitive file observation failed")
+		}
+	}()
+	if _, err := (Local{}).Resolve(plan.Task{Operation: "file", File: f}); err != nil {
+		return false, err
+	}
+	if f.State != "present" {
+		return false, errors.New("missing file observation requires present state")
+	}
+	if _, _, err := ownership(f); err != nil {
+		return false, err
+	}
+	if f.SELinux != "" {
+		if err := validateLabel(f.SELinux); err != nil {
+			return false, err
+		}
+	}
+	f.Write = true
+	f.Patch = udiff.Unified("/dev/null", f.Path, "", f.Content)
+	return true, nil
+}
+
 func validateLabelSyntax(label string) error {
 	parts := strings.SplitN(label, ":", 4)
 	if len(parts) < 3 || strings.ContainsAny(label, " \t\n\r\x00") {
@@ -307,6 +346,9 @@ func (Local) Resolve(t plan.Task) ([]plan.Action, error) {
 	}
 	if f.UID != nil && *f.UID < 0 || f.GID != nil && *f.GID < 0 || f.Mode != nil && *f.Mode > 07777 {
 		return nil, errors.New("invalid file attributes in plan")
+	}
+	if _, err := validatorDuration(f.Validate); err != nil {
+		return nil, err
 	}
 	if f.State == "absent" {
 		return []plan.Action{{Kind: "remove-file", File: f}}, nil
@@ -371,6 +413,11 @@ func (Local) Execute(ctx context.Context, a plan.Action) (err error) {
 		}
 	} else if a.Kind != "set-file-attributes" {
 		return fmt.Errorf("unsupported action %q", a.Kind)
+	}
+	if a.Kind == "overwrite-file" && f.Write && f.Validate != nil {
+		if err := validateLocalCandidate(ctx, f); err != nil {
+			return err
+		}
 	}
 	file, err := os.OpenFile(f.Path, flags, createMode)
 	if err != nil {

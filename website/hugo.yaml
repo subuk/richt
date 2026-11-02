@@ -88,6 +88,16 @@ module:
         - inventory/services/vmango-repository.yaml
         - inventory/templates/vmango.conf.gotmpl
         - inventory/templates/vmango.repo.gotmpl
+        - rpm-versions/README.md
+        - rpm-versions/inventory.yaml
+        - rpm-versions/verify.py
+        - systemd-mask/README.md
+        - systemd-mask/inventory.yaml
+        - systemd-mask/running.yaml
+        - systemd-mask/verify.py
+        - validated-ssh/README.md
+        - validated-ssh/inventory.yaml
+        - validated-ssh/templates/sshd_config.gotmpl
         - rpm-systemd/inventory.yaml
         - rpm-systemd/verify.py
         - rpm-systemd/build-repository.sh

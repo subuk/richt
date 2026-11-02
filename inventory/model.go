@@ -66,13 +66,20 @@ type Template struct {
 }
 
 type Config struct {
-	Path      string   `json:"path" yaml:"path"`
-	Owner     string   `json:"owner,omitempty" yaml:"owner"`
-	Group     string   `json:"group,omitempty" yaml:"group"`
-	Mode      string   `json:"mode,omitempty" yaml:"mode"`
-	Template  Template `json:"template" yaml:"template"`
-	Sensitive bool     `json:"sensitive,omitempty" yaml:"sensitive"`
-	SELinux   string   `json:"selinux,omitempty" yaml:"selinux"`
+	Path      string     `json:"path" yaml:"path"`
+	Owner     string     `json:"owner,omitempty" yaml:"owner"`
+	Group     string     `json:"group,omitempty" yaml:"group"`
+	Mode      string     `json:"mode,omitempty" yaml:"mode"`
+	Template  Template   `json:"template" yaml:"template"`
+	Sensitive bool       `json:"sensitive,omitempty" yaml:"sensitive"`
+	SELinux   string     `json:"selinux,omitempty" yaml:"selinux"`
+	Validate  *Validator `json:"validate,omitempty" yaml:"validate"`
+}
+
+// Validator checks a prepared candidate on the target before its content is written.
+type Validator struct {
+	Args    []string `json:"args" yaml:"args"`
+	Timeout string   `json:"timeout,omitempty" yaml:"timeout"`
 }
 
 type Process struct {
@@ -80,6 +87,7 @@ type Process struct {
 	Unit      string            `json:"unit" yaml:"unit"`
 	State     string            `json:"state" yaml:"state"`
 	Enabled   *bool             `json:"enabled,omitempty" yaml:"enabled"`
+	Masked    *bool             `json:"masked,omitempty" yaml:"masked"`
 	Timeout   string            `json:"timeout" yaml:"timeout"`
 	RestartOn []string          `json:"restart_on,omitempty" yaml:"restart_on"`
 	ReloadOn  []string          `json:"reload_on,omitempty" yaml:"reload_on"`

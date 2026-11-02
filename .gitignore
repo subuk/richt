@@ -26,3 +26,6 @@ __pycache__/
 /website/resources/
 /website/.hugo_build.lock
 /website/.cache/
+
+# Private, reusable test-host context.
+/.agents/skills/richt-linux-validation/references/hosts.local.md

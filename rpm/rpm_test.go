@@ -22,6 +22,16 @@ func TestInstalledVersionPolicy(t *testing.T) {
 		{name: "unversioned does not upgrade", installed: "0:1.0-1.noarch", state: "present"},
 		{name: "absent installs", state: "present", missing: true, want: true},
 		{name: "exact no-op", version: "0:1.0-1.noarch", installed: "0:1.0-1.noarch", state: "present"},
+		{name: "upstream no-op", version: "1.34.3", installed: "0:1.34.3-1.noarch", state: "present"},
+		{name: "upstream ignores epoch release architecture", version: "1.34.3", installed: "7:1.34.3-42.el9.aarch64", state: "present"},
+		{name: "upstream upgrade", version: "1.34.3", installed: "0:1.34.2-1.x86_64", state: "present", want: true},
+		{name: "upstream downgrade", version: "1.34.3", installed: "0:1.35.0-1.x86_64", state: "present", want: true},
+		{name: "upstream missing", version: "1.34.3", state: "present", missing: true, want: true},
+		{name: "upstream does not match prefix", version: "1.34.3", installed: "0:1.34.30-1.x86_64", state: "present", want: true},
+		{name: "upstream preserves literal version", version: "1.34.3", installed: "0:1.34.03-1.x86_64", state: "present", want: true},
+		{name: "exact observes release", version: "0:1.0-1.noarch", installed: "0:1.0-2.noarch", state: "present", want: true},
+		{name: "exact observes epoch", version: "0:1.0-1.noarch", installed: "1:1.0-1.noarch", state: "present", want: true},
+		{name: "exact observes architecture", version: "0:1.0-1.noarch", installed: "0:1.0-1.x86_64", state: "present", want: true},
 		{name: "upgrade", version: "0:2.0-1.noarch", installed: "0:1.0-1.noarch", state: "present", want: true},
 		{name: "downgrade", version: "0:1.0-1.noarch", installed: "0:2.0-1.noarch", state: "present", want: true},
 		{name: "remove", installed: "0:1.0-1.noarch", state: "absent", want: true},
@@ -50,7 +60,7 @@ func TestExactNEVRACommandAndValidation(t *testing.T) {
 	if !reflect.DeepEqual(Arguments(c), want) {
 		t.Fatal(Arguments(c))
 	}
-	for _, bad := range []string{"1.0", "0:1.0-1", "0:1.0-1.noarch --allowerasing"} {
+	for _, bad := range []string{"1.0-*", "0:1.0-1", "0:1.0-1.noarch --allowerasing"} {
 		c.Version = bad
 		if Validate(c) == nil {
 			t.Fatal("accepted", bad)
@@ -62,6 +72,86 @@ func TestExactNEVRACommandAndValidation(t *testing.T) {
 		t.Fatal("accepted option as package")
 	}
 }
+
+func TestUpstreamObserveAcceptsAnyInstalledMatch(t *testing.T) {
+	b := Backend{Run: func(context.Context, string, ...string) ([]byte, error) {
+		return []byte("other\t0:1.34.3-1.noarch\ndemo\t0:1.34.30-1.x86_64\ndemo\t7:1.34.3-9.i686\n"), nil
+	}}
+	changed, err := b.Observe(context.Background(), &plan.RPMChange{Manager: "dnf", Package: "demo", Version: "1.34.3", State: "present"})
+	if err != nil || changed {
+		t.Fatalf("changed=%v err=%v", changed, err)
+	}
+}
+
+func TestUpstreamVersionCommand(t *testing.T) {
+	for _, manager := range []string{"dnf", "yum"} {
+		t.Run(manager, func(t *testing.T) {
+			c := &plan.RPMChange{Manager: manager, Package: "demo", Version: "1.34.3", State: "present"}
+			want := []string{"-y", "install", "--", "demo-1.34.3"}
+			if !reflect.DeepEqual(Arguments(c), want) {
+				t.Fatal(Arguments(c))
+			}
+			calls := 0
+			b := Backend{Run: func(_ context.Context, name string, args ...string) ([]byte, error) {
+				calls++
+				if name != manager || !reflect.DeepEqual(args, want) {
+					t.Fatalf("unexpected command: %s %q", name, args)
+				}
+				return nil, nil
+			}}
+			if err := b.Execute(context.Background(), plan.Action{Kind: "rpm", RPM: c}); err != nil {
+				t.Fatal(err)
+			}
+			if calls != 1 || c.Version != "1.34.3" {
+				t.Fatalf("calls=%d; request=%+v", calls, c)
+			}
+		})
+	}
+}
+
+func TestUpstreamVersionFailureIsNotRetried(t *testing.T) {
+	failure := errors.New("DNF request failed")
+	calls := 0
+	b := Backend{Run: func(context.Context, string, ...string) ([]byte, error) {
+		calls++
+		return nil, failure
+	}}
+	err := b.Execute(context.Background(), plan.Action{Kind: "rpm", RPM: &plan.RPMChange{Manager: "dnf", Package: "demo", Version: "1.34.3", State: "present"}})
+	if !errors.Is(err, failure) || calls != 1 {
+		t.Fatalf("calls=%d error=%v", calls, err)
+	}
+}
+
+func TestMalformedVersionFailsBeforeCommand(t *testing.T) {
+	b := Backend{Run: func(context.Context, string, ...string) ([]byte, error) {
+		t.Fatal("malformed request reached DNF")
+		return nil, nil
+	}}
+	for _, version := range []string{"1.34.*", "1.34.3 --allowerasing", "0:1.34.3"} {
+		if err := b.Execute(context.Background(), plan.Action{Kind: "rpm", RPM: &plan.RPMChange{Manager: "dnf", Package: "demo", Version: version, State: "present"}}); err == nil {
+			t.Fatal("accepted malformed version", version)
+		}
+	}
+}
+
+func TestUpstreamResolveDisplaysApplyBoundaryWithoutRepositoryQuery(t *testing.T) {
+	b := Backend{Run: func(context.Context, string, ...string) ([]byte, error) {
+		t.Fatal("display contacted target")
+		return nil, nil
+	}}
+	c := &plan.RPMChange{Manager: "dnf", Package: "demo", Version: "1.34.3", State: "present"}
+	actions, err := b.Resolve(plan.Task{Operation: "rpm", RPM: c})
+	if err != nil {
+		t.Fatal(err)
+	}
+	shown := strings.Join(actions[0].Description, "\n")
+	for _, text := range []string{"dnf -y install -- demo-1.34.3", "Upstream version 1.34.3", "at apply", "epoch, release, and architecture"} {
+		if !strings.Contains(shown, text) {
+			t.Fatalf("missing %q in %q", text, shown)
+		}
+	}
+}
+
 func TestQueryFailureAndManagerVersion(t *testing.T) {
 	b := Backend{Run: func(context.Context, string, ...string) ([]byte, error) {
 		return nil, errors.New("database unavailable")

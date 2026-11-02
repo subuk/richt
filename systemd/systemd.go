@@ -87,6 +87,9 @@ func Validate(c *plan.ProcessChange) error {
 	if c.Reaction != "" && c.Reaction != "reload" && c.Reaction != "restart" {
 		return errors.New("invalid process reaction")
 	}
+	if c.Masked != nil && *c.Masked && (c.State != "stopped" || c.Enabled != nil && *c.Enabled) {
+		return errors.New("a masked process must target stopped and cannot be enabled")
+	}
 	d, err := time.ParseDuration(c.Timeout)
 	if err != nil || d <= 0 {
 		return errors.New("invalid process timeout")
@@ -100,7 +103,10 @@ func lifecycle(s Status, c *plan.ProcessChange) (string, error) {
 		}
 		return "", fmt.Errorf("unit %s does not exist", c.Unit)
 	}
-	if s.Load != "loaded" {
+	if s.Load == "masked" && c.State == "running" {
+		return "", fmt.Errorf("unit %s is masked; set masked: false before starting it", c.Unit)
+	}
+	if s.Load != "loaded" && !(s.Load == "masked" && c.State == "stopped") {
 		return "", fmt.Errorf("unit %s has unexpected load state", c.Unit)
 	}
 	switch s.Active {
@@ -121,34 +127,74 @@ func lifecycle(s Status, c *plan.ProcessChange) (string, error) {
 func enabled(s Status) bool { return s.Enabled == "enabled" || s.Enabled == "enabled-runtime" }
 
 func Enabled(s Status) bool { return enabled(s) }
+
+// Masked includes persistent and runtime masks. Neither implies stopped.
+func Masked(s Status) bool {
+	return s.Load == "masked" || s.Enabled == "masked" || s.Enabled == "masked-runtime"
+}
+
+// MaskNeedsChange distinguishes a requested persistent mask from a runtime mask.
+func MaskNeedsChange(s Status, target bool) bool {
+	if target {
+		return s.Load != "masked" || s.Enabled != "masked"
+	}
+	return Masked(s)
+}
+
 func (b Backend) NeedsChange(ctx context.Context, c *plan.ProcessChange) (bool, Status, error) {
 	s, err := b.Status(ctx, c.Unit)
 	if err != nil {
 		return false, s, err
 	}
 	if s.Load == "not-found" {
-		return c.State == "running", s, nil
+		return c.State == "running" || c.Masked != nil && MaskNeedsChange(s, *c.Masked), s, nil
 	}
-	op, err := lifecycle(s, c)
+	if Masked(s) && c.Enabled != nil && *c.Enabled && (c.Masked == nil || *c.Masked) {
+		return false, s, fmt.Errorf("unit %s is masked; set masked: false before enabling it", c.Unit)
+	}
+	observed := s
+	if s.Load == "masked" && c.Masked != nil && !*c.Masked {
+		// The explicit unmask task runs before the prepared lifecycle task.
+		observed.Load = "loaded"
+	}
+	op, err := lifecycle(observed, c)
 	if err != nil {
 		return false, s, err
 	}
-	return op != "" || (c.Enabled != nil && enabled(s) != *c.Enabled), s, nil
+	return op != "" || (c.Enabled != nil && enabled(s) != *c.Enabled) || c.Masked != nil && MaskNeedsChange(s, *c.Masked), s, nil
 }
 func (b Backend) Resolve(t plan.Task) ([]plan.Action, error) {
 	if t.File != nil || t.RPM != nil {
 		return nil, errors.New("systemd task contains another operation payload")
 	}
 	if t.Operation == "daemon-reload" {
+		if t.Process != nil {
+			return nil, errors.New("daemon-reload task must not contain a process payload")
+		}
 		return []plan.Action{{Kind: "daemon-reload", Description: []string{"systemctl daemon-reload"}}}, nil
 	}
-	if t.Operation != "systemd" && t.Operation != "systemd-enable" {
+	if t.Operation != "systemd" && t.Operation != "systemd-enable" && t.Operation != "systemd-mask" {
 		return nil, fmt.Errorf("unsupported systemd operation %q", t.Operation)
 	}
 	if err := Validate(t.Process); err != nil {
 		return nil, err
 	}
 	c := t.Process
+	if t.Operation == "systemd-mask" {
+		if c.Masked == nil || c.Enabled != nil || c.Reaction != "" {
+			return nil, errors.New("mask task requires only a masked target")
+		}
+		commands := []string{"if mask differs: systemctl unmask -- " + c.Unit, "then: systemctl unmask --runtime -- " + c.Unit}
+		if *c.Masked {
+			commands = []string{"if persistent mask differs: systemctl mask -- " + c.Unit}
+		}
+		lines := append([]string{"check: systemctl show --property=" + statusProperties + " -- " + c.Unit}, commands...)
+		lines = append(lines, "verify mask using the same check; command and wait timeout "+c.Timeout+"; no retries")
+		return []plan.Action{{Kind: "systemd-mask", Process: c, Description: lines}}, nil
+	}
+	if c.Masked != nil {
+		return nil, errors.New("masking requires a separate systemd-mask task")
+	}
 	if t.Operation == "systemd" && c.Enabled != nil {
 		return nil, errors.New("enablement requires a separate systemd-enable task")
 	}
@@ -191,7 +237,7 @@ func (b Backend) Execute(ctx context.Context, a plan.Action) error {
 		_, err := b.run(ctx, "daemon-reload")
 		return err
 	}
-	if a.Kind != "systemd" && a.Kind != "systemd-enable" {
+	if a.Kind != "systemd" && a.Kind != "systemd-enable" && a.Kind != "systemd-mask" {
 		return errors.New("unsupported systemd action")
 	}
 	c := a.Process
@@ -205,6 +251,43 @@ func (b Backend) Execute(ctx context.Context, a plan.Action) error {
 	if err != nil {
 		return err
 	}
+	if a.Kind == "systemd-mask" {
+		if c.Masked == nil || c.Enabled != nil || c.Reaction != "" {
+			return errors.New("mask task requires only a masked target")
+		}
+		if s.Load != "loaded" && s.Load != "not-found" && s.Load != "masked" {
+			return fmt.Errorf("unit %s has unexpected load state", c.Unit)
+		}
+		if !MaskNeedsChange(s, *c.Masked) {
+			return nil
+		}
+		if *c.Masked {
+			if _, err = b.run(ctx, "mask", "--", c.Unit); err != nil {
+				return err
+			}
+		} else {
+			if _, err = b.run(ctx, "unmask", "--", c.Unit); err != nil {
+				return err
+			}
+			if _, err = b.run(ctx, "unmask", "--runtime", "--", c.Unit); err != nil {
+				return err
+			}
+		}
+		for {
+			state, err := b.Status(ctx, c.Unit)
+			if err != nil {
+				return err
+			}
+			if !MaskNeedsChange(state, *c.Masked) && (state.Load == "loaded" || state.Load == "not-found" || state.Load == "masked") {
+				return nil
+			}
+			select {
+			case <-ctx.Done():
+				return fmt.Errorf("unit %s mask did not converge: %w", c.Unit, ctx.Err())
+			case <-time.After(25 * time.Millisecond):
+			}
+		}
+	}
 	if a.Kind == "systemd-enable" {
 		if c.Enabled == nil {
 			return errors.New("enablement task has no enabled value")
@@ -212,7 +295,7 @@ func (b Backend) Execute(ctx context.Context, a plan.Action) error {
 		if s.Load == "not-found" && c.MissingOK {
 			return nil
 		}
-		if s.Load != "loaded" {
+		if s.Load != "loaded" && !(s.Load == "masked" && !*c.Enabled) {
 			return fmt.Errorf("unit %s has unexpected load state", c.Unit)
 		}
 		if enabled(s) == *c.Enabled {

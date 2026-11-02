@@ -31,7 +31,8 @@ explicit removal without rendering templates or reading secret sources.
 
 A saved plan fixes selected hosts, explicit connection inputs, task order,
 operations, rendered file contents and patches, requested attributes and
-owner/group names, package requests, and allowed process branches. It contains
+owner/group names, file validators and their timeouts, package requests, masking
+targets, and allowed process branches. It contains
 progress for each task. Review its displayed actions, parameters, targets,
 checks, and branches, and trust its source before applying it.
 
@@ -51,6 +52,9 @@ Some operations deliberately use execution-time information:
 - DNF resolves repository metadata, dependencies, and the transaction when the
   prepared package request runs. An exact version fixes that request, not the
   complete transaction or RPM checksums; RPM artifacts are not embedded.
+- File validators run against the prepared candidate during apply, after earlier
+  package tasks and before writing the destination. They use the target's current
+  executable and supporting files; those dependencies are not embedded in JSON.
 - Process tasks read current state to select an allowed prepared branch and
   verify its result. These checks do not rebuild the plan.
 
@@ -109,10 +113,13 @@ partial-failure example.
 
 ## Plan format and security
 
-New plans use strict, indented JSON schema version `1.1`. Legacy local `1.0`
-plans remain accepted with numeric ownership fields; new connection and
-named-ownership fields require `1.1`. Unknown fields, incompatible versions,
-invalid operations, and malformed progress are rejected.
+New plans use strict, indented JSON schema version `1.2`. Versions `1.0` and
+`1.1` remain readable with their original semantics. Legacy local `1.0` plans
+use numeric ownership fields; connection and named-ownership fields require
+`1.1` or later. Short RPM versions, mask/unmask operations, and file validators
+require `1.2`. Older Richt versions reject new plans rather than skip these
+operations. Unknown fields, incompatible versions, invalid operations, and
+malformed progress are rejected.
 
 Saved JSON contains real rendered text and patches, including old and new
 secret bytes. Sensitive display does not remove them from executable inputs.

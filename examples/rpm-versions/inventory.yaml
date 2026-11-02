@@ -1,0 +1,25 @@
+# Disposable AlmaLinux 10 x86_64 host with DNF 4; see README prerequisites.
+tags:
+  example:
+    services:
+      vmango-repository: {state: present}
+      vmango-package: {state: present}
+    vars:
+      vmango_repository:
+        target: rhel-10
+services:
+  vmango-repository:
+    order: 10
+    file: ../vmango/services/repository.yaml
+  vmango-package:
+    order: 20
+    binaries:
+      package:
+        type: rpm
+        manager: dnf
+        package: vmango
+        version: "0.16.0"
+hosts:
+  - name: localhost
+    tags: [example]
+    transport: {type: local}

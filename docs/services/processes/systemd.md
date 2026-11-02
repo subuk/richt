@@ -1,6 +1,6 @@
 ---
 title: "systemd"
-description: "Manage service-unit state, enablement, owned definitions, and verified reload capability."
+description: "Manage service-unit state, enablement, masks, owned definitions, and verified reload capability."
 weight: 10
 ---
 
@@ -23,6 +23,7 @@ processes:
 | `unit` | yes | A systemd `.service` unit name |
 | `state` | no | `running` (default), or `stopped` |
 | `enabled` | no | Boolean; omission preserves current enablement |
+| `masked` | no | Boolean; `true` requests a persistent mask, `false` removes persistent and runtime masks; omission preserves masks |
 | `timeout` | no | Positive Go duration; default `5s` |
 | `restart_on` | no | Same-service binary/config references; default empty |
 | `reload_on` | no | Same-service binary/config references; default empty; requires reload capability |
@@ -42,6 +43,8 @@ Preparation observes the unit's load, activation, and enablement states. Without
 owned definitions, Richt uses an existing unit, including one supplied by a
 managed RPM. A missing unit may be supplied by a prepared package installation
 or an owned full unit; otherwise preparation fails for a present process.
+A missing external unit may explicitly target `masked: true`, or target
+`masked: false` with `state: stopped`.
 
 During a lifecycle task, `active` is running; `inactive` or `failed` is stopped.
 Unexpected load/activation states fail explicitly. Start, reload, and restart
@@ -58,6 +61,50 @@ stop, or restart a process: a stopped process may remain enabled and a running
 process may be disabled. `enabled` and `enabled-runtime` count as enabled. Its
 command and verification also share one process timeout, separate from the
 lifecycle task's timeout.
+
+## Masks
+
+```yaml
+processes:
+  unwanted:
+    type: systemd
+    unit: unwanted.service
+    state: stopped
+    masked: true
+```
+
+Masking and stopping are independent. An already running masked unit still needs
+to stop. `masked: true` requires `state: stopped` and forbids `enabled: true`.
+It creates a persistent `/etc/systemd/system/<unit>` link to `/dev/null`; a runtime
+mask alone is changed to a persistent mask. Existing runtime and persistent masks
+remain untouched when `masked` is omitted. A running or enabled target for a
+currently masked unit requires explicit `masked: false`.
+
+Enablement uses the observed `UnitFileState`: a masked unit counts as not enabled.
+Retaining a mask with `enabled: false` does not remove enablement symlinks hidden
+under that mask. This permits matching stopped, disabled-by-observation, masked
+targets to remain unchanged. To remove hidden enablement links, explicitly
+request `masked: false` with `enabled: false`; the enablement task runs after
+unmasking even when the masked observation appeared not enabled.
+
+Mask changes have their own `systemd-mask` task and persisted progress. Masking
+runs after requested disablement and stop tasks. Unmasking removes both persistent
+and runtime masks before config writes, enablement, start, or reactions. Each
+mask task observes the current state, executes its prepared commands only when
+needed, and verifies the result within its own process timeout. A failure blocks
+later tasks; continuation skips successful unmask, file, and process tasks.
+
+A persistent mask cannot coexist with an owned full unit at the same path.
+Declaring both is rejected, including ordinary configs at that unit path. To
+replace an existing mask with an owned full unit, explicitly declare
+`masked: false`; Richt prepares that file as a new file after unmasking. With
+mask omission, preparing an owned full-unit write or removal against a masked
+unit fails with an instruction to unmask it first. This prevents following a
+mask symlink into `/dev/null`. Owned drop-ins may coexist with a mask and remain
+managed normally.
+
+The [mask example](../../../examples/systemd-mask/README.md) demonstrates masking
+a missing unit and replacing its mask with an owned unit.
 
 ## Owned units and drop-ins
 
@@ -122,9 +169,12 @@ reload. Restart-only reactions can use the package's unit directly.
 
 An `absent` service overrides process targets to stopped and disabled, including
 for external units it does not remove. Already missing units are accepted.
+It ignores the declared `masked` target and preserves an existing mask. Removing
+an owned full-unit path while it is masked fails preparation: first unmask it
+through a present assignment, then request removal.
 Processes run in reverse dependency order before files and packages are removed;
 see [absent services](../lifecycle.md#absent-services).
 
 Failed commands or verification block the remainder of the host. Explicit
 [saved-plan continuation](../../continuation.md) skips successful tasks and
-retries unfinished lifecycle or enablement tasks using their prepared inputs.
+retries unfinished lifecycle, enablement, or mask tasks using their prepared inputs.

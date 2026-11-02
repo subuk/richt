@@ -75,7 +75,7 @@ func (e Local) Resolve(t plan.Task) ([]plan.Action, error) {
 		return (config.Local{}).Resolve(t)
 	case "rpm":
 		return e.RPM.Resolve(t)
-	case "systemd", "systemd-enable", "daemon-reload":
+	case "systemd", "systemd-enable", "systemd-mask", "daemon-reload":
 		return e.Systemd.Resolve(t)
 	default:
 		return nil, fmt.Errorf("unsupported operation %q", t.Operation)
@@ -85,7 +85,7 @@ func (e Local) Execute(ctx context.Context, a plan.Action) error {
 	switch a.Kind {
 	case "rpm":
 		return e.RPM.Execute(ctx, a)
-	case "systemd", "systemd-enable", "daemon-reload":
+	case "systemd", "systemd-enable", "systemd-mask", "daemon-reload":
 		return e.Systemd.Execute(ctx, a)
 	default:
 		if e.Files != nil {
@@ -255,7 +255,7 @@ func (e Local) observe(ctx context.Context, ps preparedService) ([]plan.Task, er
 	changed := map[string]bool{}
 	unitChanged := map[string]bool{}
 	daemonReload := false
-	var binaries, files, processes []plan.Task
+	var binaries, files, processes, unmasks []plan.Task
 	for _, name := range keys(ps.binaries) {
 		c := ps.binaries[name]
 		yes, err := e.RPM.Observe(ctx, c)
@@ -269,11 +269,66 @@ func (e Local) observe(ctx context.Context, ps preparedService) ([]plan.Task, er
 			binaries = append(binaries, t)
 		}
 	}
+	order, err := processOrder(s.Definition.Processes)
+	if err != nil {
+		return nil, err
+	}
+	if absent {
+		for i, j := 0, len(order)-1; i < j; i, j = i+1, j-1 {
+			order[i], order[j] = order[j], order[i]
+		}
+	}
+	statuses := map[string]systemd.Status{}
+	processChanges := map[string]*plan.ProcessChange{}
+	for _, name := range order {
+		v := s.Definition.Processes[name]
+		state, timeout := v.State, v.Timeout
+		if state == "" {
+			state = "running"
+		}
+		if timeout == "" {
+			timeout = "5s"
+		}
+		c := &plan.ProcessChange{Unit: v.Unit, State: state, Enabled: v.Enabled, Masked: v.Masked, Timeout: timeout, MissingOK: absent}
+		if absent {
+			no := false
+			c.State, c.Enabled, c.Masked = "stopped", &no, nil
+		}
+		if err := systemd.Validate(c); err != nil {
+			return nil, err
+		}
+		_, status, err := e.Systemd.NeedsChange(ctx, c)
+		if err != nil {
+			for _, f := range ps.files {
+				if f.process == name && f.file.Sensitive {
+					err = errors.New("sensitive unit observation failed")
+				}
+			}
+			return nil, err
+		}
+		statuses[name], processChanges[name] = status, c
+	}
 	for i := range ps.files {
 		f := &ps.files[i]
+		unmaskFullUnit := false
+		if c := processChanges[f.process]; c != nil && f.file.Path == "/etc/systemd/system/"+c.Unit {
+			if c.Masked != nil && *c.Masked {
+				return nil, fmt.Errorf("process %s: a persistent mask cannot coexist with an owned full unit", f.process)
+			}
+			if systemd.Masked(statuses[f.process]) {
+				if absent || c.Masked == nil {
+					return nil, fmt.Errorf("process %s: owned full unit is masked; explicitly unmask it with masked: false in a present assignment before writing or removing it", f.process)
+				}
+				unmaskFullUnit = true
+			}
+		}
 		var yes bool
 		var err error
-		if e.Files != nil {
+		if unmaskFullUnit && e.Files != nil {
+			yes, err = e.Files.ObserveMissing(ctx, f.file)
+		} else if unmaskFullUnit {
+			yes, err = config.ObserveMissing(f.file)
+		} else if e.Files != nil {
 			yes, err = e.Files.Observe(ctx, f.file)
 		} else {
 			yes, err = config.Observe(f.file)
@@ -300,39 +355,19 @@ func (e Local) observe(ctx context.Context, ps preparedService) ([]plan.Task, er
 			files = append(files, t)
 		}
 	}
-	order, err := processOrder(s.Definition.Processes)
-	if err != nil {
-		return nil, err
-	}
-	if absent {
-		for i, j := 0, len(order)-1; i < j; i, j = i+1, j-1 {
-			order[i], order[j] = order[j], order[i]
-		}
-	}
 	for _, name := range order {
 		v := s.Definition.Processes[name]
 		var unitFiles []*plan.FileChange
-		sensitiveUnit := false
+		hasFullUnit := false
 		for _, f := range ps.files {
 			if f.process == name {
 				unitFiles = append(unitFiles, f.file)
-				sensitiveUnit = sensitiveUnit || f.file.Sensitive
+				hasFullUnit = hasFullUnit || f.file.Path == "/etc/systemd/system/"+v.Unit
 			}
 		}
-		state := v.State
-		if state == "" {
-			state = "running"
-		}
-		timeout := v.Timeout
-		if timeout == "" {
-			timeout = "5s"
-		}
-		c := &plan.ProcessChange{Unit: v.Unit, State: state, Enabled: v.Enabled, Timeout: timeout, MissingOK: absent}
-		if absent {
-			no := false
-			c.State = "stopped"
-			c.Enabled = &no
-		} else {
+		c, status := processChanges[name], statuses[name]
+		unmaskRequested := c.Masked != nil && !*c.Masked && systemd.Masked(status)
+		if !absent {
 			for _, ref := range v.ReloadOn {
 				if changed[ref] {
 					c.Reaction = "reload"
@@ -347,16 +382,6 @@ func (e Local) observe(ctx context.Context, ps preparedService) ([]plan.Task, er
 				c.Reaction = "restart"
 			}
 		}
-		if err := systemd.Validate(c); err != nil {
-			return nil, err
-		}
-		_, status, err := e.Systemd.NeedsChange(ctx, c)
-		if err != nil {
-			if sensitiveUnit {
-				err = errors.New("sensitive unit observation failed")
-			}
-			return nil, err
-		}
 		// Reload declarations are capabilities, even when no input currently changes.
 		if !absent && len(v.ReloadOn) > 0 {
 			canReload, err := e.Systemd.ReloadSupported(ctx, v.Unit, status, unitFiles)
@@ -367,12 +392,29 @@ func (e Local) observe(ctx context.Context, ps preparedService) ([]plan.Task, er
 				return nil, fmt.Errorf("process %s: reload is unsupported or cannot be verified before installation; provide a unit_file or override with ExecReload", name)
 			}
 		}
-		if !absent && status.Load == "not-found" && v.UnitFile == nil && len(binaries) == 0 {
+		if !absent && status.Load == "not-found" && !hasFullUnit && len(binaries) == 0 && !(c.Masked != nil && (*c.Masked || c.State == "stopped")) {
 			return nil, fmt.Errorf("process %s: unit %s does not exist and no package installation supplies it", name, v.Unit)
 		}
+		var maskTask *plan.Task
+		if c.Masked != nil && systemd.MaskNeedsChange(status, *c.Masked) {
+			mc := *c
+			mc.Enabled = nil
+			mc.Reaction = ""
+			t := task(s.Name, "process/"+name+"/masked", "systemd-mask")
+			t.Process = &mc
+			maskTask = &t
+			if !*c.Masked {
+				// Removing a full-unit mask must precede file writes, which follow symlinks.
+				unmasks = append(unmasks, t)
+			}
+		}
+		c.Masked = nil
 		var enableTask *plan.Task
-		if c.Enabled != nil && ((status.Load != "not-found" && systemd.Enabled(status) != *c.Enabled) || (!absent && status.Load == "not-found")) {
+		if c.Enabled != nil && (unmaskRequested || (status.Load != "not-found" && systemd.Enabled(status) != *c.Enabled) || (!absent && status.Load == "not-found" && (*c.Enabled || hasFullUnit || len(binaries) > 0))) {
 			ec := *c
+			if unmaskRequested && !*c.Enabled && !hasFullUnit && len(binaries) == 0 {
+				ec.MissingOK = true
+			}
 			t := task(s.Name, "process/"+name+"/enabled", "systemd-enable")
 			t.Process = &ec
 			enableTask = &t
@@ -391,6 +433,9 @@ func (e Local) observe(ctx context.Context, ps preparedService) ([]plan.Task, er
 		if absent && enableTask != nil {
 			processes = append(processes, *enableTask)
 		}
+		if maskTask != nil && *maskTask.Process.Masked {
+			processes = append(processes, *maskTask)
+		}
 	}
 	var out []plan.Task
 	if absent {
@@ -399,6 +444,7 @@ func (e Local) observe(ctx context.Context, ps preparedService) ([]plan.Task, er
 		out = append(out, binaries...)
 	} else {
 		out = append(out, binaries...)
+		out = append(out, unmasks...)
 		out = append(out, files...)
 	}
 	if daemonReload || len(unitChanged) > 0 || (len(binaries) > 0 && len(s.Definition.Processes) > 0) {

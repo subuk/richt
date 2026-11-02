@@ -1,0 +1,17 @@
+tags:
+  example:
+    services:
+      masked: {}
+services:
+  masked:
+    order: 10
+    processes:
+      example:
+        type: systemd
+        unit: richt-mask-example.service
+        state: stopped
+        masked: true
+hosts:
+  - name: local
+    tags: [example]
+    transport: {type: local}

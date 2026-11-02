@@ -119,8 +119,10 @@ capabilities are checked during preparation or execution.
 [Services](services/_index.md) owns component behavior and the present/absent
 lifecycle. See [RPM binaries](services/binaries/rpm.md) for package requests,
 [file configs](services/configs/files.md) for templates, attributes, sensitivity,
-and SELinux, and [systemd processes](services/processes/systemd.md) for units,
-drop-ins, enablement, and timeouts. [Reactions](services/reactions.md) defines
+SELinux, and optional `validate: {args: [...], timeout: 5s}`, and [systemd processes](services/processes/systemd.md) for units,
+drop-ins, enablement, optional `masked: true|false`, and timeouts. Validator
+executables are not opened or run by inventory inspection; short and exact RPM
+version syntax is checked without contacting hosts or repositories. [Reactions](services/reactions.md) defines
 `restart_on`, `reload_on`, and process `after` references and their validation.
 
 ## Variable merging

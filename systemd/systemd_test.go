@@ -202,3 +202,135 @@ func TestDefaultLocalCommandFailureDoesNotExposeUnitOutput(t *testing.T) {
 		t.Fatal("systemd error retained output or lost exit status")
 	}
 }
+
+func TestMaskCommandsAndVerification(t *testing.T) {
+	for _, tc := range []struct {
+		name, initial, want string
+		target              bool
+	}{
+		{"mask-loaded", "disabled", "mask -- demo.service", true},
+		{"mask-missing", "not-found", "mask -- demo.service", true},
+		{"persist-runtime-mask", "masked-runtime", "mask -- demo.service", true},
+		{"already-persistent", "masked", "", true},
+		{"unmask-persistent", "masked", "unmask -- demo.service,unmask --runtime -- demo.service", false},
+		{"unmask-runtime", "masked-runtime", "unmask -- demo.service,unmask --runtime -- demo.service", false},
+		{"already-unmasked", "disabled", "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			state := tc.initial
+			var commands []string
+			b := Backend{Run: func(_ context.Context, name string, args ...string) ([]byte, error) {
+				if name != "systemctl" {
+					t.Fatal(name)
+				}
+				if args[0] == "show" {
+					load := "loaded"
+					if strings.HasPrefix(state, "masked") {
+						load = "masked"
+					} else if state == "not-found" {
+						load = "not-found"
+					}
+					return []byte("LoadState=" + load + "\nActiveState=inactive\nUnitFileState=" + state + "\n"), nil
+				}
+				commands = append(commands, strings.Join(args, " "))
+				if args[0] == "mask" {
+					state = "masked"
+				} else if len(args) > 1 && args[1] == "--runtime" {
+					state = "not-found"
+				}
+				return nil, nil
+			}}
+			c := &plan.ProcessChange{Unit: "demo.service", State: "stopped", Masked: &tc.target, Timeout: "1s"}
+			actions, err := b.Resolve(plan.Task{Operation: "systemd-mask", Process: c})
+			if err != nil || len(actions) != 1 {
+				t.Fatal(actions, err)
+			}
+			if err := b.Execute(context.Background(), actions[0]); err != nil {
+				t.Fatal(err)
+			}
+			if got := strings.Join(commands, ","); got != tc.want {
+				t.Fatalf("commands %q; want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestMaskFailureAndTimeoutDoNotRetry(t *testing.T) {
+	for _, commandFails := range []bool{false, true} {
+		t.Run(fmt.Sprint(commandFails), func(t *testing.T) {
+			calls := 0
+			b := Backend{Run: func(_ context.Context, _ string, args ...string) ([]byte, error) {
+				if args[0] == "show" {
+					return []byte("LoadState=loaded\nActiveState=inactive\nUnitFileState=disabled\n"), nil
+				}
+				calls++
+				if commandFails {
+					return nil, errors.New("mask rejected")
+				}
+				return nil, nil
+			}}
+			yes := true
+			err := b.Execute(context.Background(), plan.Action{Kind: "systemd-mask", Process: &plan.ProcessChange{Unit: "demo.service", State: "stopped", Masked: &yes, Timeout: "30ms"}})
+			if err == nil || calls != 1 {
+				t.Fatal(err, calls)
+			}
+		})
+	}
+}
+
+func TestMaskedUnitsSupportStopButRejectImplicitStart(t *testing.T) {
+	for _, state := range []string{"running", "stopped"} {
+		t.Run(state, func(t *testing.T) {
+			active := "active"
+			var commands []string
+			b := Backend{Run: func(_ context.Context, _ string, args ...string) ([]byte, error) {
+				if args[0] == "show" {
+					return []byte("LoadState=masked\nActiveState=" + active + "\nUnitFileState=masked\n"), nil
+				}
+				commands = append(commands, args[0])
+				active = "inactive"
+				return nil, nil
+			}}
+			err := b.Execute(context.Background(), plan.Action{Kind: "systemd", Process: &plan.ProcessChange{Unit: "demo.service", State: state, Timeout: "1s"}})
+			if state == "running" && (err == nil || len(commands) != 0) {
+				t.Fatal(err, commands)
+			}
+			if state == "stopped" && (err != nil || strings.Join(commands, ",") != "stop") {
+				t.Fatal(err, commands)
+			}
+		})
+	}
+}
+
+func TestMaskResolveRejectsMixedAndMissingPayloads(t *testing.T) {
+	yes := true
+	base := plan.ProcessChange{Unit: "demo.service", State: "stopped", Masked: &yes, Timeout: "1s"}
+	if _, err := (Backend{}).Resolve(plan.Task{Operation: "daemon-reload", Process: &base}); err == nil {
+		t.Fatal("accepted a process payload on daemon-reload")
+	}
+	for _, operation := range []string{"systemd", "systemd-enable", "systemd-mask"} {
+		for _, mutate := range []func(*plan.Task){
+			func(t *plan.Task) { t.File = &plan.FileChange{} },
+			func(t *plan.Task) { t.RPM = &plan.RPMChange{} },
+			func(t *plan.Task) { t.Process = nil },
+		} {
+			task := plan.Task{Operation: operation, Process: &base}
+			mutate(&task)
+			if _, err := (Backend{}).Resolve(task); err == nil {
+				t.Fatal("accepted mixed or missing payload", operation)
+			}
+		}
+	}
+	for _, mutate := range []func(*plan.ProcessChange){
+		func(c *plan.ProcessChange) { c.Masked = nil },
+		func(c *plan.ProcessChange) { c.Enabled = &yes },
+		func(c *plan.ProcessChange) { c.Reaction = "restart" },
+		func(c *plan.ProcessChange) { c.State = "running" },
+	} {
+		c := base
+		mutate(&c)
+		if _, err := (Backend{}).Resolve(plan.Task{Operation: "systemd-mask", Process: &c}); err == nil {
+			t.Fatal("accepted invalid mask payload", c)
+		}
+	}
+}

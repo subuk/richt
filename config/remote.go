@@ -152,6 +152,28 @@ fi
 
 func (Target) Resolve(task plan.Task) ([]plan.Action, error) { return (Local{}).Resolve(task) }
 
+// ObserveMissing checks target capabilities and accounts without opening a file
+// whose prepared predecessor task will remove it, for example a systemd mask.
+func (t Target) ObserveMissing(ctx context.Context, f *plan.FileChange) (changed bool, err error) {
+	defer func() {
+		if err != nil && f != nil && f.Sensitive {
+			err = errors.New("sensitive file observation failed")
+		}
+	}()
+	if _, err := (Local{}).Resolve(plan.Task{Operation: "file", File: f}); err != nil {
+		return false, err
+	}
+	if f.State != "present" {
+		return false, errors.New("missing file observation requires present state")
+	}
+	if _, err := t.run(ctx, "set -eu\n"+targetAccounts, targetFileArguments(f)...); err != nil {
+		return false, err
+	}
+	f.Write = true
+	f.Patch = udiff.Unified("/dev/null", f.Path, "", f.Content)
+	return true, nil
+}
+
 func (t Target) Execute(ctx context.Context, a plan.Action) (err error) {
 	defer func() {
 		if err != nil && a.File != nil && a.File.Sensitive {
@@ -182,6 +204,11 @@ elif [ -e "$path" ]; then [ -f "$path" ] || exit 71; rm -f -- "$path"; fi
 	case "overwrite-file":
 		if t.RunInput == nil {
 			return errors.New("missing target input runner")
+		}
+		if f.Write && f.Validate != nil {
+			if err := t.validateCandidate(ctx, f); err != nil {
+				return err
+			}
 		}
 		privateWrite := ""
 		if f.Sensitive && f.Mode != nil {

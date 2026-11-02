@@ -361,3 +361,231 @@ func TestSecretByteChangesTriggerRealReload(t *testing.T) {
 		t.Fatal("changed secret did not trigger reload", err)
 	}
 }
+
+func TestMaskingHasIndependentSavedProgress(t *testing.T) {
+	yes, no := true, false
+	path := filepath.Join(tempDir(t), "app.conf")
+	s := inventory.Service{Configs: map[string]inventory.Config{"main": {Path: path, Template: inventory.Template{Inline: inline("frozen")}}}, Processes: map[string]inventory.Process{"main": {Unit: "demo.service", State: "stopped", Enabled: &no, Masked: &yes}}}
+	active, enabled, load := "active", "enabled", "loaded"
+	maskFails := true
+	var commands []string
+	e := Local{Systemd: systemd.Backend{Run: func(_ context.Context, _ string, args ...string) ([]byte, error) {
+		if args[0] == "show" {
+			return []byte("LoadState=" + load + "\nActiveState=" + active + "\nUnitFileState=" + enabled + "\n"), nil
+		}
+		commands = append(commands, args[0])
+		switch args[0] {
+		case "disable":
+			enabled = "disabled"
+		case "stop":
+			active = "inactive"
+		case "mask":
+			if active != "inactive" || enabled != "disabled" {
+				t.Fatal("masked before stop and disable")
+			}
+			if maskFails {
+				return nil, errors.New("mask rejected")
+			}
+			load, enabled = "masked", "masked"
+		}
+		return nil, nil
+	}}}
+	p, err := e.Diff(context.Background(), resolved(s))
+	if err != nil {
+		t.Fatal(err)
+	}
+	planPath := filepath.Join(tempDir(t), "plan.json")
+	if err := plan.Save(planPath, p); err != nil {
+		t.Fatal(err)
+	}
+	store, err := plan.Open(planPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = plan.Apply(context.Background(), store.Plan, e, store.Save); err == nil {
+		t.Fatal("expected failed mask")
+	}
+	tasks := store.Plan.Hosts[0].Tasks
+	if tasks[len(tasks)-1].Operation != "systemd-mask" || tasks[len(tasks)-1].Progress.Status != "error" || tasks[len(tasks)-2].Progress.Status != "success" {
+		t.Fatal(tasks)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("edited after failure"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	maskFails = false
+	store, err = plan.Open(planPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if _, err := plan.Apply(context.Background(), store.Plan, e, store.Save); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || string(data) != "edited after failure" || strings.Join(commands, ",") != "disable,stop,mask,mask" {
+		t.Fatal(string(data), commands, err)
+	}
+}
+
+func TestUnmaskPrecedesOwnedFullUnitWritesAndEnablement(t *testing.T) {
+	no := false
+	for _, ordinary := range []bool{false, true} {
+		t.Run(fmt.Sprint(ordinary), func(t *testing.T) {
+			unit := inventory.Config{Path: "/etc/systemd/system/richt-mask-test.service", Template: inventory.Template{Inline: inline("[Service]\nExecStart=/bin/true\n")}}
+			process := inventory.Process{Unit: "richt-mask-test.service", Enabled: &no, Masked: &no, UnitFile: &unit}
+			s := inventory.Service{Processes: map[string]inventory.Process{"main": process}}
+			if ordinary {
+				process.UnitFile = nil
+				s.Processes["main"] = process
+				s.Configs = map[string]inventory.Config{"unit": unit}
+			}
+			e := Local{Systemd: systemd.Backend{Run: func(context.Context, string, ...string) ([]byte, error) {
+				return []byte("LoadState=masked\nActiveState=inactive\nUnitFileState=masked\n"), nil
+			}}}
+			p, err := e.Diff(context.Background(), resolved(s))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var operations []string
+			for _, task := range p.Hosts[0].Tasks {
+				operations = append(operations, task.Operation)
+				if task.File != nil && (!task.File.Write || !strings.Contains(task.File.Patch, "--- /dev/null")) {
+					t.Fatal("full unit was not prepared as newly created", task.File)
+				}
+			}
+			if strings.Join(operations, ",") != "systemd-mask,file,daemon-reload,systemd-enable,systemd" {
+				t.Fatal(operations)
+			}
+		})
+	}
+}
+
+func TestOwnedMaskedFullUnitRequiresExplicitUnmask(t *testing.T) {
+	for _, absent := range []bool{false, true} {
+		unit := inventory.Config{Path: "/etc/systemd/system/richt-mask-test.service", Template: inventory.Template{Inline: inline("[Service]\nExecStart=/bin/true\n")}}
+		r := resolved(inventory.Service{Processes: map[string]inventory.Process{"main": {Unit: "richt-mask-test.service", State: "stopped", UnitFile: &unit}}})
+		if absent {
+			r.Hosts[0].Services[0].State = "absent"
+		}
+		e := Local{Systemd: systemd.Backend{Run: func(context.Context, string, ...string) ([]byte, error) {
+			return []byte("LoadState=masked\nActiveState=inactive\nUnitFileState=masked\n"), nil
+		}}}
+		if _, err := e.Diff(context.Background(), r); err == nil || !strings.Contains(err.Error(), "explicitly unmask") {
+			t.Fatal(absent, err)
+		}
+	}
+}
+
+func TestMissingExternalUnitCanBeMasked(t *testing.T) {
+	yes, no := true, false
+	s := inventory.Service{Processes: map[string]inventory.Process{"main": {Unit: "missing.service", State: "stopped", Enabled: &no, Masked: &yes}}}
+	e := Local{Systemd: systemd.Backend{Run: func(context.Context, string, ...string) ([]byte, error) {
+		return []byte("LoadState=not-found\nActiveState=inactive\nUnitFileState=\n"), nil
+	}}}
+	p, err := e.Diff(context.Background(), resolved(s))
+	if err != nil || len(p.Hosts[0].Tasks) != 1 || p.Hosts[0].Tasks[0].Operation != "systemd-mask" {
+		t.Fatal(p, err)
+	}
+}
+
+func TestMatchingPersistentMaskAndDisabledObservationAreUnchanged(t *testing.T) {
+	yes, no := true, false
+	s := inventory.Service{Processes: map[string]inventory.Process{"main": {Unit: "demo.service", State: "stopped", Enabled: &no, Masked: &yes}}}
+	e := Local{Systemd: systemd.Backend{Run: func(context.Context, string, ...string) ([]byte, error) {
+		return []byte("LoadState=masked\nActiveState=inactive\nUnitFileState=masked\n"), nil
+	}}}
+	p, err := e.Diff(context.Background(), resolved(s))
+	if err != nil || len(p.Hosts[0].Tasks) != 0 {
+		t.Fatal(p, err)
+	}
+}
+
+func TestUnmaskSchedulesDisableForHiddenEnablement(t *testing.T) {
+	no := false
+	s := inventory.Service{Processes: map[string]inventory.Process{"main": {Unit: "demo.service", State: "stopped", Enabled: &no, Masked: &no}}}
+	load, enabled := "masked", "masked"
+	var commands []string
+	e := Local{Systemd: systemd.Backend{Run: func(_ context.Context, _ string, args ...string) ([]byte, error) {
+		if args[0] == "show" {
+			return []byte("LoadState=" + load + "\nActiveState=inactive\nUnitFileState=" + enabled + "\n"), nil
+		}
+		commands = append(commands, strings.Join(args, " "))
+		if args[0] == "unmask" {
+			load, enabled = "loaded", "enabled"
+		} else if args[0] == "disable" {
+			enabled = "disabled"
+		}
+		return nil, nil
+	}}}
+	p, err := e.Diff(context.Background(), resolved(s))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := plan.Apply(context.Background(), p, e, nil); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(commands, ",") != "unmask -- demo.service,unmask --runtime -- demo.service,disable -- demo.service" {
+		t.Fatal(commands)
+	}
+}
+
+func TestMaskOmissionAndAbsentAssignmentsPreserveMasks(t *testing.T) {
+	yes := true
+	for _, absent := range []bool{false, true} {
+		s := inventory.Service{Processes: map[string]inventory.Process{"main": {Unit: "demo.service", State: "stopped"}}}
+		r := resolved(s)
+		if absent {
+			v := s.Processes["main"]
+			v.Masked = &yes
+			s.Processes["main"] = v
+			r.Hosts[0].Services[0].State = "absent"
+		}
+		e := Local{Systemd: systemd.Backend{Run: func(context.Context, string, ...string) ([]byte, error) {
+			return []byte("LoadState=masked\nActiveState=inactive\nUnitFileState=masked-runtime\n"), nil
+		}}}
+		p, err := e.Diff(context.Background(), r)
+		if err != nil || len(p.Hosts[0].Tasks) != 0 {
+			t.Fatal(absent, p, err)
+		}
+	}
+}
+
+func TestMaskRunsThroughSSHCommandBoundary(t *testing.T) {
+	yes := true
+	r := resolved(inventory.Service{Processes: map[string]inventory.Process{"main": {Unit: "demo.service", State: "stopped", Masked: &yes}}})
+	r.Hosts[0].Transport = inventory.Transport{Type: "ssh", Host: "mask-target", Sudo: true}
+	masked, commands := false, 0
+	e := Local{Connect: func(c inventory.Transport) (config.Target, error) {
+		if c.Host != "mask-target" || !c.Sudo {
+			t.Fatal(c)
+		}
+		return config.Target{Run: func(_ context.Context, name string, args ...string) ([]byte, error) {
+			if name != "systemctl" {
+				t.Fatal(name)
+			}
+			if args[0] == "show" {
+				load, enabled := "loaded", "disabled"
+				if masked {
+					load, enabled = "masked", "masked"
+				}
+				return []byte("LoadState=" + load + "\nActiveState=inactive\nUnitFileState=" + enabled + "\n"), nil
+			}
+			if args[0] != "mask" {
+				t.Fatal(args)
+			}
+			commands++
+			masked = true
+			return nil, nil
+		}}, nil
+	}}
+	p, err := e.Diff(context.Background(), r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := plan.Apply(context.Background(), p, e, nil); err != nil || commands != 1 {
+		t.Fatal(err, commands)
+	}
+}

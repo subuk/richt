@@ -13,6 +13,9 @@ configs:
     mode: "0644"
     selinux: system_u:object_r:etc_t:s0
     sensitive: false
+    validate:
+      args: [/usr/sbin/example-check, --config, "{candidate}"]
+      timeout: 5s
     template:
       inline: "listen = {{ .app.listen }}\n"
 ```
@@ -26,6 +29,7 @@ configs:
 | `mode` | no | Quoted octal string such as `"0644"`; omission preserves existing permissions; new files default to 0644 |
 | `selinux` | no | Full SELinux label; omission leaves the label unmanaged |
 | `sensitive` | no | Defaults to false; template secret lookup automatically makes it true |
+| `validate` | no | Target-side validator argv and positive timeout; timeout defaults to `5s` |
 
 These fields also describe [systemd-owned units and
 drop-ins](../processes/systemd.md#owned-units-and-drop-ins), whose paths can be
@@ -64,7 +68,55 @@ values cannot escape through errors.
 Diff renders contents and compares actual bytes and requested attributes with
 the target, without modifying managed resources. A config change can drive a
 [process reaction](../reactions.md), including when only attributes changed.
-Application-specific config validation before writing is not implemented.
+Optional validation runs during apply, before a content write.
+
+## Validation before writing
+
+```yaml
+validate:
+  args: [/usr/sbin/sshd, -t, -f, "{candidate}"]
+  timeout: 5s
+```
+
+`validate.args` is a nonempty argument list whose first item is an absolute
+executable path. Exactly one later item must be the whole string `{candidate}`;
+embedded or repeated placeholders and NUL bytes are rejected. Richt replaces
+that argument with a private file containing the prepared bytes. Arguments are
+passed literally: there is no shell evaluation, environment expansion, or
+template rendering. Use absolute paths for other validator inputs. The working
+directory is always `/`, and validator stdin is empty.
+
+Inventory inspection checks only this structure. Diff renders and compares
+files without executing the validator or checking whether its executable
+exists. A preceding package task can install it. Reviewed plans retain the
+argument list and timeout with the rendered bytes; applying a saved plan does
+not reload them from inventory. Sensitive displays show the validation and
+timeout while hiding its arguments.
+
+The validator runs with the file task's target identity and explicit sudo
+setting, locally or over SSH. Its candidate is mode 0600 inside a mode 0700
+directory under `/tmp` on that target. Include paths and other application
+dependencies still refer to the target's current environment; a private
+candidate does not stage a complete application directory tree. A validator
+must accept an independently named candidate file.
+
+Exit status zero permits the existing write and attribute operations to
+continue. A nonzero exit, unavailable executable, or timeout fails the file
+task before the destination is opened or changed, and blocks later host tasks,
+including reloads and restarts. Validator stdout and stderr are always discarded
+because even ordinary application diagnostics can reveal file contents. A
+positive Go duration bounds the command; target commands use GNU coreutils
+`timeout`. Candidate files and directories are removed on success, failure, and
+timeout. Abrupt host termination, process termination, or a broken SSH session
+can prevent cleanup; remaining candidates retain their private permissions.
+
+Validation runs only when the prepared task writes content. It is skipped for
+unchanged content, attribute-only changes, and removals. Validation and writing
+share one persisted file task: explicit continuation repeats validation for an
+unfinished write and skips an already successful file task. Richt always writes
+the original prepared bytes, even if the validator modifies its candidate. An
+invalid saved candidate requires a newly prepared plan; editing its source
+inventory does not repair frozen saved inputs.
 
 ## Apply and attributes
 
@@ -112,4 +164,6 @@ files remain. See [absent services](../lifecycle.md#absent-services).
 
 Start with the [config-only quickstart](../../quickstart.md), the
 [file example](../../../examples/files/README.md), or the
-[isolated secrets example](../../../examples/secrets/README.md).
+[isolated secrets example](../../../examples/secrets/README.md). The
+[validated SSH example](../../../examples/validated-ssh/README.md) demonstrates
+`sshd -t` before writing and reloading a disposable target's configuration.

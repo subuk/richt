@@ -60,7 +60,6 @@ func (b Backend) run(ctx context.Context, name string, args ...string) ([]byte, 
 }
 
 var packagePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9+_.-]*$`)
-var versionPattern = regexp.MustCompile(`^[0-9]+:[A-Za-z0-9+_.~^]+-[A-Za-z0-9+_.~^]+\.[A-Za-z0-9_]+$`)
 
 func Validate(c *plan.RPMChange) error {
 	if c == nil {
@@ -72,8 +71,8 @@ func Validate(c *plan.RPMChange) error {
 	if !packagePattern.MatchString(c.Package) {
 		return errors.New("invalid RPM package name")
 	}
-	if c.Version != "" && !versionPattern.MatchString(c.Version) {
-		return errors.New("RPM version must be epoch:version-release.arch, for example 0:1.0-1.noarch")
+	if err := inventory.ValidateRPMVersion(c.Version); err != nil {
+		return err
 	}
 	if c.State != "present" && c.State != "absent" {
 		return errors.New("invalid RPM state")
@@ -112,7 +111,7 @@ func (b Backend) Observe(ctx context.Context, c *plan.RPMChange) (bool, error) {
 			continue
 		}
 		installed = true
-		if c.State == "present" && (c.Version == "" || version == c.Version) {
+		if c.State == "present" && installedMatches(c.Version, version) {
 			return false, nil
 		}
 	}
@@ -122,12 +121,35 @@ func (b Backend) Observe(ctx context.Context, c *plan.RPMChange) (bool, error) {
 	return true, nil
 }
 
+func installedMatches(requested, installed string) bool {
+	if requested == "" || requested == installed {
+		return true
+	}
+	if strings.Contains(requested, ":") {
+		return false
+	}
+	_, upstream, ok := strings.Cut(installed, ":")
+	if !ok {
+		return false
+	}
+	upstream, _, ok = strings.Cut(upstream, "-")
+	return ok && upstream == requested
+}
+
 // ErrNotInstalled permits deterministic package database fakes without manufacturing an exit status.
 var ErrNotInstalled = errors.New("RPM is not installed")
 
+func upstreamRequest(c *plan.RPMChange) bool {
+	return c.State == "present" && c.Version != "" && !strings.Contains(c.Version, ":")
+}
+
+// Arguments returns DNF transaction arguments for the prepared package request.
 func Arguments(c *plan.RPMChange) []string {
 	if c.State == "absent" {
 		return []string{"-y", "remove", "--", c.Package}
+	}
+	if upstreamRequest(c) {
+		return []string{"-y", "install", "--", c.Package + "-" + c.Version}
 	}
 	if c.Version != "" {
 		return []string{"-y", "install-nevra", "--", c.Package + "-" + c.Version}
@@ -144,7 +166,12 @@ func (b Backend) Resolve(t plan.Task) ([]plan.Action, error) {
 	if err := Validate(t.RPM); err != nil {
 		return nil, err
 	}
-	return []plan.Action{{Kind: "rpm", RPM: t.RPM, Description: []string{t.RPM.Manager + " " + strings.Join(Arguments(t.RPM), " "), "RPM dependencies and scripts are resolved by the target at execution"}}}, nil
+	description := []string{t.RPM.Manager + " " + strings.Join(Arguments(t.RPM), " ")}
+	if upstreamRequest(t.RPM) {
+		description = append(description, "Upstream version "+t.RPM.Version+": at apply, DNF resolves epoch, release, and architecture")
+	}
+	description = append(description, "RPM dependencies and scripts are resolved by the target at execution")
+	return []plan.Action{{Kind: "rpm", RPM: t.RPM, Description: description}}, nil
 }
 func (b Backend) Execute(ctx context.Context, a plan.Action) error {
 	if a.Kind != "rpm" {

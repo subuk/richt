@@ -6,11 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"unicode"
 )
 
-const Version = "1.1"
+const Version = "1.2"
 
 type Plan struct {
 	Version string `json:"version"`
@@ -42,18 +43,25 @@ type Task struct {
 	Progress  Progress       `json:"progress"`
 }
 type FileChange struct {
-	Path      string  `json:"path"`
-	State     string  `json:"state"`
-	Content   string  `json:"content,omitempty"`
-	Patch     string  `json:"patch,omitempty"`
-	Sensitive bool    `json:"sensitive,omitempty"`
-	Write     bool    `json:"write,omitempty"`
-	Owner     string  `json:"owner,omitempty"`
-	Group     string  `json:"group,omitempty"`
-	UID       *int    `json:"uid,omitempty"`
-	GID       *int    `json:"gid,omitempty"`
-	Mode      *uint32 `json:"mode,omitempty"`
-	SELinux   string  `json:"selinux,omitempty"`
+	Path      string         `json:"path"`
+	State     string         `json:"state"`
+	Content   string         `json:"content,omitempty"`
+	Patch     string         `json:"patch,omitempty"`
+	Sensitive bool           `json:"sensitive,omitempty"`
+	Write     bool           `json:"write,omitempty"`
+	Owner     string         `json:"owner,omitempty"`
+	Group     string         `json:"group,omitempty"`
+	UID       *int           `json:"uid,omitempty"`
+	GID       *int           `json:"gid,omitempty"`
+	Mode      *uint32        `json:"mode,omitempty"`
+	SELinux   string         `json:"selinux,omitempty"`
+	Validate  *FileValidator `json:"validate,omitempty"`
+}
+
+// FileValidator retains the command and timeout reviewed with the candidate bytes.
+type FileValidator struct {
+	Args    []string `json:"args"`
+	Timeout string   `json:"timeout"`
 }
 type Progress struct {
 	Status string `json:"status"`
@@ -73,6 +81,7 @@ type ProcessChange struct {
 	Unit      string `json:"unit"`
 	State     string `json:"state"`
 	Enabled   *bool  `json:"enabled,omitempty"`
+	Masked    *bool  `json:"masked,omitempty"`
 	Timeout   string `json:"timeout"`
 	Reaction  string `json:"reaction,omitempty"`
 	MissingOK bool   `json:"missing_ok,omitempty"`
@@ -110,8 +119,8 @@ func Bind(h Host, e Executor) (Executor, error) {
 }
 
 func (p *Plan) Validate() error {
-	if p.Version != Version && p.Version != "1.0" {
-		return fmt.Errorf("incompatible plan version %q (supported 1.0 and %s)", p.Version, Version)
+	if p.Version != Version && p.Version != "1.0" && p.Version != "1.1" {
+		return fmt.Errorf("incompatible plan version %q (supported 1.0, 1.1 and %s)", p.Version, Version)
 	}
 	seenHosts := map[string]bool{}
 	for _, h := range p.Hosts {
@@ -147,11 +156,17 @@ func (p *Plan) Validate() error {
 				return fmt.Errorf("host %s: empty or duplicate task ID", h.Name)
 			}
 			ids[t.ID] = true
+			if p.Version != Version && (t.Operation == "systemd-mask" ||
+				t.Process != nil && t.Process.Masked != nil ||
+				t.File != nil && t.File.Validate != nil ||
+				t.RPM != nil && t.RPM.Version != "" && !strings.Contains(t.RPM.Version, ":")) {
+				return fmt.Errorf("task %s: masking, file validators and short RPM versions require plan version %s", t.ID, Version)
+			}
 			payloads := 0
 			if t.File != nil {
 				payloads++
 				if p.Version == "1.0" && (t.File.Owner != "" || t.File.Group != "") {
-					return fmt.Errorf("task %s: ownership names require plan version %s", t.ID, Version)
+					return fmt.Errorf("task %s: ownership names require plan version 1.1 or later", t.ID)
 				}
 				if (t.File.Owner != "" && t.File.UID != nil) || (t.File.Group != "" && t.File.GID != nil) {
 					return fmt.Errorf("task %s: ownership name and numeric ID are mutually exclusive", t.ID)
@@ -255,6 +270,17 @@ func display(w io.Writer, p *Plan, e Executor) error {
 					fmt.Fprintf(w, " selinux=%s", f.SELinux)
 				}
 				fmt.Fprintln(w)
+				if a.Kind == "overwrite-file" && f.Validate != nil {
+					if f.Sensitive {
+						fmt.Fprintf(w, "      validate candidate before write (arguments hidden: sensitive); timeout %s\n", f.Validate.Timeout)
+					} else {
+						args := make([]string, len(f.Validate.Args))
+						for i, arg := range f.Validate.Args {
+							args[i] = strconv.Quote(arg)
+						}
+						fmt.Fprintf(w, "      validate candidate before write: [%s]; timeout %s\n", strings.Join(args, ", "), f.Validate.Timeout)
+					}
+				}
 			}
 			if t.File != nil {
 				if t.File.Sensitive {

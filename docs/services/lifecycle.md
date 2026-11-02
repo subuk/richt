@@ -20,12 +20,15 @@ Selecting a service does not select its prerequisites.
 A `present` assignment prepares changes in these phases:
 
 1. **Binaries:** apply changed package requests.
-2. **Configs:** write changed configs, owned units, and drop-ins with their
+2. **Unmask, when requested:** remove persistent and runtime masks before
+   writing an owned full unit or operating on the process.
+3. **Configs:** write changed configs, owned units, and drop-ins with their
    prepared contents and attributes.
-3. **Daemon reload, when required:** make changed systemd definitions visible.
-4. **Processes:** apply independent enablement and lifecycle tasks in process
+4. **Daemon reload, when required:** make changed systemd definitions visible.
+5. **Processes:** apply independent enablement, lifecycle, and mask tasks in process
    dependency order. For a present process, its enablement task precedes its
-   lifecycle task.
+   lifecycle task; a requested persistent mask follows both. Unmask tasks run
+   earlier so a full-unit file write cannot follow a mask link into `/dev/null`.
 
 Only changed resources need write or package tasks. Lifecycle tasks contain
 prepared branches, selected using runtime state during apply; a reaction can
@@ -74,6 +77,10 @@ order, then disables it. These process tasks precede removal of owned units,
 drop-ins, and declared configs. Declared packages are removed last, followed by
 any required daemon reload. An already missing unit is accepted; an external
 unit that remains installed is still stopped and disabled.
+The declared mask target is ignored for absence, preserving existing masks.
+An owned full-unit path that is currently masked must be explicitly unmasked
+through a present assignment before removal can be prepared. See
+[systemd masks](processes/systemd.md#masks).
 
 Removal still follows ascending service order across services. An assignment
 removed from inventory is no longer managed; it does not imply `absent`.

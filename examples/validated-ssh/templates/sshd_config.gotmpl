@@ -1,0 +1,8 @@
+# Minimal configuration for a disposable validation example.
+Port 22
+PubkeyAuthentication yes
+PasswordAuthentication no
+PermitRootLogin prohibit-password
+UsePAM yes
+LogLevel {{ .sshd.log_level }}
+Subsystem sftp internal-sftp

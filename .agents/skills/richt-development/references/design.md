@@ -113,6 +113,11 @@ Important invariants across those contracts:
   restart wins over reload. A stopped process targeting running gets only start;
   an active one gets the combined reaction or no action. Target stopped never
   permits start. Enablement is separate and does not itself restart a process.
+- Systemd `masked: true` requests a persistent mask; false removes persistent
+  and runtime masks, and omission preserves masking. Masking requires stopped
+  and cannot enable a unit or coexist with an owned full unit at the mask path.
+  Explicit unmask precedes owned file writes, enablement and lifecycle; masking
+  follows requested stop/disable. Absent assignments preserve mask state.
 - A lifecycle command and verified target state are one task. Start/reload/restart
   must reach running, stop must reach stopped. Command and polling share the
   process timeout, a positive Go duration defaulting to 5s. Running is not an
@@ -120,8 +125,11 @@ Important invariants across those contracts:
   fail the host; no retry or fallback. A timed-out client may leave a systemd job
   running. Unit changes visibly appear in diff and schedule daemon-reload.
 - Without an RPM version, keep an installed package and install only if absent.
-  Exact `epoch:version-release.arch` requests allow upgrade and downgrade. The
-  plan fixes the package request, not repository metadata, dependencies, complete
+  Short upstream VERSION requests match installed RPM VERSION independently of
+  epoch, release and architecture. Apply passes `NAME-VERSION` to ordinary
+  DNF/YUM install; the package manager resolves omitted epoch, release and
+  architecture using its normal policy. Exact `epoch:version-release.arch`
+  requests allow upgrade and downgrade. The plan fixes the package request, not repository metadata, dependencies, complete
   transaction, scriptlet effects, or RPM checksums; target DNF resolves those at
   apply. RPMs are fetched then and are not embedded as large plan artifacts.
 - Files create necessary parents, require existing named owners/groups on the
@@ -129,8 +137,12 @@ Important invariants across those contracts:
   operations follow target and parent symlinks; removal unlinks the named entry.
   New plans retain owner/group names and resolve them again on apply; numeric
   IDs may change between preparation and execution. No special inode identity
-  or symlink protection contract is imposed. Missing template variables fail preparation. Application config
-  validation before writing remains later scope.
+  or symlink protection contract is imposed. Missing template variables fail
+  preparation. Optional config validators run at apply against private
+  target-side candidate files before writing; command arguments and timeout are prepared inputs.
+  Validation and writing share one task, and failure preserves the destination
+  and blocks later reactions. Matching content, attribute-only changes, and
+  removal do not run validation. Validator output is never included in diagnostics.
 - `absent` stops and verifies processes in reverse dependency order, disables
   them before removing owned units/drop-ins and configs, then removes packages.
   Other services retain service-definition order; no special cross-service deletion
@@ -157,8 +169,8 @@ not reasons to recalculate tasks. Other incompatible backend semantics fail. Pro
 result verification remain execution operations. Successful tasks are not
 rechecked during continuation.
 
-The current saved format is strict, indented JSON schema version `1.1` (with legacy local
-`1.0` plans still accepted) with
+The current saved format is strict, indented JSON schema version `1.2` (with
+`1.0` and `1.1` plans still accepted under their original contracts) with
 validation of operations and progress. Its compatibility rules, task shapes,
 atomic writes, same-plan locking, and restrictive plan/lock permissions are
 implemented contracts, not undecided design. Extend them deliberately when new
@@ -264,8 +276,11 @@ sources. Preparation implements these contracts:
 - JSON necessarily contains secrets. Plan, lock, and atomic replacement files
   are created with mode 0600. Temporary plan files are removed on completion or
   handled errors; forced termination can leave a private temporary file behind.
-  Target content travels through stdin without secret staging files or command
-  arguments. Target permissions remain explicitly controlled by `mode`.
+  Target content travels through stdin without command arguments. Optional
+  validators use private temporary candidate files on the target; those are
+  removed on normal success/failure/timeout, though abrupt termination may leave
+  private temporary files behind. Target permissions remain explicitly
+  controlled by `mode`.
   Sensitive writes with an explicit mode restrict the target inode to 0600
   before writing; the following attribute action sets the requested final mode.
   Without an explicit mode, existing permissions and the new-file default remain.
@@ -325,8 +340,8 @@ to documentation work.
 
 NetBox inventory/plugin/rendering, URL inventory and template sources, direct
 URL binary downloads/integrity/unpacking, other package managers, script-based
-process backends, external secret stores, application config validation, agents,
-and fleet rollout orchestration are later work. Preserve useful domain boundaries
+process backends, external secret stores, multi-file configuration validation
+transactions, agents, and fleet rollout orchestration are later work. Preserve useful domain boundaries
 without building empty layers or advertising unsupported implementations.
 
 Future NetBox inventory supplies the complete host/tag/assignment inventory;

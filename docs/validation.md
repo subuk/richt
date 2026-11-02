@@ -4,6 +4,81 @@ description: "Recorded Linux acceptance results, environment, commands, and limi
 weight: 120
 ---
 
+## RPM versions, masks, and validators — 2026-11-02
+
+KRG-93, KRG-94, and KRG-95 were verified on three independent authorized
+AlmaLinux 10.2 x86_64 hosts with SELinux Enforcing, DNF 4.20.0, RPM 4.19.1.1,
+and systemd 257. Each feature was exercised by a Linux binary as local root
+and by a macOS controller over SSH using a non-root login with explicit
+`sudo -n`. Existing PostgreSQL, Kubernetes/CRI-O, and exporter fixtures were
+preserved. No Kubernetes cluster was initialized and the active SSH
+configuration was not replaced.
+
+| Suite | Local Linux | SSH/sudo |
+| --- | ---: | ---: |
+| Published Vmango short/exact/omitted RPM requests | 10 passed | 7 passed |
+| systemd masks, ordering, owned units, and continuation | 15 passed | 15 passed |
+| Config validators and real isolated `sshd -t` candidates | 17 passed | 18 passed |
+| Existing file/SELinux/saved-plan regression harness | 17 passed | — |
+
+The 99 acceptance checks cover RPM install, upgrade and downgrade through
+ordinary DNF/YUM versioned install; matching upstream VERSION no-op; exact
+and omitted-version compatibility; unavailable-version failure; frozen saved
+requests and continuation. Package fixtures use published signed Vmango RPMs,
+without building custom packages.
+
+Mask checks cover stop/disable before masking, no-op when already masked,
+omission preserving the mask, runtime-to-persistent conversion, unmasking both
+mask locations, disabling hidden enablement after unmasking, missing units,
+owned-file safety, deliberate failure and saved-plan continuation. Systemd's
+masked `UnitFileState` hides enablement links: clearing those links requires
+explicit `masked: false` with `enabled: false`, as documented in
+[systemd masks](services/processes/systemd.md#masks).
+
+Validator checks cover literal argv, private candidate permissions, fixed
+working directory, success, failure, missing executable, timeout, cleanup,
+diagnostic redaction, and preservation of destination content and attributes
+on rejection. They verify deleted source files, skipped completed tasks,
+blocked later tasks, matching-file no-op, attribute-only changes and removal.
+The real `sshd -t` tests validate copied configuration at isolated file paths.
+The file package tests also ran on Linux, including GNU timeout cleanup,
+symlinks, sensitive permissions, and SELinux behavior. Go orchestration tests
+verify that a prerequisite package task can supply a missing validator and
+that validator failure blocks reload/restart.
+
+Reproduce the focused suites from a checkout on an authorized disposable
+host, following each harness's prerequisites:
+
+```sh
+python3 examples/rpm-versions/verify.py ./bin/richt-linux-amd64 /root/richt-rpm-versions
+python3 examples/systemd-mask/verify.py --binary ./bin/richt-linux-amd64 --output /root/richt-masks
+python3 tests/integration/config_validation.py --binary ./bin/richt-linux-amd64 --work-root /root/richt-validation
+python3 tests/integration/files.py --binary ./bin/richt-linux-amd64 --work-root /root --target-root /var/lib
+```
+
+The mask harness accepts `--ssh-host`, and the validator harness accepts
+`--host`, with a non-root SSH destination and a controller binary. The RPM SSH run used the same published
+package scenario, including a YUM 4 upgrade and DNF 4 downgrade.
+
+Local `make check`, relevant `go test -race`, and `make docs-check` passed.
+The source was `e0b7991bf3f7fa9bb17a13a65001b69ce3182190` plus the three feature
+changes and tests. Live binary SHA-256 identities were:
+
+| Binary | SHA-256 |
+| --- | --- |
+| Linux file/mask suites | `032282b709db7ee04d9ccce7ce4a3b3a35eb0e06e2215d53fc9b3eddc07efb2a` |
+| macOS file/mask controller | `ab4d75129387c1ad5bde4e3173f70cce837624abe4710a5b52fe0e1654bc5e0d` |
+| Linux RPM suite | `b6d48ba6dccae2a5b83b373a0fcf978ac862ec0fa4cae711fd1eb3e01d68a41c` |
+
+Command logs and JSON acceptance reports were retained in private test work
+directories. Temporary validator files, test units and configs, and declared
+RPM acceptance packages/repositories were cleaned up; package-manager-generated
+application state was not purged. This is DNF 4/systemd 257 coverage, not DNF 5,
+other distributions, or full multi-file application validation. Abrupt host or
+process termination can leave private validator candidates behind.
+
+## Baseline acceptance — 2026-11-01
+
 Acceptance on 2026-11-01 passed on two authorized disposable AlmaLinux 10.2
 x86_64 hosts with DNF 4.20.0, systemd 257, Python 3.12.13 and SELinux
 Enforcing. The controller was macOS with the system OpenSSH client; remote

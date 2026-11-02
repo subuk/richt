@@ -13,6 +13,13 @@ Prefer extending the checked-in harnesses when new behavior needs coverage;
 avoid duplicating their acceptance workflows.
 This skill does not grant host access or authority to install packages.
 
+## Local test-host context
+
+When present, read `references/hosts.local.md` before asking for a test host.
+It records this workspace owner's reusable disposable hosts, authorization
+scope, and retained fixtures. The file is local and gitignored; keep host
+addresses out of public examples and acceptance reports.
+
 ## Prepare the environment
 
 Run `make check` locally for code changes and `make linux-amd64` when a Linux

@@ -1,0 +1,28 @@
+tags:
+  example:
+    services:
+      masked: {}
+services:
+  masked:
+    order: 10
+    processes:
+      example:
+        type: systemd
+        unit: richt-mask-example.service
+        masked: false
+        enabled: true
+        state: running
+        unit_file:
+          mode: "0644"
+          template:
+            inline: |
+              [Unit]
+              Description=Richt disposable masking example
+              [Service]
+              ExecStart=/usr/bin/sleep infinity
+              [Install]
+              WantedBy=multi-user.target
+hosts:
+  - name: local
+    tags: [example]
+    transport: {type: local}

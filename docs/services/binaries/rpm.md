@@ -1,6 +1,6 @@
 ---
 title: "RPM packages"
-description: "Manage exact or unversioned RPM requests through DNF 4 and YUM 4."
+description: "Manage upstream, exact, or unversioned RPM requests through DNF 4 and YUM 4."
 weight: 10
 ---
 
@@ -10,7 +10,7 @@ binaries:
     type: rpm
     manager: dnf
     package: example-app
-    version: "0:1.2-3.noarch"
+    version: "1.34.3"
 ```
 
 | Field | Required | Meaning and default |
@@ -18,7 +18,7 @@ binaries:
 | `type` | yes | `rpm` |
 | `manager` | no | `dnf` (default), or `yum` backed by DNF 4 |
 | `package` | yes | RPM NAME, without an architecture selector |
-| `version` | no | Exact `epoch:version-release.arch`; omission keeps any installed version |
+| `version` | no | Literal upstream VERSION such as `1.34.3`, or exact `epoch:version-release.arch`; omission keeps any installed version |
 
 The supported backend is DNF 4, including its YUM 4 compatibility command.
 YUM 3, DNF 5, and other package managers are unsupported. See
@@ -29,9 +29,18 @@ YUM 3, DNF 5, and other package managers are unsupported. See
 
 With no `version`, Richt installs only when the named package is absent. It
 leaves an installed version alone even when repositories contain a newer one.
-An explicit version requires epoch, version, release, and architecture; write
-`0` for a package without an epoch. An exact installed match needs no task;
-a different version requests the exact NEVRA and permits upgrade or downgrade.
+A short version such as `1.34.3` constrains the upstream RPM VERSION only.
+An installed package with that literal VERSION needs no task, regardless of
+its epoch, release, or architecture. It does not match a prefix such as
+`1.34.30`. A missing package or different VERSION prepares an install request
+that can upgrade or downgrade.
+
+An exact version includes epoch, version, release, and architecture, for example
+`0:1.34.3-1.noarch`; write `0` for a package without an epoch. All components
+must match for an exact request to need no task. A different installed version
+requests the exact NEVRA and permits upgrade or downgrade. Partial forms such
+as `0:1.34.3` or `1.34.3-1.noarch`, whitespace, and user-supplied globs are
+rejected. Quote version values in YAML.
 
 Preparation checks `manager --version` and queries the installed RPM database.
 It does not consult repository metadata or download RPMs. A preceding
@@ -46,13 +55,24 @@ The prepared request resolves to these commands (`yum` may replace `dnf`):
 | --- | --- |
 | Unversioned install | `dnf -y install-n -- NAME` |
 | Exact install | `dnf -y install-nevra -- NAME-EPOCH:VERSION-RELEASE.ARCH` |
+| Upstream version | `dnf -y install -- NAME-VERSION` |
 | Removal | `dnf -y remove -- NAME` |
+
+For a short upstream version, DNF resolves omitted epoch, release, and
+architecture from the target's repository configuration when it executes the
+versioned install request. Richt passes the literal `NAME-VERSION` without
+adding a version-prefix glob. DNF's versioned install permits both upgrades
+and downgrades; its package-spec matching and transaction policy apply. See the
+[DNF 4 command reference](https://dnf.readthedocs.io/en/stable/command_ref.html#install-command).
 
 Names and versions are validated as individual arguments. Local execution
 passes arguments directly; SSH safely quotes them for the target shell.
 
-The plan fixes the requested package and exact NEVRA when specified. It does
-not freeze repository metadata, dependency resolution, checksums, scriptlet
+The plan fixes the requested package and supplied version string. For a short
+version, the displayed action explicitly defers epoch, release, and architecture
+selection until apply; the saved request remains short after execution. An
+exact version fixes the NEVRA. The plan does not freeze repository metadata,
+dependency resolution, checksums, scriptlet
 side effects, or every package in the transaction. The target's DNF resolves
 these when applying the request and downloads RPMs then. Repository trust and
 signature checks follow the host's repository configuration. RPM artifacts are
@@ -69,4 +89,5 @@ services](../lifecycle.md#absent-services) for ordering and assignment semantics
 
 The [ready vmango walkthrough](../../../examples/vmango/README.md) demonstrates
 repository configuration, exact upgrade/downgrade, unversioned preservation,
-and removal with published RPMs.
+and removal with published RPMs. The [upstream-version example](../../../examples/rpm-versions/README.md)
+compares short, exact, and omitted requests.
