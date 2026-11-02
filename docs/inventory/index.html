@@ -45,7 +45,7 @@
 
 	<meta itemprop="name" content="YAML inventory">
 	<meta itemprop="description" content="Define services and hosts, merge tag variables, resolve paths, and select assignments.">
-	<meta itemprop="wordCount" content="1183">
+	<meta itemprop="wordCount" content="1336">
 	<meta name="twitter:card" content="summary">
 	<meta name="twitter:title" content="YAML inventory">
 	<meta name="twitter:description" content="Define services and hosts, merge tag variables, resolve paths, and select assignments.">
@@ -89,7 +89,7 @@
     aria-label='Search this site…'
     autocomplete="off"
     
-    data-offline-search-index-json-src="/richt/offline-search-index.e536e48567cb8d376fe4d24e5b916221.json"
+    data-offline-search-index-json-src="/richt/offline-search-index.80b384b62bea49cb770d77aa0e813243.json"
     data-offline-search-base-href="/"
     data-offline-search-max-results="12"
   >
@@ -114,7 +114,7 @@
     aria-label='Search this site…'
     autocomplete="off"
     
-    data-offline-search-index-json-src="/richt/offline-search-index.e536e48567cb8d376fe4d24e5b916221.json"
+    data-offline-search-index-json-src="/richt/offline-search-index.80b384b62bea49cb770d77aa0e813243.json"
     data-offline-search-base-href="/"
     data-offline-search-max-results="12"
   >
@@ -240,23 +240,26 @@ documents are errors. All definitions and references are validated, including
 definitions outside the selected scope.</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-yaml" data-lang="yaml"><span class="line"><span class="cl"><span class="nt">tags</span><span class="p">:</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">shared</span><span class="p">:</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">weight</span><span class="p">:</span><span class="w"> </span><span class="m">10</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">order</span><span class="p">:</span><span class="w"> </span><span class="m">10</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">services</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="nt">app</span><span class="p">:</span><span class="w"> </span>{}<span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">vars</span><span class="p">:</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="nt">app</span><span class="p">:</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="nt">listen</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;127.0.0.1:8080&#34;</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="nt">services</span><span class="p">:</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">app</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">order</span><span class="p">:</span><span class="w"> </span><span class="m">10</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l">services/app.yaml</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="nt">hosts</span><span class="p">:</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l">example</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">tags</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="l">shared]</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">transport</span><span class="p">:</span><span class="w"> </span>{<span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l">local}</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">services</span><span class="p">:</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">      </span>- {<span class="nt">name: app, order: 10, state</span><span class="p">:</span><span class="w"> </span><span class="l">present}</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="nt">secret_sources</span><span class="p">:</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">default</span><span class="p">:</span><span class="w"> </span>{<span class="nt">type: yaml, file</span><span class="p">:</span><span class="w"> </span><span class="l">secrets/default.yaml}</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">production</span><span class="p">:</span><span class="w"> </span>{<span class="nt">type: yaml, file</span><span class="p">:</span><span class="w"> </span><span class="l">secrets/production.yaml}</span><span class="w">
-</span></span></span></code></pre></div><p>A service can be defined inline or by <code>file</code>, exclusively. Referenced files
+</span></span></span></code></pre></div><p>A service requires an integer <code>order</code>, including when it is not assigned to any
+host. Explicit zero is valid; omission is an error. Components can be defined
+inline or by <code>file</code>, exclusively, with <code>order</code> beside either form. Referenced files
 contain one bare service definition (<code>binaries</code>, <code>configs</code>, <code>processes</code>), without
 another <code>services</code> wrapper or recursive file references. Service file paths are
 relative to the inventory file. Template paths are relative to the service file
@@ -264,11 +267,19 @@ declaring them; inline services use the inventory file as their base. Absolute
 local file paths are also accepted. URL sources are unsupported. Resolved JSON
 includes absolute source/template paths and normalized absolute target paths.</p>
 <p>A service must contain at least one component; binary-only, config-only and
-process-only services are accepted. An assignment has only <code>name</code>, <code>order</code> and
-<code>state</code>. State defaults to <code>present</code>; <code>absent</code> declares removal. Each assigned
-service and each order must be unique on its host. A missing assignment does not
-request removal. Tags supply variables and never assign services. Component
-parameters belong to the service definition, with no assignment overrides.</p>
+process-only services are accepted. Tags assign services through a mapping keyed
+by service name. Each value contains only optional <code>state: present|absent</code>;
+<code>{}</code> defaults to <code>present</code>. Hosts receive services from all their tags and do
+not declare assignments themselves. A host without assignments has an empty
+service list. Component parameters belong to the service definition, with no
+assignment or host overrides.</p>
+<p>Each service must occur at most once on a host, even when two tags assign it
+with identical settings. Errors identify the host, service and both source
+tags. Different effective services on a host must have different service
+orders. Tags or services that are never combined on a host may reuse assignments
+or order values. Services execute in ascending service order, including
+<code>absent</code> assignments; tag order does not set execution order. Removing a tag or
+assignment does not request resource removal: use explicit <code>state: absent</code>.</p>
 <h2 id="components">Components</h2>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-yaml" data-lang="yaml"><span class="line"><span class="cl"><span class="nt">binaries</span><span class="p">:</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">package</span><span class="p">:</span><span class="w">
@@ -322,18 +333,19 @@ configs. Their target paths may be omitted and are then derived as shown:</p>
 these locations. Override names are plain <code>.conf</code> filenames. Template paths
 still use the declaring service file as their base.</p>
 <h2 id="variable-merging">Variable merging</h2>
-<p>Weights increase in priority. All tags of a weight are checked as a group
-before that group is merged with earlier weights. YAML tag order has no effect.</p>
+<p>Tags are processed by ascending <code>order</code>, which defaults to zero when omitted.
+All tags of an order are checked as a group before that group is merged with
+earlier orders. Host tag listing order has no effect.</p>
 <ul>
-<li>Scalars and lists replace the lower-weight value completely.</li>
-<li>Maps merge recursively; a map and a non-map replace each other at higher weight.</li>
-<li>At equal weight, different keys and compatible nested maps merge. Identical
+<li>Scalars and lists replace the lower-order value completely.</li>
+<li>Maps merge recursively; a map and a non-map replace each other at higher order.</li>
+<li>At equal order, different keys and compatible nested maps merge. Identical
 values are accepted. Different scalar/list values or incompatible types on
-the same path fail, even when a higher-weight tag would replace that path.</li>
-<li>Errors identify the host, variable path, both tag names and common weight.</li>
+the same path fail, even when a higher-order tag would replace that path.</li>
+<li>Errors identify the host, variable path, both tag names and common order.</li>
 </ul>
 <p>For a reproducible conflict, add <code>home</code> to <code>lanst.tags</code> in a copy of the example:
-<code>home</code> and <code>net</code> both set <code>vmango.cloud_name</code> at weight 20. Validation fails at
+<code>home</code> and <code>net</code> both set <code>vmango.cloud_name</code> at order 20. Validation fails at
 <code>vars.vmango.cloud_name</code>, including when <code>--service vmango-repository</code> is used.</p>
 <h2 id="resource-ownership">Resource ownership</h2>
 <p>Before service filtering, every assignment of each selected host is checked.
@@ -361,8 +373,11 @@ that group selects everything.</li>
 Selected hosts with no matching assignments remain visible with an empty
 services list.</li>
 <li>Hosts are displayed by name; their assignments are displayed by increasing
-order. Ownership and tag conflicts on unselected hosts are outside the scope;
-service selection cannot hide those conflicts on selected hosts.</li>
+service order. <code>--tag</code> selects hosts, and every selected host still receives
+services and variables from all its tags. Duplicate assignment, service-order,
+ownership and variable conflicts on unselected hosts are outside the scope;
+service selection cannot hide those conflicts on selected hosts. Definitions
+and references, including assignments in unused tags, are always validated.</li>
 </ul>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-sh" data-lang="sh"><span class="line"><span class="cl"><span class="c1"># All services on one host</span>
 </span></span><span class="line"><span class="cl">go run . inventory show -i examples/inventory/richt.yaml --host gena

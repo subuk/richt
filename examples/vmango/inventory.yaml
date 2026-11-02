@@ -1,7 +1,10 @@
 # Local execution example: disposable AlmaLinux 10 x86_64, root, DNF 4, systemd.
 tags:
   example:
-    weight: 10
+    services:
+      vmango-repository: {state: present}
+      vmango: {state: present}
+    order: 10
     vars:
       vmango:
         listen: "127.0.0.1:18080"
@@ -10,13 +13,12 @@ tags:
         target: rhel-10
 services:
   vmango-repository:
+    order: 10
     file: services/repository.yaml
   vmango:
+    order: 20
     file: services/vmango.yaml
 hosts:
   - name: localhost
     tags: [example]
     transport: {type: local}
-    services:
-      - {name: vmango-repository, order: 10}
-      - {name: vmango, order: 20}

@@ -45,7 +45,7 @@
 
 	<meta itemprop="name" content="Config-only quickstart">
 	<meta itemprop="description" content="Create, review, apply, update, and remove a templated file without root privileges.">
-	<meta itemprop="wordCount" content="442">
+	<meta itemprop="wordCount" content="445">
 	<meta name="twitter:card" content="summary">
 	<meta name="twitter:title" content="Config-only quickstart">
 	<meta name="twitter:description" content="Create, review, apply, update, and remove a templated file without root privileges.">
@@ -89,7 +89,7 @@
     aria-label='Search this site…'
     autocomplete="off"
     
-    data-offline-search-index-json-src="/richt/offline-search-index.e536e48567cb8d376fe4d24e5b916221.json"
+    data-offline-search-index-json-src="/richt/offline-search-index.80b384b62bea49cb770d77aa0e813243.json"
     data-offline-search-base-href="/"
     data-offline-search-max-results="12"
   >
@@ -114,7 +114,7 @@
     aria-label='Search this site…'
     autocomplete="off"
     
-    data-offline-search-index-json-src="/richt/offline-search-index.e536e48567cb8d376fe4d24e5b916221.json"
+    data-offline-search-index-json-src="/richt/offline-search-index.80b384b62bea49cb770d77aa0e813243.json"
     data-offline-search-base-href="/"
     data-offline-search-max-results="12"
   >
@@ -230,11 +230,14 @@ requirements and verification scope are in <a href="/richt/docs/installation/">i
 </span></span><span class="line"><span class="cl">cat &gt; <span class="s2">&#34;</span><span class="nv">$demo_dir</span><span class="s2">/inventory.yaml&#34;</span> <span class="s">&lt;&lt;EOF_INVENTORY
 </span></span></span><span class="line"><span class="cl"><span class="s">tags:
 </span></span></span><span class="line"><span class="cl"><span class="s">  defaults:
-</span></span></span><span class="line"><span class="cl"><span class="s">    weight: 10
+</span></span></span><span class="line"><span class="cl"><span class="s">    order: 10
+</span></span></span><span class="line"><span class="cl"><span class="s">    services:
+</span></span></span><span class="line"><span class="cl"><span class="s">      greeting: {state: present}
 </span></span></span><span class="line"><span class="cl"><span class="s">    vars:
 </span></span></span><span class="line"><span class="cl"><span class="s">      greeting: Hello from Richt
 </span></span></span><span class="line"><span class="cl"><span class="s">services:
 </span></span></span><span class="line"><span class="cl"><span class="s">  greeting:
+</span></span></span><span class="line"><span class="cl"><span class="s">    order: 10
 </span></span></span><span class="line"><span class="cl"><span class="s">    configs:
 </span></span></span><span class="line"><span class="cl"><span class="s">      main:
 </span></span></span><span class="line"><span class="cl"><span class="s">        path: $demo_dir/target/greeting.conf
@@ -244,11 +247,10 @@ requirements and verification scope are in <a href="/richt/docs/installation/">i
 </span></span></span><span class="line"><span class="cl"><span class="s">  - name: local
 </span></span></span><span class="line"><span class="cl"><span class="s">    tags: [defaults]
 </span></span></span><span class="line"><span class="cl"><span class="s">    transport: {type: local}
-</span></span></span><span class="line"><span class="cl"><span class="s">    services:
-</span></span></span><span class="line"><span class="cl"><span class="s">      - {name: greeting, order: 10, state: present}
 </span></span></span><span class="line"><span class="cl"><span class="s">EOF_INVENTORY</span>
-</span></span></code></pre></div><p>Keep this shell open so <code>demo_dir</code> stays available. Tag <code>defaults</code> supplies the
-template&rsquo;s <code>.greeting</code> variable. The assignment&rsquo;s <code>order</code> fixes service order;
+</span></span></code></pre></div><p>Keep this shell open so <code>demo_dir</code> stays available. Tag <code>defaults</code> assigns the
+service and supplies the template&rsquo;s <code>.greeting</code> variable. The service
+definition&rsquo;s <code>order</code> fixes execution order;
 config-only services need no binary or process component. Template paths are
 relative to their declaring service file, or the inventory for inline services.</p>
 <h2 id="inspect-prepare-and-apply">Inspect, prepare, and apply</h2>

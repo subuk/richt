@@ -72,12 +72,12 @@ for unit in ['richt-first.service', 'richt-second.service', 'richt-timeout.servi
 run('systemctl', 'daemon-reload')
 run('sh', str(Path(__file__).with_name('build-repository.sh')))
 reload_content = '[Service]\nExecReload=\nExecReload=/bin/kill -HUP $MAINPID\n'
-inventory = dict(services=dict(
-    repository=dict(configs=dict(repo=dict(path='/etc/yum.repos.d/richt-demo.repo', mode='0644', template=dict(inline='[richt-demo]\nname=Richt demo\nbaseurl=file:///var/lib/richt-demo-fixture/repo\nenabled=1\ngpgcheck=0\n')))),
-    demo=dict(binaries=dict(app=dict(type='rpm', manager='dnf', package='richt-demo', version='0:1.0-1.noarch')),
+inventory = dict(tags=dict(example=dict(services=dict(repository={},demo={}))),services=dict(
+    repository=dict(order=10,configs=dict(repo=dict(path='/etc/yum.repos.d/richt-demo.repo', mode='0644', template=dict(inline='[richt-demo]\nname=Richt demo\nbaseurl=file:///var/lib/richt-demo-fixture/repo\nenabled=1\ngpgcheck=0\n')))),
+    demo=dict(order=20,binaries=dict(app=dict(type='rpm', manager='dnf', package='richt-demo', version='0:1.0-1.noarch')),
               configs=dict(main=dict(path='/etc/richt-demo.conf', mode='0644', template=dict(inline='message=one\n'))),
               processes=dict(main=dict(type='systemd', unit='richt-demo.service', enabled=True, state='running', timeout='5s', restart_on=['binary.app'], reload_on=['config.main'], overrides={'20-reload.conf': dict(template=dict(inline=reload_content))})))),
-    hosts=[dict(name='isolated', transport=dict(type='local'), services=[dict(name='repository', order=10), dict(name='demo', order=20)])])
+    hosts=[dict(name='isolated', tags=['example'], transport=dict(type='local'))])
 path, tasks = diff('first', inventory)
 check('diff does not install repository or package', not Path('/etc/yum.repos.d/richt-demo.repo').exists() and run('rpm', '-q', 'richt-demo', ok=False).returncode != 0)
 check('repository task precedes package task', tasks[0]['service'] == 'repository' and next(i for i,t in enumerate(tasks) if t['operation']=='rpm') > 0)
@@ -161,14 +161,14 @@ inventory['services']['demo']['processes']['main']['overrides']['20-reload.conf'
 # Multiple processes use after; the second start fails if the first has not finished.
 unit1='[Service]\nType=simple\nExecStart=/usr/bin/sleep infinity\nExecStartPost=/usr/bin/touch /run/richt-order-first\n'
 unit2='[Service]\nType=simple\nExecStartPre=/usr/bin/test -e /run/richt-order-first\nExecStart=/usr/bin/sleep infinity\nExecStartPost=/usr/bin/touch /run/richt-order-second\n'
-multiple=dict(services=dict(order=dict(processes={'z-first':own_unit('richt-first.service',unit1),'a-second':own_unit('richt-second.service',unit2,after=['z-first'])})),hosts=[dict(name='isolated',transport=dict(type='local'),services=[dict(name='order',order=10)])])
+multiple=dict(tags=dict(example=dict(services=dict(order={}))),services=dict(order=dict(order=10,processes={'z-first':own_unit('richt-first.service',unit1),'a-second':own_unit('richt-second.service',unit2,after=['z-first'])})),hosts=[dict(name='isolated',tags=['example'],transport=dict(type='local'))])
 path,tasks=diff('after',multiple)
 check('after is reflected in process task order',[t['component'] for t in tasks if t['operation']=='systemd']==['process/z-first','process/a-second'])
 apply('after',path)
 check('multiple processes start in dependency order',active('richt-first.service')=='active' and active('richt-second.service')=='active' and Path('/run/richt-order-second').exists())
 for label,command,timeout in [('timeout','/usr/bin/sleep 2','100ms'),('error','/bin/false','5s')]:
     unit=f'richt-{label}.service'
-    bad=dict(services=dict(bad=dict(processes=dict(main=own_unit(unit,f'[Service]\nType=oneshot\nExecStart={command}\nRemainAfterExit=yes\n',timeout=timeout)))),hosts=[dict(name='isolated',transport=dict(type='local'),services=[dict(name='bad',order=10)])])
+    bad=dict(tags=dict(example=dict(services=dict(bad={}))),services=dict(bad=dict(order=10,processes=dict(main=own_unit(unit,f'[Service]\nType=oneshot\nExecStart={command}\nRemainAfterExit=yes\n',timeout=timeout)))),hosts=[dict(name='isolated',tags=['example'],transport=dict(type='local'))])
     path,_=diff(label,bad);start=time.monotonic();p=apply(label,path,ok=False);elapsed=time.monotonic()-start
     check(label+' stops host and records error',p.returncode!=0 and json.loads(path.read_text())['hosts'][0]['tasks'][-1]['progress']['status']=='error')
     if label=='timeout':check('timeout bounds command and waiting together',elapsed<1.5)
@@ -180,7 +180,7 @@ unsupported['services']['order']['processes']['z-first']['reload_on']=['config.m
 p=run(binary,'diff','-i',str(write('unsupported',unsupported)),ok=False)
 check('unsupported reload is rejected in preparation',p.returncode!=0 and 'reload is unsupported' in p.stdout)
 # Full removal stops and disables before removing owned files and package.
-inventory['hosts'][0]['services'][1]['state']='absent'
+inventory['tags']['example']['services']['demo']['state']='absent'
 path,tasks=diff('absent',inventory)
 ops=[t['operation'] for t in tasks]
 check('absent orders process before files and package',ops.index('systemd')<ops.index('file')<ops.index('rpm') and ops.index('systemd-enable')<ops.index('file'))
@@ -188,16 +188,16 @@ apply('absent',path)
 check('absent removes declared package config and drop-in',run('rpm','-q','richt-demo',ok=False).returncode!=0 and not Path('/etc/richt-demo.conf').exists() and not Path('/etc/systemd/system/richt-demo.service.d/20-reload.conf').exists())
 check('application state is retained',Path('/run/richt-demo/events').exists())
 # YUM 4 is DNF's compatibility entry point, exercised with the same exact request.
-inventory['hosts'][0]['services'][1]['state']='present'
+inventory['tags']['example']['services']['demo']['state']='present'
 inventory['services']['demo']['binaries']['app']['manager']='yum'
 inventory['services']['demo']['binaries']['app']['version']='0:1.0-1.noarch'
 path,_=diff('yum-install',inventory);apply('yum-install',path)
 check('YUM 4 exact package installation works',installed()=='0:1.0-1.noarch' and active()=='active')
-inventory['hosts'][0]['services'][1]['state']='absent'
+inventory['tags']['example']['services']['demo']['state']='absent'
 path,_=diff('yum-remove',inventory);apply('yum-remove',path)
 check('YUM 4 package removal works',run('rpm','-q','richt-demo',ok=False).returncode!=0)
 # Clean owned extra units through the same absent mechanism.
-multiple['hosts'][0]['services'][0]['state']='absent'
+multiple['tags']['example']['services']['order']['state']='absent'
 path,_=diff('after-absent',multiple);apply('after-absent',path)
 check('owned full units are removed',not Path('/etc/systemd/system/richt-first.service').exists() and not Path('/etc/systemd/system/richt-second.service').exists())
 (work/'acceptance.json').write_text(json.dumps(dict(checks=checks,passed=len(checks)),indent=2)+'\n')

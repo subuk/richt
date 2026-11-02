@@ -48,7 +48,7 @@ bin/richt inventory validate -i examples/files/inventory.yaml bin/richt diff -i 
 	<meta itemprop="name" content="Local files">
 	<meta itemprop="description" content="Build with make build and run from the repository root. This example manages only /var/tmp/richt-example/greeting.conf; it needs no root, RPM, systemd or network access when that directory is writable by the current user.
 bin/richt inventory validate -i examples/files/inventory.yaml bin/richt diff -i examples/files/inventory.yaml -o /var/tmp/richt-files-plan.json bin/richt apply -y /var/tmp/richt-files-plan.json cat /var/tmp/richt-example/greeting.conf bin/richt diff -i examples/files/inventory.yaml Diff renders and observes without modifying managed resources; saving a plan writes only that plan. The final diff should have no changes. Change greeting in the inventory to inspect an update. Apply without -y for explicit terminal confirmation; piped input does not supply terminal agreement.">
-	<meta itemprop="wordCount" content="179">
+	<meta itemprop="wordCount" content="176">
 	<meta name="twitter:card" content="summary">
 	<meta name="twitter:title" content="Local files">
 	<meta name="twitter:description" content="Build with make build and run from the repository root. This example manages only /var/tmp/richt-example/greeting.conf; it needs no root, RPM, systemd or network access when that directory is writable by the current user.
@@ -93,7 +93,7 @@ bin/richt inventory validate -i examples/files/inventory.yaml bin/richt diff -i 
     aria-label='Search this site…'
     autocomplete="off"
     
-    data-offline-search-index-json-src="/richt/offline-search-index.e536e48567cb8d376fe4d24e5b916221.json"
+    data-offline-search-index-json-src="/richt/offline-search-index.80b384b62bea49cb770d77aa0e813243.json"
     data-offline-search-base-href="/"
     data-offline-search-max-results="12"
   >
@@ -118,7 +118,7 @@ bin/richt inventory validate -i examples/files/inventory.yaml bin/richt diff -i 
     aria-label='Search this site…'
     autocomplete="off"
     
-    data-offline-search-index-json-src="/richt/offline-search-index.e536e48567cb8d376fe4d24e5b916221.json"
+    data-offline-search-index-json-src="/richt/offline-search-index.80b384b62bea49cb770d77aa0e813243.json"
     data-offline-search-base-href="/"
     data-offline-search-max-results="12"
   >
@@ -219,7 +219,7 @@ network access when that directory is writable by the current user.</p>
 writes only that plan. The final diff should have no changes. Change <code>greeting</code>
 in the inventory to inspect an update. Apply without <code>-y</code> for explicit terminal
 confirmation; piped input does not supply terminal agreement.</p>
-<p>Set the greeting assignment&rsquo;s <code>state: absent</code>, prepare a new plan and apply it
+<p>Set <code>tags.example.services.greeting.state: absent</code>, prepare a new plan and apply it
 to remove the managed file. Removing the assignment alone requests no deletion.
 Restore <code>state: present</code> afterwards if reusing the checked-in example.
 The containing directory, plan and lock are retained. Use

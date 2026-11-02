@@ -45,7 +45,7 @@
 
 	<meta itemprop="name" content="RPM and systemd services">
 	<meta itemprop="description" content="Manage exact package requests, process reactions, unit files, and explicit removal.">
-	<meta itemprop="wordCount" content="1569">
+	<meta itemprop="wordCount" content="1594">
 	<meta name="twitter:card" content="summary">
 	<meta name="twitter:title" content="RPM and systemd services">
 	<meta name="twitter:description" content="Manage exact package requests, process reactions, unit files, and explicit removal.">
@@ -89,7 +89,7 @@
     aria-label='Search this site…'
     autocomplete="off"
     
-    data-offline-search-index-json-src="/richt/offline-search-index.e536e48567cb8d376fe4d24e5b916221.json"
+    data-offline-search-index-json-src="/richt/offline-search-index.80b384b62bea49cb770d77aa0e813243.json"
     data-offline-search-base-href="/"
     data-offline-search-max-results="12"
   >
@@ -114,7 +114,7 @@
     aria-label='Search this site…'
     autocomplete="off"
     
-    data-offline-search-index-json-src="/richt/offline-search-index.e536e48567cb8d376fe4d24e5b916221.json"
+    data-offline-search-index-json-src="/richt/offline-search-index.80b384b62bea49cb770d77aa0e813243.json"
     data-offline-search-base-href="/"
     data-offline-search-max-results="12"
   >
@@ -217,7 +217,8 @@
 </header>
 	<p>Richt manages each service in binary → config → process order. A service may
 contain any nonempty combination of these component sets. Services run in their
-assignment <code>order</code>; <code>after</code> orders processes within one service. References and
+definition&rsquo;s <code>order</code>; tags supply assignments and <code>after</code> orders processes
+within one service. References and
 cycles are validated before diff. There are no cross-service dependency links.</p>
 <p>The supported package backend is <strong>DNF 4</strong>, including its <strong>YUM 4 compatibility
 command</strong>. YUM 3, DNF 5, APT, and non-systemd process managers are unsupported.
@@ -387,11 +388,13 @@ removed. Processes are stopped in reverse dependency order. Declared RPM
 packages are removed after the managed files, and a final daemon reload follows
 unit/drop-in or package changes. An already missing unit is accepted during removal. An external unit that remains
 installed is still stopped and disabled.</p>
+<p>Across services, removal follows ascending service-definition order, just like
+<code>present</code> assignments. There is no automatic reverse service removal order.</p>
 <p>DNF may remove dependent packages in its removal transaction. RPM itself
 controls the treatment of its package-owned config files, including possible
 <code>.rpmsave</code> files. Richt removes only explicitly declared config/unit/drop-in
 files; it does not purge application data, state directories, unrelated files,
-or <code>.rpmsave</code> files. Removing a service assignment from inventory does not mean
+or <code>.rpmsave</code> files. Removing a tag or service assignment from inventory does not mean
 <code>absent</code>; declare <code>absent</code> to request deletion.</p>
 <p>A failed task blocks later tasks on that host. Successful config writes and
 other task progress remain saved when applying a JSON file. A pending process

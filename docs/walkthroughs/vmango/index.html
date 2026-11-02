@@ -48,7 +48,7 @@ It uses published, signed Vmango COPR RPMs . No package build, fixture repositor
 	<meta itemprop="name" content="Vmango RPM and systemd">
 	<meta itemprop="description" content="Run this example on a disposable AlmaLinux 10 x86_64 machine with root, DNF 4, systemd as PID 1, network access to distribution repositories, EPEL and COPR, and a built Linux Richt binary at bin/richt. Run all commands from the repository root. The example owns /etc/yum.repos.d/richt-vmango.repo, /etc/vmango.conf, the vmango package and vmango.service; start without an existing Vmango installation or either managed configuration file.
 It uses published, signed Vmango COPR RPMs . No package build, fixture repository, rpm-build, createrepo_c, or COPR CLI plugin is needed. The config-only repository service runs before the package service. The rhel-10 target is deliberate: EPEL 10 builds target CentOS Stream and can require newer libvirt than AlmaLinux/RHEL provides. Runtime dependencies are resolved by DNF during apply; no hypervisor or VM image is required.">
-	<meta itemprop="wordCount" content="739">
+	<meta itemprop="wordCount" content="742">
 	<meta name="twitter:card" content="summary">
 	<meta name="twitter:title" content="Vmango RPM and systemd">
 	<meta name="twitter:description" content="Run this example on a disposable AlmaLinux 10 x86_64 machine with root, DNF 4, systemd as PID 1, network access to distribution repositories, EPEL and COPR, and a built Linux Richt binary at bin/richt. Run all commands from the repository root. The example owns /etc/yum.repos.d/richt-vmango.repo, /etc/vmango.conf, the vmango package and vmango.service; start without an existing Vmango installation or either managed configuration file.
@@ -93,7 +93,7 @@ It uses published, signed Vmango COPR RPMs . No package build, fixture repositor
     aria-label='Search this site…'
     autocomplete="off"
     
-    data-offline-search-index-json-src="/richt/offline-search-index.e536e48567cb8d376fe4d24e5b916221.json"
+    data-offline-search-index-json-src="/richt/offline-search-index.80b384b62bea49cb770d77aa0e813243.json"
     data-offline-search-base-href="/"
     data-offline-search-max-results="12"
   >
@@ -118,7 +118,7 @@ It uses published, signed Vmango COPR RPMs . No package build, fixture repositor
     aria-label='Search this site…'
     autocomplete="off"
     
-    data-offline-search-index-json-src="/richt/offline-search-index.e536e48567cb8d376fe4d24e5b916221.json"
+    data-offline-search-index-json-src="/richt/offline-search-index.80b384b62bea49cb770d77aa0e813243.json"
     data-offline-search-base-href="/"
     data-offline-search-max-results="12"
   >
@@ -294,8 +294,8 @@ there is no extra restart after that start. For failure/continuation without
 packages, use <a href="/richt/docs/walkthroughs/continuation/">the separate config-only example</a>
 .</p>
 <h2 id="explicit-removal">Explicit removal</h2>
-<p>Set <code>state: absent</code> on <strong>both</strong> assignments in
-<code>examples/vmango/inventory.yaml</code>, keeping their orders 10 and 20. Then:</p>
+<p>Set <code>state: absent</code> on <strong>both</strong> assignments under <code>tags.example.services</code> in
+<code>examples/vmango/inventory.yaml</code>, keeping service definition orders 10 and 20. Then:</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-sh" data-lang="sh"><span class="line"><span class="cl">bin/richt diff -i examples/vmango/inventory.yaml -o /root/vmango-remove.json
 </span></span><span class="line"><span class="cl">bin/richt apply -y /root/vmango-remove.json
 </span></span><span class="line"><span class="cl">rpm -q vmango

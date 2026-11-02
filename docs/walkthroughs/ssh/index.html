@@ -45,7 +45,7 @@
 
 	<meta itemprop="name" content="Two hosts over SSH">
 	<meta itemprop="description" content="This inventory reuses the Vmango example on two disposable AlmaLinux 10 x86_64 targets. Its richt-test-a and richt-test-b SSH aliases are placeholders. Configure each alias’s HostName, non-root User, authentication key/agent and trusted host key using normal OpenSSH settings. Both accounts need noninteractive sudo -n for the managed operations. Both targets need DNF 4, systemd, distribution repositories, CRB, EPEL and COPR network access; neither needs a compiler, fixture package build, hypervisor or Vmango login user. Prepare CRB and EPEL on each target with sudo -n dnf config-manager --set-enabled crb and sudo -n dnf install -y epel-release; the published RPM needs EPEL’s genisoimage dependency. Start without an existing Vmango installation or the example’s managed files. See SSH rules for explicit overrides and authentication.">
-	<meta itemprop="wordCount" content="357">
+	<meta itemprop="wordCount" content="359">
 	<meta name="twitter:card" content="summary">
 	<meta name="twitter:title" content="Two hosts over SSH">
 	<meta name="twitter:description" content="This inventory reuses the Vmango example on two disposable AlmaLinux 10 x86_64 targets. Its richt-test-a and richt-test-b SSH aliases are placeholders. Configure each alias’s HostName, non-root User, authentication key/agent and trusted host key using normal OpenSSH settings. Both accounts need noninteractive sudo -n for the managed operations. Both targets need DNF 4, systemd, distribution repositories, CRB, EPEL and COPR network access; neither needs a compiler, fixture package build, hypervisor or Vmango login user. Prepare CRB and EPEL on each target with sudo -n dnf config-manager --set-enabled crb and sudo -n dnf install -y epel-release; the published RPM needs EPEL’s genisoimage dependency. Start without an existing Vmango installation or the example’s managed files. See SSH rules for explicit overrides and authentication.">
@@ -89,7 +89,7 @@
     aria-label='Search this site…'
     autocomplete="off"
     
-    data-offline-search-index-json-src="/richt/offline-search-index.e536e48567cb8d376fe4d24e5b916221.json"
+    data-offline-search-index-json-src="/richt/offline-search-index.80b384b62bea49cb770d77aa0e813243.json"
     data-offline-search-base-href="/"
     data-offline-search-max-results="12"
   >
@@ -114,7 +114,7 @@
     aria-label='Search this site…'
     autocomplete="off"
     
-    data-offline-search-index-json-src="/richt/offline-search-index.e536e48567cb8d376fe4d24e5b916221.json"
+    data-offline-search-index-json-src="/richt/offline-search-index.80b384b62bea49cb770d77aa0e813243.json"
     data-offline-search-base-href="/"
     data-offline-search-max-results="12"
   >
@@ -236,8 +236,8 @@ tasks while the other host continues. Fix the external problem, then apply the
 same saved plan explicitly to skip successful tasks and retry unfinished ones.
 No automatic retry occurs. Saved plans retain explicit inventory connections
 and ready config bytes; OpenSSH still reads current client configuration.</p>
-<p>For cleanup, set both assignments on both hosts to <code>state: absent</code>, build a
-new removal plan and apply it. The Vmango walkthrough describes retained
+<p>For cleanup, set both assignments in the shared <code>tags.example.services</code> map to
+<code>state: absent</code>, build a new removal plan and apply it. The Vmango walkthrough describes retained
 application data and RPM side effects. Do not delete assignments as a substitute
 for declaring absence.</p>
 <p>Validation status: published Vmango installation/no-op/removal passed on two

@@ -17,7 +17,7 @@ writes only that plan. The final diff should have no changes. Change `greeting`
 in the inventory to inspect an update. Apply without `-y` for explicit terminal
 confirmation; piped input does not supply terminal agreement.
 
-Set the greeting assignment's `state: absent`, prepare a new plan and apply it
+Set `tags.example.services.greeting.state: absent`, prepare a new plan and apply it
 to remove the managed file. Removing the assignment alone requests no deletion.
 Restore `state: present` afterwards if reusing the checked-in example.
 The containing directory, plan and lock are retained. Use

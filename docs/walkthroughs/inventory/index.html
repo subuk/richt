@@ -34,29 +34,29 @@
 <link rel="icon" href="/richt/favicon.svg" type="image/svg+xml" />
 
 <title>Inventory and variables | Richt</title>
-<meta name="description" content="This example illustrates merging variables, assignment ordering, selections, service file paths, and fictional SSH settings. It is not an execution quickstart: lanst.example.invalid is a fictional address, its declared secret source files need not exist, and the local cloud assumes an existing libvirt hypervisor. Use the runnable Vmango walkthrough for an isolated RPM/systemd installation with no hypervisor.
+<meta name="description" content="This example illustrates tag service assignment, merging variables, service ordering, selections, service file paths, and fictional SSH settings. It is not an execution quickstart: lanst.example.invalid is a fictional address, its declared secret source files need not exist, and the local cloud assumes an existing libvirt hypervisor. Use the runnable Vmango walkthrough for an isolated RPM/systemd installation with no hypervisor.
 Run from the repository root:
-bin/richt inventory validate -i examples/inventory/richt.yaml bin/richt inventory show -i examples/inventory/richt.yaml bin/richt inventory show -i examples/inventory/richt.yaml --tag hypervisor --service vmango These commands do not contact hosts, open templates, or read secret values. The home and net tags override only vmango.cloud_name; the shared listen address and libvirt URI remain. Adding both tags to one host causes an equal-weight conflict. Both services must be selected for a first installation; --service vmango does not implicitly select the repository service.">
+bin/richt inventory validate -i examples/inventory/richt.yaml bin/richt inventory show -i examples/inventory/richt.yaml bin/richt inventory show -i examples/inventory/richt.yaml --tag hypervisor --service vmango These commands do not contact hosts, open templates, or read secret values. The hypervisor tag assigns both services; service definition orders 10 and 20 run the repository before Vmango. The home and net tags override only vmango.cloud_name; the shared listen address and libvirt URI remain. Adding both tags to one host causes a variable conflict at the same tag order. Both services must be selected for a first installation; --service vmango does not implicitly select the repository service.">
 <meta property="og:url" content="https://subuk.github.io/richt/docs/walkthroughs/inventory/">
 	<meta property="og:site_name" content="Richt">
 	<meta property="og:title" content="Inventory and variables">
-	<meta property="og:description" content="This example illustrates merging variables, assignment ordering, selections, service file paths, and fictional SSH settings. It is not an execution quickstart: lanst.example.invalid is a fictional address, its declared secret source files need not exist, and the local cloud assumes an existing libvirt hypervisor. Use the runnable Vmango walkthrough for an isolated RPM/systemd installation with no hypervisor.
+	<meta property="og:description" content="This example illustrates tag service assignment, merging variables, service ordering, selections, service file paths, and fictional SSH settings. It is not an execution quickstart: lanst.example.invalid is a fictional address, its declared secret source files need not exist, and the local cloud assumes an existing libvirt hypervisor. Use the runnable Vmango walkthrough for an isolated RPM/systemd installation with no hypervisor.
 Run from the repository root:
-bin/richt inventory validate -i examples/inventory/richt.yaml bin/richt inventory show -i examples/inventory/richt.yaml bin/richt inventory show -i examples/inventory/richt.yaml --tag hypervisor --service vmango These commands do not contact hosts, open templates, or read secret values. The home and net tags override only vmango.cloud_name; the shared listen address and libvirt URI remain. Adding both tags to one host causes an equal-weight conflict. Both services must be selected for a first installation; --service vmango does not implicitly select the repository service.">
+bin/richt inventory validate -i examples/inventory/richt.yaml bin/richt inventory show -i examples/inventory/richt.yaml bin/richt inventory show -i examples/inventory/richt.yaml --tag hypervisor --service vmango These commands do not contact hosts, open templates, or read secret values. The hypervisor tag assigns both services; service definition orders 10 and 20 run the repository before Vmango. The home and net tags override only vmango.cloud_name; the shared listen address and libvirt URI remain. Adding both tags to one host causes a variable conflict at the same tag order. Both services must be selected for a first installation; --service vmango does not implicitly select the repository service.">
 	<meta property="og:locale" content="en">
 	<meta property="og:type" content="article">
 		<meta property="article:section" content="docs">
 
 	<meta itemprop="name" content="Inventory and variables">
-	<meta itemprop="description" content="This example illustrates merging variables, assignment ordering, selections, service file paths, and fictional SSH settings. It is not an execution quickstart: lanst.example.invalid is a fictional address, its declared secret source files need not exist, and the local cloud assumes an existing libvirt hypervisor. Use the runnable Vmango walkthrough for an isolated RPM/systemd installation with no hypervisor.
+	<meta itemprop="description" content="This example illustrates tag service assignment, merging variables, service ordering, selections, service file paths, and fictional SSH settings. It is not an execution quickstart: lanst.example.invalid is a fictional address, its declared secret source files need not exist, and the local cloud assumes an existing libvirt hypervisor. Use the runnable Vmango walkthrough for an isolated RPM/systemd installation with no hypervisor.
 Run from the repository root:
-bin/richt inventory validate -i examples/inventory/richt.yaml bin/richt inventory show -i examples/inventory/richt.yaml bin/richt inventory show -i examples/inventory/richt.yaml --tag hypervisor --service vmango These commands do not contact hosts, open templates, or read secret values. The home and net tags override only vmango.cloud_name; the shared listen address and libvirt URI remain. Adding both tags to one host causes an equal-weight conflict. Both services must be selected for a first installation; --service vmango does not implicitly select the repository service.">
-	<meta itemprop="wordCount" content="136">
+bin/richt inventory validate -i examples/inventory/richt.yaml bin/richt inventory show -i examples/inventory/richt.yaml bin/richt inventory show -i examples/inventory/richt.yaml --tag hypervisor --service vmango These commands do not contact hosts, open templates, or read secret values. The hypervisor tag assigns both services; service definition orders 10 and 20 run the repository before Vmango. The home and net tags override only vmango.cloud_name; the shared listen address and libvirt URI remain. Adding both tags to one host causes a variable conflict at the same tag order. Both services must be selected for a first installation; --service vmango does not implicitly select the repository service.">
+	<meta itemprop="wordCount" content="161">
 	<meta name="twitter:card" content="summary">
 	<meta name="twitter:title" content="Inventory and variables">
-	<meta name="twitter:description" content="This example illustrates merging variables, assignment ordering, selections, service file paths, and fictional SSH settings. It is not an execution quickstart: lanst.example.invalid is a fictional address, its declared secret source files need not exist, and the local cloud assumes an existing libvirt hypervisor. Use the runnable Vmango walkthrough for an isolated RPM/systemd installation with no hypervisor.
+	<meta name="twitter:description" content="This example illustrates tag service assignment, merging variables, service ordering, selections, service file paths, and fictional SSH settings. It is not an execution quickstart: lanst.example.invalid is a fictional address, its declared secret source files need not exist, and the local cloud assumes an existing libvirt hypervisor. Use the runnable Vmango walkthrough for an isolated RPM/systemd installation with no hypervisor.
 Run from the repository root:
-bin/richt inventory validate -i examples/inventory/richt.yaml bin/richt inventory show -i examples/inventory/richt.yaml bin/richt inventory show -i examples/inventory/richt.yaml --tag hypervisor --service vmango These commands do not contact hosts, open templates, or read secret values. The home and net tags override only vmango.cloud_name; the shared listen address and libvirt URI remain. Adding both tags to one host causes an equal-weight conflict. Both services must be selected for a first installation; --service vmango does not implicitly select the repository service.">
+bin/richt inventory validate -i examples/inventory/richt.yaml bin/richt inventory show -i examples/inventory/richt.yaml bin/richt inventory show -i examples/inventory/richt.yaml --tag hypervisor --service vmango These commands do not contact hosts, open templates, or read secret values. The hypervisor tag assigns both services; service definition orders 10 and 20 run the repository before Vmango. The home and net tags override only vmango.cloud_name; the shared listen address and libvirt URI remain. Adding both tags to one host causes a variable conflict at the same tag order. Both services must be selected for a first installation; --service vmango does not implicitly select the repository service.">
 <link rel="preload" href="/richt/scss/main.min.837bcd9ee43b630b69cf51ae131dacbb236c33fcf3728473bc3771c47aa4bf9b.css" as="style" integrity="sha256-g3vNnuQ7Ywtpz1GuEx2suyNsM/zzcoRzvDdxxHqkv5s=" crossorigin="anonymous">
 <link href="/richt/scss/main.min.837bcd9ee43b630b69cf51ae131dacbb236c33fcf3728473bc3771c47aa4bf9b.css" rel="stylesheet" integrity="sha256-g3vNnuQ7Ywtpz1GuEx2suyNsM/zzcoRzvDdxxHqkv5s=" crossorigin="anonymous">
 <script defer
@@ -97,7 +97,7 @@ bin/richt inventory validate -i examples/inventory/richt.yaml bin/richt inventor
     aria-label='Search this site…'
     autocomplete="off"
     
-    data-offline-search-index-json-src="/richt/offline-search-index.e536e48567cb8d376fe4d24e5b916221.json"
+    data-offline-search-index-json-src="/richt/offline-search-index.80b384b62bea49cb770d77aa0e813243.json"
     data-offline-search-base-href="/"
     data-offline-search-max-results="12"
   >
@@ -122,7 +122,7 @@ bin/richt inventory validate -i examples/inventory/richt.yaml bin/richt inventor
     aria-label='Search this site…'
     autocomplete="off"
     
-    data-offline-search-index-json-src="/richt/offline-search-index.e536e48567cb8d376fe4d24e5b916221.json"
+    data-offline-search-index-json-src="/richt/offline-search-index.80b384b62bea49cb770d77aa0e813243.json"
     data-offline-search-base-href="/"
     data-offline-search-max-results="12"
   >
@@ -211,8 +211,8 @@ bin/richt inventory validate -i examples/inventory/richt.yaml bin/richt inventor
 	<header class="article-meta">
 		
 </header>
-	<p>This example illustrates merging variables, assignment ordering, selections,
-service file paths, and fictional SSH settings. It is <strong>not</strong> an execution
+	<p>This example illustrates tag service assignment, merging variables, service
+ordering, selections, service file paths, and fictional SSH settings. It is <strong>not</strong> an execution
 quickstart: <code>lanst.example.invalid</code> is a fictional address, its declared secret
 source files need not exist, and the local cloud assumes an existing libvirt
 hypervisor. Use <a href="/richt/docs/walkthroughs/vmango/">the runnable Vmango walkthrough</a>
@@ -223,10 +223,12 @@ isolated RPM/systemd installation with no hypervisor.</p>
 </span></span><span class="line"><span class="cl">bin/richt inventory show -i examples/inventory/richt.yaml
 </span></span><span class="line"><span class="cl">bin/richt inventory show -i examples/inventory/richt.yaml --tag hypervisor --service vmango
 </span></span></code></pre></div><p>These commands do not contact hosts, open templates, or read secret values.
-The <code>home</code> and <code>net</code> tags override only <code>vmango.cloud_name</code>; the shared listen
-address and libvirt URI remain. Adding both tags to one host causes an
-equal-weight conflict. Both services must be selected for a first installation;
-<code>--service vmango</code> does not implicitly select the repository service.</p>
+The <code>hypervisor</code> tag assigns both services; service definition orders 10 and 20
+run the repository before Vmango. The <code>home</code> and <code>net</code> tags override only
+<code>vmango.cloud_name</code>; the shared listen address and libvirt URI remain. Adding
+both tags to one host causes a variable conflict at the same tag order. Both
+services must be selected for a first installation; <code>--service vmango</code> does not
+implicitly select the repository service.</p>
 
 	
 </div>

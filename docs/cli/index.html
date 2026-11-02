@@ -45,7 +45,7 @@
 
 	<meta itemprop="name" content="CLI reference">
 	<meta itemprop="description" content="Commands, flags, selection, confirmation, concurrency, and exit status.">
-	<meta itemprop="wordCount" content="568">
+	<meta itemprop="wordCount" content="581">
 	<meta name="twitter:card" content="summary">
 	<meta name="twitter:title" content="CLI reference">
 	<meta name="twitter:description" content="Commands, flags, selection, confirmation, concurrency, and exit status.">
@@ -89,7 +89,7 @@
     aria-label='Search this site…'
     autocomplete="off"
     
-    data-offline-search-index-json-src="/richt/offline-search-index.e536e48567cb8d376fe4d24e5b916221.json"
+    data-offline-search-index-json-src="/richt/offline-search-index.80b384b62bea49cb770d77aa0e813243.json"
     data-offline-search-base-href="/"
     data-offline-search-max-results="12"
   >
@@ -114,7 +114,7 @@
     aria-label='Search this site…'
     autocomplete="off"
     
-    data-offline-search-index-json-src="/richt/offline-search-index.e536e48567cb8d376fe4d24e5b916221.json"
+    data-offline-search-index-json-src="/richt/offline-search-index.80b384b62bea49cb770d77aa0e813243.json"
     data-offline-search-base-href="/"
     data-offline-search-max-results="12"
   >
@@ -278,8 +278,9 @@ modify managed resources. <code>-o</code> writes the plan file as an explicit ou
 two groups intersect. An unspecified group selects everything. Matching is
 exact and case sensitive; unknown names fail. Service selection does not add
 assignments or pull in prerequisite services. Full schema validation still
-includes unselected definitions; selected hosts&rsquo; ownership and variable
-conflicts cannot be hidden by a service filter. See <a href="/richt/docs/inventory/">inventory</a>
+includes unselected definitions and unused tag assignments. Every selected host
+uses all its tags; duplicate assignments, service-order collisions, ownership
+and variable conflicts cannot be hidden by a service filter. See <a href="/richt/docs/inventory/">inventory</a>
 .</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-sh" data-lang="sh"><span class="line"><span class="cl">richt inventory show -i fleet.yaml --host app-a --tag staging --service web
 </span></span><span class="line"><span class="cl">richt diff -i fleet.yaml --host app-a --service repository --service web -o plan.json

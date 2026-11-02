@@ -45,7 +45,7 @@
 
 	<meta itemprop="name" content="Linux validation">
 	<meta itemprop="description" content="Recorded Linux acceptance results, environment, commands, and limits.">
-	<meta itemprop="wordCount" content="918">
+	<meta itemprop="wordCount" content="1798">
 	<meta name="twitter:card" content="summary">
 	<meta name="twitter:title" content="Linux validation">
 	<meta name="twitter:description" content="Recorded Linux acceptance results, environment, commands, and limits.">
@@ -89,7 +89,7 @@
     aria-label='Search this site…'
     autocomplete="off"
     
-    data-offline-search-index-json-src="/richt/offline-search-index.e536e48567cb8d376fe4d24e5b916221.json"
+    data-offline-search-index-json-src="/richt/offline-search-index.80b384b62bea49cb770d77aa0e813243.json"
     data-offline-search-base-href="/"
     data-offline-search-max-results="12"
   >
@@ -114,7 +114,7 @@
     aria-label='Search this site…'
     autocomplete="off"
     
-    data-offline-search-index-json-src="/richt/offline-search-index.e536e48567cb8d376fe4d24e5b916221.json"
+    data-offline-search-index-json-src="/richt/offline-search-index.80b384b62bea49cb770d77aa0e813243.json"
     data-offline-search-base-href="/"
     data-offline-search-max-results="12"
   >
@@ -190,6 +190,12 @@
     <li><a href="#published-rpm-and-local-systemd-lifecycle">Published RPM and local systemd lifecycle</a></li>
     <li><a href="#two-real-ssh-targets">Two real SSH targets</a></li>
     <li><a href="#cleanup-and-limits">Cleanup and limits</a></li>
+    <li><a href="#tag-assignments-and-service-order-2026-11-02">Tag assignments and service order, 2026-11-02</a>
+      <ul>
+        <li><a href="#three-host-workload">Three-host workload</a></li>
+        <li><a href="#fixture-correction-continuation-and-retained-state">Fixture correction, continuation and retained state</a></li>
+      </ul>
+    </li>
   </ul>
 </nav>
   </div>
@@ -370,6 +376,157 @@ this documentation.</p>
 deliberately excluded from this run. Their fixture-specific reload, timeout,
 changed-identity and YUM scenarios are not established by this report. This run
 also does not establish behavior on other distributions or DNF versions.</p>
+<h2 id="tag-assignments-and-service-order-2026-11-02">Tag assignments and service order, 2026-11-02</h2>
+<p>KRG-91 was verified on three independent disposable AlmaLinux 10.2 x86_64
+hosts with SELinux Enforcing, DNF 4.20.0 and systemd 257. The macOS controller
+used non-root SSH logins and explicit <code>sudo: true</code>. CRB was already enabled;
+EPEL was initially absent on the PostgreSQL host and present on the two package
+hosts. Firewalld was inactive, so no firewall changes were required.</p>
+<p>The source was revision <code>aaa56d175b1ef22e6826b131591b5820b6c5e198</code> plus the
+KRG-91 working-tree changes. Tested binary SHA-256 identities were:</p>
+<table>
+	<thead>
+			<tr>
+					<th>Binary</th>
+					<th>SHA-256</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>macOS controller</td>
+					<td><code>905855e589a6422048b39d04c0c2d53446b361458e904e857a9f21537693d191</code></td>
+			</tr>
+			<tr>
+					<td>Linux amd64</td>
+					<td><code>a5d360a89c4abe442aae009d517421aa207b17e2cf9f97d6b539d1db23bd3f61</code></td>
+			</tr>
+	</tbody>
+</table>
+<p>The updated Linux file harness passed all 17 checks, and the secret example
+passed all four groups. The updated quickstart passed create, no-op, update
+and explicit removal on Linux using the transferred binary and <code>apply -y</code>.
+Local <code>make check</code> and <code>make docs-check</code> passed; inventory validate/show smoke
+checks covered every checked-in example. Go regression tests cover inherited
+ordering, duplicate and ownership failures before service filtering, strict
+source validation, saved inputs, failure blocking and explicit continuation.</p>
+<h3 id="three-host-workload">Three-host workload</h3>
+<p>The standard-library driver <a href="https://github.com/subuk/richt/blob/main/tests/integration/tag_services.py">tag_services.py</a>
+
+generates private inventory, bare templates, a YAML secret source and saved
+plans. Run it only against explicitly authorized disposable hosts. The following
+names are illustrative; supply the authorized addresses or SSH aliases:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-sh" data-lang="sh"><span class="line"><span class="cl">make build
+</span></span><span class="line"><span class="cl">python3 tests/integration/tag_services.py --binary ./bin/richt <span class="se">\
+</span></span></span><span class="line"><span class="cl">  --work-root /tmp/richt-tag-services <span class="se">\
+</span></span></span><span class="line"><span class="cl">  --postgres-host postgres-test.example <span class="se">\
+</span></span></span><span class="line"><span class="cl">  --kubernetes-host kubernetes-test-a.example <span class="se">\
+</span></span></span><span class="line"><span class="cl">  --kubernetes-host kubernetes-test-b.example
+</span></span></code></pre></div><p>Targets need trusted host keys, noninteractive sudo, Python 3, curl, ss,
+enabled CRB, network access to the package repositories and an unused PostgreSQL
+data directory. This fixture requires inactive firewalld; prepare an equivalent
+isolated network policy separately when using a firewall. <code>--user</code> defaults to
+<code>almalinux</code>; use <code>--postgres-address</code> when the SSH name is not a database address
+reachable from the Kubernetes hosts. The fixture does not build custom RPMs.
+Kubernetes and CRI-O use their official v1.36 repositories, as described by
+<a href="https://v1-36.docs.kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/">Kubernetes</a>
+
+and <a href="https://cri-o.io/">CRI-O</a>
+; repository and RPM signature checks remain enabled.</p>
+<p>Assignments came exclusively from tags. All hosts had one shared <code>monitoring</code>
+tag assigning EPEL setup (service order 5) and node exporter (50). Kubernetes
+hosts also received repository configuration (10) and packages (30) from the
+<code>kubernetes</code> tag; the PostgreSQL host received its service (40) from the
+<code>postgresql</code> tag. Resolved services and saved tasks followed service order.
+<code>--tag monitoring</code> selected all three hosts, and <code>--service node-exporter</code>
+resolved exactly one assignment on each.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Resource</th>
+					<th>Installed version or verified state</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>PostgreSQL server/client</td>
+					<td><code>16.15-1.el10_2.x86_64</code> on the database host; client also installed on both Kubernetes hosts</td>
+			</tr>
+			<tr>
+					<td>kubeadm, kubelet, kubectl</td>
+					<td><code>1.36.6-150500.1.1.x86_64</code> on both Kubernetes hosts</td>
+			</tr>
+			<tr>
+					<td>CRI-O</td>
+					<td><code>1.36.7-150500.1.1.x86_64</code> on both Kubernetes hosts</td>
+			</tr>
+			<tr>
+					<td>node-exporter</td>
+					<td><code>1.12.1-1.el10_2.x86_64</code> on all three hosts</td>
+			</tr>
+			<tr>
+					<td>epel-release</td>
+					<td><code>10-6.el10.noarch</code> on all three hosts</td>
+			</tr>
+			<tr>
+					<td>PostgreSQL unit</td>
+					<td><code>postgresql.service</code>, active and enabled</td>
+			</tr>
+			<tr>
+					<td>Exporter unit</td>
+					<td>Managed through <code>node_exporter.service</code>, an alias of <code>prometheus-node-exporter.service</code>; active and enabled on all hosts</td>
+			</tr>
+			<tr>
+					<td>kubelet unit</td>
+					<td>Inactive and disabled on both hosts</td>
+			</tr>
+	</tbody>
+</table>
+<p>No kubeadm command was invoked, no cluster was initialized or joined, and
+CRI-O coverage establishes package installation rather than container runtime
+functionality. Each exporter returned HTTP 200 and <code>node_uname_info</code> at
+<code>http://127.0.0.1:9100/metrics</code>.</p>
+<p>PostgreSQL initialized a fresh test cluster through an owned systemd oneshot
+unit. Its effective settings were <code>listen_addresses = '0.0.0.0'</code> and
+<code>password_encryption = 'scram-sha-256'</code>; <code>ss</code> confirmed <code>0.0.0.0:5432</code>.
+The external HBA file contained only local peer authentication and
+<code>host all all 192.168.0.0/16 scram-sha-256</code>, with no earlier password bypass.
+Both Kubernetes hosts connected to the dedicated <code>richt_krg91</code> database and
+role using the correct generated password and failed password authentication
+with an incorrect one. A boolean database query verified the stored role
+password was SCRAM. The password entered through <code>secret</code>, remained in a
+root-owned mode-0600 SQL file and private executable inputs, and was excluded
+from displays and reports. External PostgreSQL config files received the
+<code>postgresql_etc_t</code> SELinux label; SELinux remained Enforcing throughout.</p>
+<h3 id="fixture-correction-continuation-and-retained-state">Fixture correction, continuation and retained state</h3>
+<p>The first saved apply completed both Kubernetes hosts but PostgreSQL startup
+failed with <code>203/EXEC</code>: the fixture initially used <code>/usr/bin/postmaster</code>, while
+the installed package provides <code>/usr/bin/postgres</code>. Inspection of the packaged
+unit identified the mismatch. A separate config-only Richt plan repaired the
+drop-in and reloaded systemd; the fixture now uses the verified path. Explicit
+apply of the original saved plan skipped successful tasks, retried PostgreSQL
+startup, bootstrapped the test role and completed monitoring. All 44 original
+tasks ended in success. No backend or saved-plan format change was needed.</p>
+<p>The driver&rsquo;s <code>--verify-existing</code> mode then passed its runtime assertions and
+saved a private final no-op plan with zero tasks on each host. This mode
+requires the original private work directory and matching target options,
+performs probes and diff without apply, and preserves the initial report and
+logs. Commands used for correction and continuation were:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-sh" data-lang="sh"><span class="line"><span class="cl">bin/richt diff -i REPAIR.yaml -o REPAIR.json
+</span></span><span class="line"><span class="cl">bin/richt apply -y REPAIR.json
+</span></span><span class="line"><span class="cl">bin/richt apply -y --parallelism <span class="m">3</span> FIRST-PLAN.json
+</span></span><span class="line"><span class="cl"><span class="c1"># Repeat the driver invocation with the same paths/targets and:</span>
+</span></span><span class="line"><span class="cl"><span class="c1"># --verify-existing</span>
+</span></span></code></pre></div><p>Retained resources include the installed packages and repositories, node
+exporter on all hosts, PostgreSQL data/test role/database, its external configs,
+private bootstrap SQL and initialization/bootstrap oneshot units. The file
+harness retained its uniquely named inputs and targets for inspection; the
+standalone secret example and quickstart removed their temporary resources.
+Private controller evidence retains inventories, secret source, executable
+plans/progress, original failure, repair and continuation logs, verification
+results and actual target identities outside the tracked repository. Restore
+the disposable hosts and choose an empty work directory before a fresh workload
+run. The custom RPM/systemd and full SSH fixture suites were not rerun; their
+inputs were updated and validated locally.</p>
 
 	
 </div>
