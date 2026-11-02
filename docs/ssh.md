@@ -9,7 +9,9 @@ identity files, SSH agent, proxy/jump settings, and known-hosts policy remain in
 effect. The controller needs OpenSSH in `PATH`; remote targets need the Linux
 utilities used by the selected resources (GNU coreutils/findutils, `getent`,
 and, when requested, DNF 4/YUM 4, systemd, or SELinux tools). No Richt daemon or
-installed Richt binary is needed on an SSH target.
+installed Richt binary is needed on an SSH target. See [Inventory](inventory.md)
+for connection declarations, [Services](services/_index.md) for resources, and
+[saved plans and apply](files.md) for the execution workflow.
 
 ```yaml
 tags:
@@ -120,7 +122,8 @@ an acceptance report. It also creates and removes a unique test user/group to
 verify ownership changes between preparation and apply. This stage needs the
 target shadow-utils commands (`useradd`, `usermod`, `groupadd`, `groupmod`,
 `userdel`, and `groupdel`). See its `--help` for target and output options. The local
-[file harness](files.md) and [service harness](services.md) remain regression
+[file harness](validation.md#file-acceptance-harness) and
+[RPM/systemd harness](validation.md#rpm-and-systemd-fixture-regression) remain regression
 checks; concurrency and persistence failures also have Go race-detector tests.
 
 ```sh

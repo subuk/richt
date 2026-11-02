@@ -77,10 +77,11 @@ Read these contracts instead of reconstructing syntax from older proposals:
 
 - [Inventory](../../../../docs/inventory.md) owns schema, references, source and
   template path resolution, merge, selection, and resource ownership.
-- [Files and saved plans](../../../../docs/files.md) owns templates, file
-  attributes/SELinux, confirmation, executable JSON, locking, and continuation.
-- [Services](../../../../docs/services.md) owns exact RPM requests, systemd
-  capabilities, lifecycle branches, reactions, unit/drop-in handling, and removal.
+- [Services](../../../../docs/services/_index.md) owns composition, lifecycle
+  order, reactions, and component references: exact RPM requests, file templates
+  and attributes/SELinux, systemd capabilities, unit/drop-in handling, and removal.
+- [Saved plans and apply](../../../../docs/files.md) owns preparation,
+  confirmation, executable JSON, locking, and continuation.
 - [Secrets](../../../../docs/secrets.md) owns YAML source values, template lookup,
   sensitivity, safe diagnostics, and secret-bearing plan handling.
 
@@ -304,6 +305,14 @@ RPMs, systemd, SSH/sudo, secrets, and failure/continuation. The accepted final
 validation scope used published RPMs only; custom fixture RPM suites were
 excluded by explicit scope decision. The report's coverage limits describe
 what was verified, not outstanding first-version tasks.
+
+Inventory and Services are the central documentation concepts. Inventory
+describes hosts, tags, assignments, variables, and selection; Services explains
+reusable component composition, execution order, and reactions before the
+implementation references. RPM and systemd are current implementations of
+binary and process components. Configs currently use templated files without a
+type discriminator. New implementations extend their component reference lists;
+the documentation must not advertise them before they are supported.
 
 For subsequent changes, keep help, examples, and guides synchronized. Ship
 reproducible examples, short usage/verification instructions, and relevant tests

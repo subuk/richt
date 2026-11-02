@@ -98,7 +98,7 @@ To remove this walkthrough's remaining inputs and plans after reviewing them:
 rm -rf -- "$demo_dir"
 ```
 
-Continue with [inventory rules](inventory.md), the [ready-package vmango
-example](../examples/vmango/README.md), [SSH](ssh.md), or the [two-source secret
-example](../examples/secrets/README.md). To see a partial failure and retry only
+Continue with [Inventory](inventory.md), [Services](services/_index.md), the
+[ready-package vmango example](../examples/vmango/README.md), [SSH](ssh.md), or
+the [two-source secret example](../examples/secrets/README.md). To see a partial failure and retry only
 unfinished work, use the [continuation walkthrough](continuation.md).

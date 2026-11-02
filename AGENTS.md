@@ -30,14 +30,17 @@ output in English.
 - Read [inventory rules](docs/inventory.md) for schema, variable merging,
   selection, resource ownership, and path resolution. Inventory inspection must
   not contact hosts, open templates, or fetch secrets.
-- Read [files and saved plans](docs/files.md) before changing preparation,
+- Read [saved plans and apply](docs/files.md) before changing preparation,
   execution, persistence, confirmation, or sensitive output. Saved JSON plans
   contain executable prepared inputs and progress. Apply uses those inputs
   without rereading inventory/templates or recomputing changes. Explicit
   continuation skips successful tasks and retries unfinished tasks; a failure
   blocks later tasks on that host. Preserve atomic progress writes and locking.
-- Read [service behavior](docs/services.md) before changing package/process
-  ordering, reactions, removal, timeouts, or reload capability checks. Plans fix
+- Read [services](docs/services/_index.md) for composition and the component
+  references, including [files and templates](docs/services/configs/files.md).
+  Read [lifecycle](docs/services/lifecycle.md) and
+  [reactions](docs/services/reactions.md) before changing package/process
+  ordering, removal, timeouts, or reload capability checks. Plans fix
   package requests, while target DNF resolves repository transactions at apply.
 - Keep schema, examples, guides, and observable CLI behavior consistent when a
   task intentionally changes a contract. Do not silently introduce automatic

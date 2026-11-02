@@ -1,10 +1,14 @@
 # Richt
 
-Richt is a standalone Go CLI that prepares, displays, and explicitly applies
-executable Linux host configuration plans. YAML inventory assigns reusable
-services containing RPM packages, templated files, and systemd processes through
-host tags. Tags merge host variables by order; service definitions set execution
-order. Local and SSH execution support explicit
+Richt is a standalone Go CLI for Linux host configuration. An
+[inventory](docs/inventory.md) describes hosts, tags, variables, and service
+assignments. A [service](docs/services/_index.md) is a reusable unit made of
+named binaries, configs, and processes in any nonempty combination. Tags assign
+service target states to hosts; service definitions set execution order.
+
+Inspect the inventory, prepare changes with `diff`, review the executable plan,
+and explicitly `apply` it. Current backends provide RPM packages, templated
+files, and systemd processes over local or SSH transport, with explicit
 noninteractive sudo, bounded host concurrency, and local YAML secret sources.
 
 ## Start here
@@ -52,9 +56,11 @@ autosave, automatic retry, rollback, or run history.
 
 The [documentation index](docs/_index.md) links the complete first-version guide:
 
-- [CLI commands and flags](docs/cli.md), [inventory schema and selection](docs/inventory.md).
-- [Files and saved plans](docs/files.md), [manual continuation](docs/continuation.md).
-- [RPM/systemd lifecycle and removal](docs/services.md), [SSH/sudo and concurrency](docs/ssh.md).
+- [Inventory](docs/inventory.md): hosts, tags, assignments, variables, and selection.
+- [Services](docs/services/_index.md): [binaries](docs/services/binaries/_index.md),
+  [configs](docs/services/configs/_index.md), and [processes](docs/services/processes/_index.md).
+- [Saved plans and apply](docs/files.md), [manual continuation](docs/continuation.md).
+- [CLI commands and flags](docs/cli.md), [SSH/sudo and concurrency](docs/ssh.md).
 - [Secrets and sensitive output](docs/secrets.md), [limitations](docs/limitations.md).
 - [Examples](docs/examples.md): [ready vmango RPMs](examples/vmango/README.md),
   [two YAML secret sources](examples/secrets/README.md), and

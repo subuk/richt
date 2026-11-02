@@ -1,7 +1,13 @@
 {{- $href := .Destination -}}
 {{- $url := urls.Parse $href -}}
 {{- if and (not $url.IsAbs) (not (hasPrefix $href "#")) (not (hasPrefix $href "/")) -}}
-  {{- $sourceDir := .Page.Params.sourceDir | default "docs" -}}
+  {{- $sourceDir := "docs" -}}
+  {{- with .Page.File -}}
+    {{- $sourceDir = .Dir -}}
+  {{- end -}}
+  {{- with .Page.Params.sourceDir -}}
+    {{- $sourceDir = . -}}
+  {{- end -}}
   {{- $source := path.Clean (path.Join $sourceDir $url.Path) -}}
   {{- if and (hasPrefix $source "examples/") (eq (path.Base $source) "README.md") -}}
     {{- $href = printf "docs/walkthroughs/%s/" (path.Base (path.Dir $source)) | relURL -}}

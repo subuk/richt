@@ -263,3 +263,74 @@ results and actual target identities outside the tracked repository. Restore
 the disposable hosts and choose an empty work directory before a fresh workload
 run. The custom RPM/systemd and full SSH fixture suites were not rerun; their
 inputs were updated and validated locally.
+
+## File acceptance harness
+
+Run local unit and CLI checks with `go test ./...`. On an authorized disposable
+Linux machine with SELinux Enforcing, run the file acceptance suite as root:
+
+```sh
+python3 tests/integration/files.py --binary ./bin/richt --work-root /root --target-root /var/lib
+```
+
+The suite allocates unique test directories beneath the specified existing
+roots and removes only those directories afterwards. `--keep` retains them for
+inspection. It verifies create/update/no changes/absent, ownership/mode/SELinux,
+frozen saved inputs, inode preservation, missing owner/group errors, ordinary
+symlink writes, partial progress and continuation, sensitive display, actual
+terminal confirmation, and concurrent apply locking. It does not install
+packages or manage services.
+
+All 17 checks passed on 2026-11-01 on a disposable AlmaLinux 10.2 x86_64 host
+with SELinux Enforcing. This includes two independent YAML sources, multiline
+secret bytes, private plan permissions, continuation after deleting sources,
+requested target mode and SELinux label, and explicit sensitivity when replacing
+old secret content. The suite removes its temporary directories after completion.
+The later 2026-11-02 run and its retained directories are recorded above.
+
+## RPM and systemd fixture regression
+
+The following harness is a separate developer regression tool. Its custom RPM
+build prerequisites are not required by the ready-vmango walkthrough or current
+package acceptance.
+
+Use a disposable AlmaLinux machine with root privileges. The fixture only
+manages resources named `richt-*`; the harness deliberately installs/removes
+its test package and changes its test units. Do not run it on a user host.
+
+```sh
+dnf install -y rpm-build createrepo_c python3
+# Build Richt on the target, or copy a Linux binary built on another machine:
+# CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o richt .
+python3 examples/rpm-systemd/verify.py ./richt /root/richt-service-test
+```
+
+The harness builds real versions `1.0-1` and `2.0-1` of a minimal noarch RPM,
+creates a file repository, and runs the CLI against it. It checks first install
+with a previously absent repo config, exact update/downgrade, no-op diff,
+unversioned policy, merged reactions, no extra restart after start, independent
+enablement and stopped state, multiple processes with `after`, command failure,
+a shared command/wait timeout, unsupported reload, persisted process resume,
+YUM 4 exact install/removal, and complete declared-resource removal. It also
+checks initial secret rendering and secret rotation, actual reload reactions,
+redacted file display, and frozen apply after deleting the secret source.
+The recorded fixture run passed all 33 checks on 2026-11-01 on AlmaLinux 10.2
+x86_64 with DNF 4.20.0, YUM 4 compatibility, systemd 257, and SELinux Enforcing.
+This is evidence for that fixture suite, not a verification claim for the
+ready-vmango example. Plans, displayed diffs, apply output,
+and `acceptance.json` remain in the work directory. Application event traces
+are deliberately retained. Fixture scripts require only standard Python and
+shell facilities in addition to the listed RPM build tools.
+
+For a manual walkthrough:
+
+```sh
+sh examples/rpm-systemd/build-repository.sh
+./richt diff -i examples/rpm-systemd/inventory.yaml -o /root/demo-plan.json
+./richt apply -y /root/demo-plan.json
+./richt diff -i examples/rpm-systemd/inventory.yaml
+```
+
+Change `version` between `0:1.0-1.noarch` and `0:2.0-1.noarch`, or change the
+config inline content, to inspect the resulting exact package and process
+branches. Set the demo assignment to `absent` to remove it.

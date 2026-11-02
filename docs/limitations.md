@@ -14,8 +14,8 @@ URL downloads, and external secret stores are unsupported.
 
 ## Executable plans are prepared inputs
 
-A saved plan fixes selected hosts, explicit connection inputs, task order,
-operations, file bytes/patches/attributes, package requests, and allowed process
+A [saved plan](files.md) fixes selected hosts, explicit connection inputs,
+task order, operations, file bytes/patches/attributes, package requests, and allowed process
 branches. Apply does not reread inventory/templates/secrets, compute a new diff,
 or check for drift. A file changed by another actor after diff can be overwritten
 by the prepared write. Completed tasks are skipped without rechecking them on
@@ -54,7 +54,8 @@ restart. Services follow service-definition order; process `after` works only in
 one service. There is no cross-service dependency graph or automatic dependency
 selection.
 
-`state: absent` removes explicitly owned resources in the documented order.
+`state: absent` removes explicitly owned resources in the
+[service lifecycle order](services/lifecycle.md).
 Deleting an assignment alone does not remove anything. DNF can remove dependent
 packages and RPM can retain `.rpmsave` files. Richt does not purge application
 data, state directories, unrelated files, or `.rpmsave`. It does not validate an

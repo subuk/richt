@@ -53,8 +53,8 @@ during execution. Owner/group names are resolved again on the target. SSH uses
 the system client's current configuration, including an alias's current address.
 The saved explicit connection inputs remain fixed. DNF resolves dependencies
 and repository transactions when its prepared package request executes. These
-are the documented boundaries of frozen inputs; see [files and saved
-plans](files.md), [services](services.md), and [SSH](ssh.md).
+are the documented boundaries of frozen inputs; see [saved plans and apply](files.md),
+[service lifecycle](services/lifecycle.md), and [SSH](ssh.md).
 
 ## Confirmation and concurrency
 

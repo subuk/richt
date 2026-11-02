@@ -24,6 +24,6 @@ The containing directory, plan and lock are retained. Use
 [the continuation walkthrough](../continuation/README.md) for a repeatable
 failure that demonstrates saved progress and manual resume.
 
-See [files and saved plans](../../docs/files.md) for frozen inputs, confirmation,
+See [saved plans and apply](../../docs/files.md) for frozen inputs, confirmation,
 locking, attributes and sensitive output, and the repository acceptance report
 for executed validation results.

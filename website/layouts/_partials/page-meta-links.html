@@ -5,7 +5,7 @@
   {{- if eq .Path "/docs/walkthroughs" -}}
     {{- $source = "website/content/docs/walkthroughs/_index.md" -}}
   {{- else if .File -}}
-    {{- $source = printf "docs/%s" (path.Base .File.Filename) -}}
+    {{- $source = .File.Path -}}
   {{- end -}}
 {{- end -}}
 <div class="td-page-meta ms-2 pb-1 pt-2 mb-0">

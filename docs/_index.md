@@ -4,32 +4,38 @@ description: "Prepare, review, and explicitly apply Linux host configuration wit
 weight: 10
 ---
 
-Richt is a standalone Go CLI for executable host configuration plans. Describe
-hosts and reusable services in YAML, inspect the resolved inventory, prepare
-changes against the targets, then review and explicitly apply them. Services
-combine RPM packages, templated files, and systemd processes. Config-only,
-package-only, and process-only services are also supported.
+Richt is a standalone Go CLI for Linux host configuration. Its two core
+concepts are [Inventory](inventory.md) and [Services](services/_index.md).
+Inventory describes hosts, tags, variables, and assignments. A service groups
+named binaries, configs, and processes into a reusable unit; any nonempty
+combination is valid. Tags assign a service's target state to hosts, while the
+service definition sets execution order.
 
-Start with the [config-only quickstart](quickstart.md), then use
-[installation and platform requirements](installation.md) and the
-[CLI reference](cli.md) for your environment. The [examples](examples.md) include
-ready-package vmango, SSH, local secrets, and deliberate failure/continuation
-scenarios. [Validation](validation.md) separates recorded Linux acceptance from
-illustrative configurations.
+Inspect the resolved inventory without contacting hosts. Then use `diff` to
+prepare changes against the targets, review the executable plan, and explicitly
+`apply` it. The [config-only quickstart](quickstart.md) walks through that flow
+without root privileges. Use [installation and platform requirements](installation.md)
+and the [CLI reference](cli.md) for your environment. The [examples](examples.md)
+include ready-package vmango, SSH, local secrets, and failure/continuation.
+[Validation](validation.md) records Linux acceptance and its coverage limits.
 
-The focused contracts are:
+The focused guides are:
 
-- [Inventory](inventory.md): strict YAML, tag assignments and variable order, paths, ordering,
-  ownership, and filters.
-- [Files and saved plans](files.md): templates, attributes, SELinux, confirmation,
-  executable JSON, and locking.
-- [RPM and systemd](services.md): exact versions, reactions, timeouts, unit files,
-  and removal.
-- [SSH and sudo](ssh.md): client configuration, authentication, privileges, and
-  parallel hosts.
-- [Secrets](secrets.md): source lookup, sensitive display, and real saved bytes.
+- [Inventory](inventory.md): strict YAML, tag assignments and variable order,
+  paths, service order, resource ownership, and selection.
+- [Services](services/_index.md): composition, [lifecycle](services/lifecycle.md),
+  and [change reactions](services/reactions.md).
+- [Binaries](services/binaries/_index.md), [configs](services/configs/_index.md),
+  and [processes](services/processes/_index.md): component concepts and the
+  current [RPM](services/binaries/rpm.md), [file](services/configs/files.md),
+  and [systemd](services/processes/systemd.md) backends.
+- [Saved plans and apply](files.md): frozen executable inputs, review,
+  confirmation, protected JSON, and locking.
 - [Continuation](continuation.md): task progress, partial failure, and explicit
   retry using the same plan.
+- [SSH and sudo](ssh.md): client configuration, authentication, privileges,
+  and parallel hosts.
+- [Secrets](secrets.md): source lookup, sensitive display, and real saved bytes.
 
 Read [limitations](limitations.md) before using a saved plan as an operational
 artifact. Plans contain prepared executable inputs, potentially including

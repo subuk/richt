@@ -18,7 +18,7 @@ const search = lunr(function () {
   this.field('body');
   index.forEach(page => this.add(page));
 });
-for (const term of ['inventory', 'systemd', 'secret', 'continuation']) {
+for (const term of ['inventory', 'services', 'reload', 'systemd', 'secret', 'continuation']) {
   assert(search.search(term).length, `Local search has no results for ${term}`);
 }
 assert(index.some(page => JSON.stringify(page).includes('/docs/walkthroughs/vmango/')), 'Source-rendered walkthrough missing from search');
@@ -37,4 +37,27 @@ for (const file of htmlFiles) {
 const walkthrough = fs.readFileSync(path.join(output, 'docs/walkthroughs/vmango/index.html'), 'utf8');
 assert(walkthrough.includes('href="#exact-upgrade-downgrade-and-config-reaction"'), 'Walkthrough table of contents missing');
 assert(!walkthrough.includes('<h1 id="vmango-rpm-and-systemd-walkthrough"'), 'Source README title duplicated');
+
+// The service section must remain navigable and searchable after splitting the
+// original guide, including links back to its nested Markdown source files.
+const servicePages = [
+  ['services/', 'services/_index.md'],
+  ['services/lifecycle/', 'services/lifecycle.md'],
+  ['services/reactions/', 'services/reactions.md'],
+  ['services/binaries/', 'services/binaries/_index.md'],
+  ['services/binaries/rpm/', 'services/binaries/rpm.md'],
+  ['services/configs/', 'services/configs/_index.md'],
+  ['services/configs/files/', 'services/configs/files.md'],
+  ['services/processes/', 'services/processes/_index.md'],
+  ['services/processes/systemd/', 'services/processes/systemd.md'],
+];
+for (const [route, source] of servicePages) {
+  const page = fs.readFileSync(path.join(output, 'docs', route, 'index.html'), 'utf8');
+  assert(index.some(entry => entry.ref.endsWith(`/docs/${route}`)), `Service page missing from search: ${route}`);
+  assert(page.includes(`/blob/main/docs/${source}`), `Incorrect nested source link: ${route}`);
+}
+const services = fs.readFileSync(path.join(output, 'docs/services/index.html'), 'utf8');
+for (const fragment of ['package-requests', 'process-lifecycle', 'owned-units-and-drop-ins', 'removal-and-continuation', 'ready-package-walkthrough', 'developer-fixture-regression-suite']) {
+  assert(services.includes(`id="${fragment}"`), `Original service guide fragment lost: ${fragment}`);
+}
 console.log(`Checked local search (${index.length} pages), source walkthroughs, and ${htmlFiles.length} HTML pages`);

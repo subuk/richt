@@ -35,13 +35,18 @@ referenced templates or secret source files. Inspecting successfully does not
 prove target privileges, repository availability, application configuration, or
 reload capability.
 
+Use [Inventory](inventory.md) for assignments and selection, and
+[Services](services/_index.md) for component composition and lifecycle.
 For a persistent reviewed run, use `diff -o` followed by `apply` on the JSON
 path. For a one-off run with no saved progress, `apply -i` prepares and applies
-in memory. See [CLI](cli.md) and [continuation](continuation.md).
+in memory. See [saved plans and apply](files.md), [CLI](cli.md), and
+[continuation](continuation.md).
 
 The [RPM/systemd fixture harness](../examples/rpm-systemd/verify.py) and
 [SSH harness](../tests/integration/ssh.py) remain developer regression tools.
-They create custom fixture RPMs and require their documented isolated setup;
+They create custom fixture RPMs and require the isolated setup documented in
+[fixture regression](validation.md#rpm-and-systemd-fixture-regression) and
+[SSH acceptance](ssh.md#developer-fixture-acceptance);
 they are separate from the ready-vmango walkthrough and current package
 acceptance. Do not install build tools or create a fixture repository to follow
 the vmango example.

@@ -33,10 +33,14 @@ binary automatically.
 
 ## Content and checks
 
-Canonical guides stay in `../docs/*.md`, mounted at `/docs/`. The landing page
-reads its YAML example directly from `../examples/files/inventory.yaml`.
-Walkthrough wrappers render `../examples/*/README.md` directly through a
-shortcode; their prose is not copied here. The link render hook maps repository
+Canonical guides stay in `../docs/`, recursively mounted at `/docs/`. Section
+indexes and nested guides define the documentation hierarchy; services have
+their own section for the service model, binary, config, and process components,
+and lifecycle behavior. The landing page introduces inventory and services,
+then reads both YAML examples directly from `../examples/files/inventory.yaml`
+and `../examples/files/service.yaml`. Keep these source inclusions rather than
+copying YAML into the template. Walkthrough wrappers render
+`../examples/*/README.md` directly through a shortcode; their prose is not copied here. The link render hook maps repository
 Markdown links to local documentation/walkthrough routes. Other example files
 are mounted as downloads, with an explicit allowlist in `hugo.yaml` so stray
 local plans or secret files cannot be included automatically. Add intended new

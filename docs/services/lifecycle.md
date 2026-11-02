@@ -1,0 +1,100 @@
+---
+title: "Lifecycle and ordering"
+description: "Understand service phases, process dependencies, removal, and failure."
+weight: 10
+---
+
+Each assigned service runs in ascending service-definition `order`, including
+`absent` assignments. Orders must be unique among effective services on each
+host; services never combined on a host may share an order. Explicit zero is
+valid. Tag `order` separately controls variable merging and does not order
+service execution. See [inventory assignments](../inventory.md#schema-and-file-references).
+
+Services remain sequential within a host. Different hosts may run concurrently;
+see [SSH and parallel apply](../ssh.md). There are no cross-service dependency
+links, automatic dependency inclusion, or reverse service deletion graph.
+Selecting a service does not select its prerequisites.
+
+## Present services
+
+A `present` assignment prepares changes in these phases:
+
+1. **Binaries:** apply changed package requests.
+2. **Configs:** write changed configs, owned units, and drop-ins with their
+   prepared contents and attributes.
+3. **Daemon reload, when required:** make changed systemd definitions visible.
+4. **Processes:** apply independent enablement and lifecycle tasks in process
+   dependency order. For a present process, its enablement task precedes its
+   lifecycle task.
+
+Only changed resources need write or package tasks. Lifecycle tasks contain
+prepared branches, selected using runtime state during apply; a reaction can
+therefore become a start when the process is stopped. See [change
+reactions](reactions.md) for the branch table.
+
+`after: [other-process]` orders processes within the same service. Referenced
+processes execute first; independent processes use deterministic name ordering.
+Unknown references, duplicates, and dependency cycles fail inventory validation.
+`after` orders Richt's tasks; it does not create systemd unit dependencies or
+check application readiness.
+
+```yaml
+processes:
+  api:
+    type: systemd
+    unit: example-api.service
+  worker:
+    type: systemd
+    unit: example-worker.service
+    after: [api]
+```
+
+Changes to owned units/drop-ins schedule daemon reload and a restart reaction
+for their process. Changed ordinary configs under `/etc/systemd/system/`,
+`/usr/lib/systemd/system/`, or `/run/systemd/system/` also schedule daemon reload.
+A changed package request in a service with processes schedules it too, allowing
+new package units to be discovered without relying on RPM scriptlets.
+Daemon reload precedes process tasks for present services. See
+[systemd definitions](processes/systemd.md#owned-units-and-drop-ins) for file
+paths and reload capability verification.
+
+## Absent services
+
+Request removal through the tag assignment:
+
+```yaml
+tags:
+  example:
+    services:
+      app: {state: absent}
+```
+
+Within that service, Richt stops and verifies each process in reverse `after`
+order, then disables it. These process tasks precede removal of owned units,
+drop-ins, and declared configs. Declared packages are removed last, followed by
+any required daemon reload. An already missing unit is accepted; an external
+unit that remains installed is still stopped and disabled.
+
+Removal still follows ascending service order across services. An assignment
+removed from inventory is no longer managed; it does not imply `absent`.
+Absent services do not open templates or secret sources.
+
+Richt removes explicitly declared files and requests package removal. The
+[RPM reference](binaries/rpm.md#removal) explains dependency removal and package
+config handling. Application data, state directories, unrelated files, and
+`.rpmsave` files are not purged.
+
+## Failure and continuation
+
+A failed task blocks later tasks on its host, including later services. Other
+hosts continue. Lifecycle commands succeed only after their result verification;
+[systemd timeouts](processes/systemd.md#states-enablement-and-timeouts) include
+both command and waiting time. There are no automatic retries or rollback.
+
+With a saved plan, earlier successes remain recorded and pending reactions
+remain executable. Explicitly applying the same file again skips successful
+tasks and retries unfinished ones, without rewriting completed configs or
+rerendering templates. Interrupted tasks may already have taken effect and can
+execute again. Without a saved file, progress exists only for that invocation.
+See [saved plans and apply](../files.md) for persistence and locking and
+[manual continuation](../continuation.md) for the full failure contract.

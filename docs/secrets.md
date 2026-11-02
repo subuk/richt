@@ -7,7 +7,10 @@ weight: 80
 Secret values are fetched during plan preparation on the machine running
 `diff` or `apply -i`. Inventory inspection does not open secret sources, and
 applying a saved plan never fetches them again. Local files, SSH/sudo files,
-systemd units, and drop-ins use the same template and sensitivity rules.
+systemd units, and drop-ins use the same template and sensitivity rules. See
+[file configs](services/configs/files.md) for templates and attributes,
+[reactions](services/reactions.md) for change-triggered process behavior, and
+[saved plans and apply](files.md) for progress and locking.
 
 ## Sources and lookup
 

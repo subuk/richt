@@ -6,7 +6,9 @@ description: Validate Richt file, SELinux, RPM, and systemd behavior using its e
 # Richt Linux validation
 
 Read [AGENTS.md](../../../AGENTS.md), then the affected contract in
-[files](../../../docs/files.md) or [services](../../../docs/services.md).
+[files](../../../docs/services/configs/files.md) or
+[services](../../../docs/services/_index.md), and the
+[validation harness instructions](../../../docs/validation.md).
 Prefer extending the checked-in harnesses when new behavior needs coverage;
 avoid duplicating their acceptance workflows.
 This skill does not grant host access or authority to install packages.

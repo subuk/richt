@@ -4,6 +4,11 @@ description: "Define services and hosts, merge tag variables, resolve paths, and
 weight: 40
 ---
 
+Inventory describes hosts and their connection settings, tags, variables, and
+assignments of reusable [services](services/_index.md). Tags select each
+service's target state; service definitions contain its named components and
+execution order.
+
 Validate and view the supplied two-host example without network access:
 
 ```sh
@@ -84,66 +89,39 @@ assignment does not request resource removal: use explicit `state: absent`.
 
 ## Components
 
+A service definition groups named binary, config, and process components. This
+bare definition can be stored in the `services/app.yaml` referenced above:
+
 ```yaml
 binaries:
   package:
     type: rpm
-    manager: dnf              # dnf (default) or yum
     package: app
-    version: "0:1.2-3.noarch" # optional exact epoch:version-release.arch
 configs:
   main:
     path: /etc/app.conf
-    owner: root
-    group: root
     mode: "0644"
-    selinux: system_u:object_r:etc_t:s0
-    sensitive: false
-    template:
-      file: templates/app.gotmpl
+    template: {file: templates/app.gotmpl}
 processes:
   web:
     type: systemd
     unit: app.service
-    state: running           # running (default) or stopped
-    enabled: true            # optional
-    timeout: 5s              # positive Go duration; default 5s
     restart_on: [binary.package]
     reload_on: [config.main]
-    after: []
 ```
 
-Configuration targets must be absolute file paths. `mode` is an octal string.
-`template` requires exactly one of `file` or `inline`; an empty inline string is
-valid. Templates receive the complete merged host variables. Missing variables,
-file permissions, actual owners/groups and SELinux application are checked when
-preparing or executing a plan, beyond inventory-only validation.
+The example assumes an existing unit with reload support. Binary-only,
+config-only, and process-only definitions are equally valid. Templates receive
+the host's complete merged variables. Inventory inspection validates structure
+and resolves paths; rendering, target ownership and permissions, and backend
+capabilities are checked during preparation or execution.
 
-`restart_on` and `reload_on` reference `binary.<name>` or `config.<name>` in the
-same service. `after` references process names in the same service. Unknown,
-duplicate or cross-service references and cycles are errors. Processes use
-systemd `.service` unit names. Reload support depends on host capabilities and
-is checked during plan preparation.
-
-An optional process `unit_file` and named `overrides` use the same fields as
-configs. Their target paths may be omitted and are then derived as shown:
-
-```yaml
-processes:
-  web:
-    type: systemd
-    unit: app.service
-    unit_file:
-      template: {file: templates/app.service.gotmpl}
-    overrides:
-      10-runtime.conf:
-        template: {inline: "[Service]\nRestart=always\n"}
-```
-
-The unit target is `/etc/systemd/system/app.service`; the override target is
-`/etc/systemd/system/app.service.d/10-runtime.conf`. Explicit paths must match
-these locations. Override names are plain `.conf` filenames. Template paths
-still use the declaring service file as their base.
+[Services](services/_index.md) owns component behavior and the present/absent
+lifecycle. See [RPM binaries](services/binaries/rpm.md) for package requests,
+[file configs](services/configs/files.md) for templates, attributes, sensitivity,
+and SELinux, and [systemd processes](services/processes/systemd.md) for units,
+drop-ins, enablement, and timeouts. [Reactions](services/reactions.md) defines
+`restart_on`, `reload_on`, and process `after` references and their validation.
 
 ## Variable merging
 

@@ -7,7 +7,7 @@ languages:
   en:
     label: English
     params:
-      description: Prepare, review, and apply Linux host configuration.
+      description: Define hosts, assign services through tags, and review and apply Linux configuration plans.
 menu:
   main:
     - name: Documentation

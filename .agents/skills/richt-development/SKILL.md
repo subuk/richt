@@ -22,12 +22,16 @@ Read the guide that owns the changed contract:
 
 - [Inventory](../../../docs/inventory.md): strict YAML, assignments, variables,
   selectors, references, paths, and resource ownership.
-- [Files and saved plans](../../../docs/files.md): preparation, executable JSON,
+- [Saved plans and apply](../../../docs/files.md): preparation, executable JSON,
   progress, continuation, locking, confirmation, and sensitive output.
 - [SSH](../../../docs/ssh.md): system-client configuration, noninteractive
   authentication, sudo, target observations, and parallel host execution.
-- [Services](../../../docs/services.md): RPM requests, process reactions,
-  dependency order, enablement, removal, and shared command/wait timeouts.
+- [Services](../../../docs/services/_index.md): composition,
+  [lifecycle](../../../docs/services/lifecycle.md),
+  [reactions](../../../docs/services/reactions.md), and component references for
+  [RPM](../../../docs/services/binaries/rpm.md),
+  [files](../../../docs/services/configs/files.md), and
+  [systemd](../../../docs/services/processes/systemd.md).
 - [Secrets](../../../docs/secrets.md): YAML source lookup, template sensitivity,
   safe diagnostics, and protection of prepared secret-bearing files.
 
