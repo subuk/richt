@@ -1,18 +1,27 @@
+tags:
+  example:
+    services:
+      first: {state: present}
+      second: {state: present}
+      third: {state: present}
 # README.md allocates a fresh directory and substitutes this target prefix.
 services:
   first:
+    order: 10
     configs:
       main:
         path: /var/tmp/richt-continuation-example/first.conf
         mode: "0644"
         template: {inline: "step=first\n"}
   second:
+    order: 20
     configs:
       main:
         path: /var/tmp/richt-continuation-example/blocked/second.conf
         mode: "0644"
         template: {inline: "step=second\n"}
   third:
+    order: 30
     configs:
       main:
         path: /var/tmp/richt-continuation-example/third.conf
@@ -20,8 +29,5 @@ services:
         template: {inline: "step=third\n"}
 hosts:
   - name: localhost
+    tags: [example]
     transport: {type: local}
-    services:
-      - {name: first, order: 10}
-      - {name: second, order: 20}
-      - {name: third, order: 30}

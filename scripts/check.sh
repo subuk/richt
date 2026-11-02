@@ -14,6 +14,10 @@ trap 'rm -rf "$check_dir"' EXIT HUP INT TERM
 "$GO" build -trimpath -o "$check_dir/richt" .
 "$check_dir/richt" --help
 "$check_dir/richt" --version
+for inventory in examples/*/inventory.yaml examples/inventory/richt.yaml; do
+    "$check_dir/richt" inventory validate -i "$inventory"
+    "$check_dir/richt" inventory show -i "$inventory" >"$check_dir/inventory.json"
+done
 if "$check_dir/richt" unknown-command >"$check_dir/stdout" 2>"$check_dir/stderr"; then
     printf 'Unknown command unexpectedly succeeded\n' >&2
     exit 1

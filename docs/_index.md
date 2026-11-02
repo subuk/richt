@@ -19,7 +19,7 @@ illustrative configurations.
 
 The focused contracts are:
 
-- [Inventory](inventory.md): strict YAML, weighted variables, paths, ordering,
+- [Inventory](inventory.md): strict YAML, tag assignments and variable order, paths, ordering,
   ownership, and filters.
 - [Files and saved plans](files.md): templates, attributes, SELinux, confirmation,
   executable JSON, and locking.

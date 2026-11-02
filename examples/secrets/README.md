@@ -4,7 +4,8 @@ All values in this directory are fictional. The same `credential.password`
 key exists in `default.yaml` and `production.yaml`; the template selects each
 source independently and also formats a value and uses a multiline value.
 Calling `secret` marks the file sensitive even though inventory specifies
-`sensitive: false`. The target mode is explicitly 0600.
+`sensitive: false`. The target mode is explicitly 0600. The `example` tag assigns
+the application; its execution order belongs to the service definition.
 
 Run the isolated verifier from the repository root:
 

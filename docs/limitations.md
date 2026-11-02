@@ -50,7 +50,7 @@ A failed host blocks its remaining tasks while other hosts continue. See
 Process command and verification polling share a positive duration, default
 **5s**. Timeouts fail the task; an accepted systemd job may continue after the
 client times out. Unsupported reload is an error and never falls back to
-restart. Services follow assignment order; process `after` works only inside
+restart. Services follow service-definition order; process `after` works only inside
 one service. There is no cross-service dependency graph or automatic dependency
 selection.
 

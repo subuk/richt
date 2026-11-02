@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/subuk/richt/inventory"
 	"github.com/subuk/richt/plan"
 )
 
@@ -20,7 +22,7 @@ func testInventory(t *testing.T) (string, string) {
 	}
 	target := filepath.Join(dir, "target")
 	path := filepath.Join(dir, "inventory.yaml")
-	text := fmt.Sprintf("services:\n  example:\n    configs:\n      main:\n        path: %s\n        template:\n          inline: 'example content'\nhosts:\n  - name: local\n    transport:\n      type: local\n    services:\n      - name: example\n", target)
+	text := fmt.Sprintf("tags:\n  example:\n    services: {example: {}}\nservices:\n  example:\n    order: 10\n    configs:\n      main:\n        path: %s\n        template:\n          inline: 'example content'\nhosts:\n  - name: local\n    tags: [example]\n    transport:\n      type: local\n", target)
 	if err := os.WriteFile(path, []byte(text), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -71,6 +73,101 @@ func TestCLIInventoryAndSavedApply(t *testing.T) {
 	code, out, err = run(t, "apply", "-y", "--parallelism", "1", saved)
 	if code != 0 || !strings.Contains(out, "previously completed") {
 		t.Fatalf("resume: %d %s %s", code, out, err)
+	}
+}
+
+func TestCLITagSelectorsAndFrozenOrderedContinuation(t *testing.T) {
+	dir := t.TempDir()
+	first, blocked, last := filepath.Join(dir, "first"), filepath.Join(dir, "blocked"), filepath.Join(dir, "last")
+	filename, saved := filepath.Join(dir, "inventory.yaml"), filepath.Join(dir, "plan.json")
+	source := fmt.Sprintf(`tags:
+  shared:
+    services: {last: {}, first: {}}
+  worker:
+    services: {second: {}}
+services:
+  last:
+    order: 30
+    configs:
+      main: {path: %q, template: {inline: last}}
+  second:
+    order: 20
+    configs:
+      main: {path: %q, template: {inline: second}}
+  first:
+    order: 10
+    configs:
+      main: {path: %q, template: {inline: first}}
+hosts:
+  - {name: a, tags: [worker, shared], transport: {type: local}}
+  - {name: b, tags: [shared], transport: {type: local}}
+`, last, filepath.Join(blocked, "second"), first)
+	if err := os.WriteFile(filename, []byte(source), 0600); err != nil {
+		t.Fatal(err)
+	}
+	code, stdout, stderr := run(t, "inventory", "show", "-i", filename, "--host", "a", "--tag", "shared", "--service", "second")
+	var selected inventory.Resolved
+	if code != 0 || json.Unmarshal([]byte(stdout), &selected) != nil {
+		t.Fatalf("selected inventory: %d %s %s", code, stdout, stderr)
+	}
+	if len(selected.Hosts) != 2 || len(selected.Hosts[0].Services) != 1 || selected.Hosts[0].Services[0].Name != "second" || len(selected.Hosts[1].Services) != 0 {
+		t.Fatalf("host/tag union and service intersection: %+v", selected.Hosts)
+	}
+	// Service selection keeps only inherited assignments and adds no prerequisites.
+	code, _, stderr = run(t, "diff", "-i", filename, "--host", "a", "--service", "second", "-o", saved)
+	if code != 0 {
+		t.Fatal(stderr)
+	}
+	readPlan := func() *plan.Plan {
+		t.Helper()
+		store, err := plan.Open(saved)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer store.Close()
+		return store.Plan
+	}
+	if tasks := readPlan().Hosts[0].Tasks; len(tasks) != 1 || tasks[0].Service != "second" {
+		t.Fatalf("service filter added work: %+v", tasks)
+	}
+	code, _, stderr = run(t, "diff", "-i", filename, "--host", "a", "-o", saved)
+	if code != 0 {
+		t.Fatal(stderr)
+	}
+	tasks := readPlan().Hosts[0].Tasks
+	var services []string
+	for _, task := range tasks {
+		services = append(services, task.Service)
+	}
+	if strings.Join(services, ",") != "first,second,last" {
+		t.Fatalf("inherited services must occur once in definition order: %v", services)
+	}
+	if err := os.WriteFile(blocked, []byte("deliberate obstruction"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filename); err != nil {
+		t.Fatal(err)
+	}
+	code, _, _ = run(t, "apply", "-y", saved)
+	tasks = readPlan().Hosts[0].Tasks
+	if code == 0 || tasks[0].Progress.Status != "success" || tasks[1].Progress.Status != "error" || tasks[2].Progress.Status != "pending" {
+		t.Fatalf("ordered failure did not block later work: code %d tasks %+v", code, tasks)
+	}
+	if err := os.WriteFile(first, []byte("external change"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(blocked); err != nil {
+		t.Fatal(err)
+	}
+	code, stdout, stderr = run(t, "apply", "-y", saved)
+	if code != 0 || !strings.Contains(stdout, "previously completed") {
+		t.Fatalf("frozen continuation: %d %s %s", code, stdout, stderr)
+	}
+	for path, want := range map[string]string{first: "external change", filepath.Join(blocked, "second"): "second", last: "last"} {
+		got, err := os.ReadFile(path)
+		if err != nil || string(got) != want {
+			t.Fatalf("continued target %s: %q, %v", path, got, err)
+		}
 	}
 }
 func TestNoTerminalRequiresYesAndNoAutosave(t *testing.T) {
@@ -136,8 +233,12 @@ func TestCLISecretPlansFreezeInputsAndProtectOutput(t *testing.T) {
 	text := fmt.Sprintf(`secret_sources:
   default: {type: yaml, file: default.yaml}
   alternate: {type: yaml, file: alternate.yaml}
+tags:
+  example:
+    services: {example: {}}
 services:
   example:
+    order: 10
     configs:
       main:
         path: %s
@@ -146,8 +247,8 @@ services:
           inline: '{{ secret "token" }}|{{ secret "token" "alternate" }}|{{ printf "%%q" (secret "token") }}|{{ printf "%%x" (secret "token") }}'
 hosts:
   - name: local
+    tags: [example]
     transport: {type: local}
-    services: [{name: example}]
 `, target)
 	if err := os.WriteFile(inventoryPath, []byte(text), 0600); err != nil {
 		t.Fatal("could not write synthetic inventory")
@@ -255,8 +356,12 @@ func TestCLISecretPreparationErrorsDoNotExposeValues(t *testing.T) {
 	} {
 		text := fmt.Sprintf(`secret_sources:
   default: {type: yaml, file: source.yaml}
+tags:
+  example:
+    services: {example: {}}
 services:
   example:
+    order: 10
     configs:
       main:
         path: %s
@@ -264,8 +369,8 @@ services:
           inline: '%s'
 hosts:
   - name: local
+    tags: [example]
     transport: {type: local}
-    services: [{name: example}]
 `, filepath.Join(dir, "target"), source)
 		if err := os.WriteFile(path, []byte(text), 0600); err != nil {
 			t.Fatal("could not write synthetic inventory")

@@ -2,7 +2,10 @@
 # Configure non-root SSH aliases, host trust, and passwordless sudo first.
 tags:
   example:
-    weight: 10
+    services:
+      vmango-repository: {state: present}
+      vmango: {state: present}
+    order: 10
     vars:
       vmango:
         listen: "127.0.0.1:18080"
@@ -11,19 +14,15 @@ tags:
         target: rhel-10
 services:
   vmango-repository:
+    order: 10
     file: ../vmango/services/repository.yaml
   vmango:
+    order: 20
     file: ../vmango/services/vmango.yaml
 hosts:
   - name: first
     tags: [example]
     transport: {type: ssh, host: richt-test-a, sudo: true}
-    services:
-      - {name: vmango-repository, order: 10}
-      - {name: vmango, order: 20}
   - name: second
     tags: [example]
     transport: {type: ssh, host: richt-test-b, sudo: true}
-    services:
-      - {name: vmango-repository, order: 10}
-      - {name: vmango, order: 20}

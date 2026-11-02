@@ -41,8 +41,8 @@ same saved plan explicitly to skip successful tasks and retry unfinished ones.
 No automatic retry occurs. Saved plans retain explicit inventory connections
 and ready config bytes; OpenSSH still reads current client configuration.
 
-For cleanup, set both assignments on both hosts to `state: absent`, build a
-new removal plan and apply it. The Vmango walkthrough describes retained
+For cleanup, set both assignments in the shared `tags.example.services` map to
+`state: absent`, build a new removal plan and apply it. The Vmango walkthrough describes retained
 application data and RPM side effects. Do not delete assignments as a substitute
 for declaring absence.
 

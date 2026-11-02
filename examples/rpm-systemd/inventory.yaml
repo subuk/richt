@@ -1,5 +1,11 @@
+tags:
+  example:
+    services:
+      repository: {state: present}
+      demo: {state: present}
 services:
   repository:
+    order: 10
     configs:
       repo:
         path: /etc/yum.repos.d/richt-demo.repo
@@ -12,6 +18,7 @@ services:
             enabled=1
             gpgcheck=0
   demo:
+    order: 20
     binaries:
       app:
         type: rpm
@@ -44,7 +51,5 @@ services:
                 ExecReload=/bin/kill -HUP $MAINPID
 hosts:
   - name: isolated
+    tags: [example]
     transport: {type: local}
-    services:
-      - {name: repository, order: 10}
-      - {name: demo, order: 20}

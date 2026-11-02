@@ -47,25 +47,59 @@ func (in *Inventory) Resolve(s Selectors) (*Resolved, error) {
 		if err != nil {
 			return nil, err
 		}
-		if err := in.validateOwnership(h); err != nil {
+		assignments, err := in.assignments(h)
+		if err != nil {
+			return nil, err
+		}
+		if err := in.validateOwnership(h.Name, assignments); err != nil {
 			return nil, err
 		}
 		rh := ResolvedHost{Name: h.Name, Tags: append([]string{}, h.Tags...), Transport: h.Transport, Vars: vars, Services: []ResolvedService{}}
 		sort.Strings(rh.Tags)
-		assignments := append([]Assignment(nil), h.Services...)
-		sort.Slice(assignments, func(i, j int) bool { return assignments[i].Order < assignments[j].Order })
 		for _, a := range assignments {
 			if len(serviceSet) > 0 && !serviceSet[a.Name] {
 				continue
 			}
-			if a.State == "" {
-				a.State = "present"
-			}
-			rh.Services = append(rh.Services, ResolvedService{Assignment: a, Definition: normalizedService(in.Services[a.Name])})
+			rh.Services = append(rh.Services, ResolvedService{Assignment: a, Definition: normalizedService(in.Services[a.Name].Service)})
 		}
 		out.Hosts = append(out.Hosts, rh)
 	}
 	return out, nil
+}
+
+// assignments expands a selected host's tags before service filtering. A tag's
+// variable priority never overrides an assignment contributed by another tag.
+func (in *Inventory) assignments(h Host) ([]Assignment, error) {
+	tags := append([]string(nil), h.Tags...)
+	sort.Strings(tags)
+	sources := map[string]string{}
+	assignments := []Assignment{}
+	for _, tag := range tags {
+		for _, name := range sortedKeys(in.Tags[tag].Services) {
+			if previous, ok := sources[name]; ok {
+				return nil, fmt.Errorf("host %q: service %q is assigned by both tags %q and %q; assign it through only one tag", h.Name, name, previous, tag)
+			}
+			sources[name] = tag
+			state := in.Tags[tag].Services[name].State
+			if state == "" {
+				state = "present"
+			}
+			assignments = append(assignments, Assignment{Name: name, Order: *in.Services[name].Order, State: state})
+		}
+	}
+	sort.Slice(assignments, func(i, j int) bool {
+		if assignments[i].Order != assignments[j].Order {
+			return assignments[i].Order < assignments[j].Order
+		}
+		return assignments[i].Name < assignments[j].Name
+	})
+	for i := 1; i < len(assignments); i++ {
+		a, b := assignments[i-1], assignments[i]
+		if a.Order == b.Order {
+			return nil, fmt.Errorf("host %q services: order %d is shared by services %q (tag %q) and %q (tag %q)", h.Name, a.Order, a.Name, sources[a.Name], b.Name, sources[b.Name])
+		}
+	}
+	return assignments, nil
 }
 
 func stringSet(values []string) map[string]bool {

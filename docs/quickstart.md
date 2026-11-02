@@ -24,11 +24,14 @@ printf '%s\n' 'message={{ .greeting }}' > "$demo_dir/greeting.gotmpl"
 cat > "$demo_dir/inventory.yaml" <<EOF_INVENTORY
 tags:
   defaults:
-    weight: 10
+    order: 10
+    services:
+      greeting: {state: present}
     vars:
       greeting: Hello from Richt
 services:
   greeting:
+    order: 10
     configs:
       main:
         path: $demo_dir/target/greeting.conf
@@ -38,13 +41,12 @@ hosts:
   - name: local
     tags: [defaults]
     transport: {type: local}
-    services:
-      - {name: greeting, order: 10, state: present}
 EOF_INVENTORY
 ```
 
-Keep this shell open so `demo_dir` stays available. Tag `defaults` supplies the
-template's `.greeting` variable. The assignment's `order` fixes service order;
+Keep this shell open so `demo_dir` stays available. Tag `defaults` assigns the
+service and supplies the template's `.greeting` variable. The service
+definition's `order` fixes execution order;
 config-only services need no binary or process component. Template paths are
 relative to their declaring service file, or the inventory for inline services.
 

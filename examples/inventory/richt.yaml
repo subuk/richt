@@ -1,6 +1,9 @@
 tags:
   hypervisor:
-    weight: 10
+    services:
+      vmango-repository: {state: present}
+      vmango: {state: present}
+    order: 10
     vars:
       vmango:
         listen: "127.0.0.1:8080"
@@ -9,12 +12,12 @@ tags:
       vmango_repository:
         target: rhel-10
   home:
-    weight: 20
+    order: 20
     vars:
       vmango:
         cloud_name: Home
   net:
-    weight: 20
+    order: 20
     vars:
       vmango:
         cloud_name: Net
@@ -31,8 +34,10 @@ secret_sources:
 
 services:
   vmango-repository:
+    order: 10
     file: services/vmango-repository.yaml
   vmango:
+    order: 20
     file: services/vmango.yaml
 
 hosts:
@@ -40,11 +45,6 @@ hosts:
     tags: [hypervisor, home]
     transport:
       type: local
-    services:
-      - name: vmango
-        order: 20
-      - name: vmango-repository
-        order: 10
   - name: lanst
     tags: [net, hypervisor]
     transport:
@@ -52,9 +52,3 @@ hosts:
       host: lanst.example.invalid
       user: root
       sudo: true
-    services:
-      - name: vmango-repository
-        order: 10
-      - name: vmango
-        order: 20
-        state: present

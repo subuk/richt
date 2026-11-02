@@ -6,7 +6,8 @@ weight: 60
 
 Richt manages each service in binary → config → process order. A service may
 contain any nonempty combination of these component sets. Services run in their
-assignment `order`; `after` orders processes within one service. References and
+definition's `order`; tags supply assignments and `after` orders processes
+within one service. References and
 cycles are validated before diff. There are no cross-service dependency links.
 
 The supported package backend is **DNF 4**, including its **YUM 4 compatibility
@@ -163,11 +164,14 @@ packages are removed after the managed files, and a final daemon reload follows
 unit/drop-in or package changes. An already missing unit is accepted during removal. An external unit that remains
 installed is still stopped and disabled.
 
+Across services, removal follows ascending service-definition order, just like
+`present` assignments. There is no automatic reverse service removal order.
+
 DNF may remove dependent packages in its removal transaction. RPM itself
 controls the treatment of its package-owned config files, including possible
 `.rpmsave` files. Richt removes only explicitly declared config/unit/drop-in
 files; it does not purge application data, state directories, unrelated files,
-or `.rpmsave` files. Removing a service assignment from inventory does not mean
+or `.rpmsave` files. Removing a tag or service assignment from inventory does not mean
 `absent`; declare `absent` to request deletion.
 
 A failed task blocks later tasks on that host. Successful config writes and

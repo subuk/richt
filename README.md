@@ -2,8 +2,9 @@
 
 Richt is a standalone Go CLI that prepares, displays, and explicitly applies
 executable Linux host configuration plans. YAML inventory assigns reusable
-services containing RPM packages, templated files, and systemd processes.
-Weighted tags supply host variables. Local and SSH execution support explicit
+services containing RPM packages, templated files, and systemd processes through
+host tags. Tags merge host variables by order; service definitions set execution
+order. Local and SSH execution support explicit
 noninteractive sudo, bounded host concurrency, and local YAML secret sources.
 
 ## Start here

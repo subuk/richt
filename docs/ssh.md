@@ -12,16 +12,21 @@ and, when requested, DNF 4/YUM 4, systemd, or SELinux tools). No Richt daemon or
 installed Richt binary is needed on an SSH target.
 
 ```yaml
+tags:
+  application:
+    services:
+      application: {}
+services:
+  application: {order: 10, file: services/application.yaml}
 hosts:
   - name: application-a
+    tags: [application]
     transport:
       type: ssh
       host: app-a             # address or existing ssh_config alias
       user: deploy           # optional; otherwise use SSH configuration
       port: 2222             # optional; otherwise use SSH configuration
       sudo: true             # explicit; never enabled implicitly
-    services:
-      - {name: application, order: 10}
 ```
 
 `host` accepts a hostname, address, or SSH alias; use the separate `user` field
@@ -80,7 +85,8 @@ of the saved plan and does not select hosts or alter tasks. Inventory/host/tag/
 service filters remain forbidden when applying a saved plan. Local and SSH
 hosts can share one plan.
 
-Services and tasks remain sequential within each host. A task failure blocks
+Services run by service-definition order, and tasks remain sequential within
+each host. A task failure blocks
 the rest of its host; other active and queued hosts continue. All hosts finish
 before the final ordered summary, and any failure produces a nonzero exit.
 Explicit continuation skips successful tasks and retries unfinished tasks.

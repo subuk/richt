@@ -21,18 +21,25 @@ Go CLI. It prepares desired configuration, observes resources to calculate a
 diff, displays an executable plan, and explicitly applies that plan. NetBox,
 Argo CD, and Ansible are not required dependencies of the local core.
 
-A host has a stable name, tags, ordered service assignments, and connection
+A host has a stable name, tags, and connection
 settings. A service is a reusable logical unit containing zero or more named
 binary, config, and process components; at least one set must be nonempty.
 Config-only services can establish repositories before later package services;
 binary-only and process-only services are equally valid. A service and an
 individual managed process are different concepts.
 
-Assignments specify only the service, unique numeric order, and target state
-(`present` by default, or explicit `absent`). Component parameters, units,
+Tags assign services through mappings keyed by service name. Assignment values
+specify only target state (`present` by default, or explicit `absent`). Hosts
+receive all their tags' assignments; duplicate assignments are errors even with
+identical settings. Each top-level service definition requires an integer
+`order`, alongside inline components or a file reference. Explicit zero is valid.
+Effective services execute in ascending order, with per-host order uniqueness;
+unassigned or separately assigned services may share an order. Component parameters, units,
 overrides, and timeouts belong to service definitions, with no per-assignment
 overrides. Content parameterization happens in templates using the host's full
-merged variables. Tags supply variables and never assign services.
+merged variables. Tags also supply variables, processed in ascending tag `order`
+(default zero). Tag order and service execution order are independent. This is
+the accepted KRG-91 contract from 2026-11-02.
 
 Keep domain rules independent of YAML, CLI/TTY, filesystem, RPM, systemd, and
 transport implementations. Use meaningful domain or technology names rather
@@ -81,9 +88,14 @@ Important invariants across those contracts:
 
 - Inventory inspection never contacts hosts, opens templates, or reads secret
   values. Structural validation includes definitions outside selected scope.
-  Weights increase in priority: scalars and lists replace; maps merge recursively.
-  Equal-weight differing values or incompatible types are errors before effects,
-  even if a higher weight would overwrite them. Tag listing order breaks no ties.
+  Tag orders increase in priority: scalars and lists replace; maps merge recursively.
+  Equal-order differing values or incompatible types are errors before effects,
+  even if a higher order would overwrite them. Tag listing order breaks no ties.
+  All tag assignment references and service orders are checked globally;
+  duplicate assignments, service-order collisions and resource ownership are
+  checked on selected hosts before service filtering. `--tag` selects hosts,
+  each of which still uses all its tags. Inspection retains flattened effective
+  services with their order and state.
 - Each selected host has one owner per explicitly declared package, normalized
   file path, and systemd unit, including managed units/drop-ins. Validate all its
   assignments before service filtering; identical settings or opposing target
@@ -92,7 +104,7 @@ Important invariants across those contracts:
   intersect, repeated choices within a group form unions. Selecting a service
   neither assigns it nor automatically includes other services. Filters apply
   only during plan construction and are argument errors for saved-plan apply.
-- Services run in assignment order; present phases are binary, config, process.
+- Services run in service-definition order; present phases are binary, config, process.
   `restart_on`/`reload_on` refer to `binary.<name>` or `config.<name>` in the same
   service; `after` orders its processes. Unknown/cyclic references fail validation.
   There are no cross-service links or arbitrary service dependency graphs.
@@ -120,7 +132,7 @@ Important invariants across those contracts:
   validation before writing remains later scope.
 - `absent` stops and verifies processes in reverse dependency order, disables
   them before removing owned units/drop-ins and configs, then removes packages.
-  Other services retain assignment order; no special cross-service deletion
+  Other services retain service-definition order; no special cross-service deletion
   graph. External units are still stopped/disabled. DNF may remove dependencies;
   RPM handles package configs and possible `.rpmsave`. Richt does not purge
   application data, state, unrelated files, or `.rpmsave`. Removing an assignment

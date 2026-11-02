@@ -3,22 +3,33 @@
 package inventory
 
 type Inventory struct {
-	Tags          map[string]Tag          `json:"tags" yaml:"tags"`
-	Services      map[string]Service      `json:"services" yaml:"services"`
-	Hosts         []Host                  `json:"hosts" yaml:"hosts"`
-	SecretSources map[string]SecretSource `json:"secret_sources,omitempty" yaml:"secret_sources"`
+	Tags          map[string]Tag               `json:"tags" yaml:"tags"`
+	Services      map[string]ServiceDefinition `json:"services" yaml:"services"`
+	Hosts         []Host                       `json:"hosts" yaml:"hosts"`
+	SecretSources map[string]SecretSource      `json:"secret_sources,omitempty" yaml:"secret_sources"`
 }
 
 type Tag struct {
-	Weight int            `json:"weight" yaml:"weight"`
-	Vars   map[string]any `json:"vars" yaml:"vars"`
+	Order    int                          `json:"order" yaml:"order"`
+	Services map[string]ServiceAssignment `json:"services" yaml:"services"`
+	Vars     map[string]any               `json:"vars" yaml:"vars"`
 }
 
 type Host struct {
-	Name      string       `json:"name" yaml:"name"`
-	Tags      []string     `json:"tags" yaml:"tags"`
-	Transport Transport    `json:"transport" yaml:"transport"`
-	Services  []Assignment `json:"services" yaml:"services"`
+	Name      string    `json:"name" yaml:"name"`
+	Tags      []string  `json:"tags" yaml:"tags"`
+	Transport Transport `json:"transport" yaml:"transport"`
+}
+
+// ServiceAssignment declares a service's target state through a tag.
+type ServiceAssignment struct {
+	State string `json:"state" yaml:"state"`
+}
+
+// ServiceDefinition keeps required inventory ordering outside bare components.
+type ServiceDefinition struct {
+	Order   *int `json:"order" yaml:"order"`
+	Service `yaml:",inline"`
 }
 
 type Transport struct {

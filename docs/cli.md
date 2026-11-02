@@ -33,8 +33,9 @@ Host names and tags form a union, repeated services form another union, and the
 two groups intersect. An unspecified group selects everything. Matching is
 exact and case sensitive; unknown names fail. Service selection does not add
 assignments or pull in prerequisite services. Full schema validation still
-includes unselected definitions; selected hosts' ownership and variable
-conflicts cannot be hidden by a service filter. See [inventory](inventory.md).
+includes unselected definitions and unused tag assignments. Every selected host
+uses all its tags; duplicate assignments, service-order collisions, ownership
+and variable conflicts cannot be hidden by a service filter. See [inventory](inventory.md).
 
 ```sh
 richt inventory show -i fleet.yaml --host app-a --tag staging --service web

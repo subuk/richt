@@ -36,10 +36,10 @@ def run(args,ok=True):
  return p.stdout+p.stderr
 def write_inv(configs, state='present'):
  with open(inv,'w') as f:
-  f.write('tags:\n  vars:\n    weight: 10\n    vars:\n      greeting: example-one\nservices:\n  example:\n    configs:\n')
+  f.write('tags:\n  vars:\n    order: 10\n    services:\n      example: {state: '+state+'}\n    vars:\n      greeting: example-one\nservices:\n  example:\n    order: 10\n    configs:\n')
   for name,path,extra in configs:
    f.write('      '+name+':\n        path: '+path+'\n        template:\n          file: config.tmpl\n'+extra)
-  f.write('hosts:\n  - name: local\n    tags: [vars]\n    transport:\n      type: local\n    services:\n      - name: example\n        state: '+state+'\n')
+  f.write('hosts:\n  - name: local\n    tags: [vars]\n    transport:\n      type: local\n')
 def tty_apply(answer,expect_ok,hold=False):
  master,slave=pty.openpty();p=subprocess.Popen([cli,'apply',saved],stdin=slave,stdout=slave,stderr=slave,close_fds=True);os.close(slave);out=b'';deadline=time.monotonic()+10
  while b'Apply these changes?' not in out:
@@ -96,10 +96,11 @@ try:
     secret_inventory=dict(secret_sources={
       'default':dict(type='yaml',file='default.yaml'),
       'production':dict(type='yaml',file='production.yaml')},
-      services=dict(example=dict(configs={
+      tags=dict(example=dict(services=dict(example={}))),
+      services=dict(example=dict(order=10,configs={
        'a':secret_config(first_secret,'{{secret "database.password"}}'),
        'b':secret_config(second_secret,'{{secret "database.password" "production"}}')})),
-      hosts=[dict(name='local',transport=dict(type='local'),services=[dict(name='example')])])
+      hosts=[dict(name='local',tags=['example'],transport=dict(type='local'))])
     with open(inv,'w') as f: json.dump(secret_inventory,f)
     out=run(['diff','-i',inv,'-o',saved])
     tasks=json.load(open(saved))['hosts'][0]['tasks']

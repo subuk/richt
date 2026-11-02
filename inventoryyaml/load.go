@@ -23,8 +23,8 @@ type document struct {
 }
 
 type serviceDefinition struct {
-	File              string `yaml:"file"`
-	inventory.Service `yaml:",inline"`
+	File                        string `yaml:"file"`
+	inventory.ServiceDefinition `yaml:",inline"`
 }
 
 // Load reads inventory and explicitly referenced service definitions. Templates
@@ -39,7 +39,7 @@ func Load(filename string) (*inventory.Inventory, error) {
 	if err := read(filename, &doc); err != nil {
 		return nil, err
 	}
-	in := &inventory.Inventory{Tags: doc.Tags, Hosts: doc.Hosts, SecretSources: doc.SecretSources, Services: map[string]inventory.Service{}}
+	in := &inventory.Inventory{Tags: doc.Tags, Hosts: doc.Hosts, SecretSources: doc.SecretSources, Services: map[string]inventory.ServiceDefinition{}}
 	for _, name := range keys(doc.Services) {
 		raw := doc.Services[name]
 		s := raw.Service
@@ -60,7 +60,7 @@ func Load(filename string) (*inventory.Inventory, error) {
 		if err := resolvePaths(&s, source); err != nil {
 			return nil, fmt.Errorf("service %q: %w", name, err)
 		}
-		in.Services[name] = s
+		in.Services[name] = inventory.ServiceDefinition{Order: raw.Order, Service: s}
 	}
 	for _, name := range keys(in.SecretSources) {
 		s := in.SecretSources[name]
@@ -89,6 +89,11 @@ func read(filename string, value any) error {
 	}
 	if err := stringKeys(&root, make(map[*yaml.Node]bool)); err != nil {
 		return fmt.Errorf("%s: %w", filename, err)
+	}
+	if _, ok := value.(*document); ok {
+		if err := inventorySchema(&root); err != nil {
+			return fmt.Errorf("%s: %w", filename, err)
+		}
 	}
 	d := yaml.NewDecoder(bytes.NewReader(data))
 	d.KnownFields(true)

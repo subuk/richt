@@ -1,17 +1,16 @@
 tags:
   example:
-    weight: 10
+    services:
+      greeting: {state: present}
+    order: 10
     vars:
       greeting: Hello from Richt
 services:
   greeting:
+    order: 10
     file: service.yaml
 hosts:
   - name: localhost
     tags: [example]
     transport:
       type: local
-    services:
-      - name: greeting
-        order: 10
-        state: present

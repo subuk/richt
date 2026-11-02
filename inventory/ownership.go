@@ -6,13 +6,13 @@ import (
 	"strings"
 )
 
-func (in *Inventory) validateOwnership(h Host) error {
+func (in *Inventory) validateOwnership(host string, assignments []Assignment) error {
 	type owner struct{ service, component string }
 	owners := map[string]owner{}
 	claim := func(resource, service, component string) error {
 		if old, ok := owners[resource]; ok {
 			if old.service != service || (!strings.HasPrefix(resource, "systemd unit ") && old.component != component) {
-				return fmt.Errorf("host %q: resource %s is owned by both %s/%s and %s/%s", h.Name, resource, old.service, old.component, service, component)
+				return fmt.Errorf("host %q: resource %s is owned by both %s/%s and %s/%s", host, resource, old.service, old.component, service, component)
 			}
 		}
 		owners[resource] = owner{service, component}
@@ -28,7 +28,7 @@ func (in *Inventory) validateOwnership(h Host) error {
 		}
 		return nil
 	}
-	for _, a := range h.Services {
+	for _, a := range assignments {
 		s := in.Services[a.Name]
 		processUnits := map[string]string{}
 		for _, name := range sortedKeys(s.Binaries) {
@@ -46,7 +46,7 @@ func (in *Inventory) validateOwnership(h Host) error {
 			p := s.Processes[name]
 			component := "process." + name
 			if previous, ok := processUnits[p.Unit]; ok {
-				return fmt.Errorf("host %q: systemd unit %s is managed by both %s/process.%s and %s/%s", h.Name, p.Unit, a.Name, previous, a.Name, component)
+				return fmt.Errorf("host %q: systemd unit %s is managed by both %s/process.%s and %s/%s", host, p.Unit, a.Name, previous, a.Name, component)
 			}
 			processUnits[p.Unit] = name
 			if err := claim("systemd unit "+p.Unit, a.Name, component); err != nil {

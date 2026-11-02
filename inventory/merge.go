@@ -7,7 +7,7 @@ import (
 )
 
 // MergeTags resolves variables without changing tags or their nested values.
-// Equal-weight groups are checked before any higher-weight overrides.
+// Equal-order groups are checked before any higher-order overrides.
 func MergeTags(host string, names []string, tags map[string]Tag) (map[string]any, error) {
 	for _, name := range names {
 		if _, ok := tags[name]; !ok {
@@ -17,15 +17,15 @@ func MergeTags(host string, names []string, tags map[string]Tag) (map[string]any
 	names = append([]string(nil), names...)
 	sort.Slice(names, func(i, j int) bool {
 		a, b := tags[names[i]], tags[names[j]]
-		if a.Weight != b.Weight {
-			return a.Weight < b.Weight
+		if a.Order != b.Order {
+			return a.Order < b.Order
 		}
 		return names[i] < names[j]
 	})
 	result := map[string]any{}
 	for first := 0; first < len(names); {
 		last := first + 1
-		for last < len(names) && tags[names[last]].Weight == tags[names[first]].Weight {
+		for last < len(names) && tags[names[last]].Order == tags[names[first]].Order {
 			last++
 		}
 		// Pairwise comparison preserves the identity of both conflicting tags,
@@ -33,7 +33,7 @@ func MergeTags(host string, names []string, tags map[string]Tag) (map[string]any
 		for i := first; i < last; i++ {
 			for j := i + 1; j < last; j++ {
 				if p, conflict := conflictPath(tags[names[i]].Vars, tags[names[j]].Vars, "vars"); conflict {
-					return nil, fmt.Errorf("host %q: %s conflicts between tags %q and %q at weight %d", host, p, names[i], names[j], tags[names[i]].Weight)
+					return nil, fmt.Errorf("host %q: %s conflicts between tags %q and %q at order %d", host, p, names[i], names[j], tags[names[i]].Order)
 				}
 			}
 		}

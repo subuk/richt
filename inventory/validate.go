@@ -22,7 +22,8 @@ func validName(kind, name string) error {
 }
 
 // Validate checks definitions and references without reading host state or
-// resolving tags. Host ownership and equal-weight conflicts are scope checks.
+// resolving tags. Effective assignments, ownership and equal-order conflicts
+// are checked only for selected hosts during resolution.
 func (in *Inventory) Validate() error {
 	if in == nil {
 		return fmt.Errorf("inventory is nil")
@@ -37,6 +38,15 @@ func (in *Inventory) Validate() error {
 		// Values must also be representable in the public JSON view and plan.
 		if _, err := json.Marshal(in.Tags[name].Vars); err != nil {
 			return fmt.Errorf("tag %q vars: unsupported value: %w", name, err)
+		}
+		for _, service := range sortedKeys(in.Tags[name].Services) {
+			if _, ok := in.Services[service]; !ok {
+				return fmt.Errorf("tag %q services: unknown service %q", name, service)
+			}
+			state := in.Tags[name].Services[service].State
+			if state != "" && state != "present" && state != "absent" {
+				return fmt.Errorf("tag %q service %q state: expected present or absent", name, service)
+			}
 		}
 	}
 	for _, name := range sortedKeys(in.SecretSources) {
@@ -55,14 +65,10 @@ func (in *Inventory) Validate() error {
 		if err := validName("service", name); err != nil {
 			return err
 		}
-		if err := validateService(in.Services[name]); err != nil {
-			for _, h := range in.Hosts {
-				for _, a := range h.Services {
-					if a.Name == name {
-						return fmt.Errorf("host %q: service %q: %w", h.Name, name, err)
-					}
-				}
-			}
+		if in.Services[name].Order == nil {
+			return fmt.Errorf("service %q order: required integer; set order on the top-level service definition", name)
+		}
+		if err := validateService(in.Services[name].Service); err != nil {
 			return fmt.Errorf("service %q: %w", name, err)
 		}
 	}
@@ -87,24 +93,6 @@ func (in *Inventory) Validate() error {
 				return fmt.Errorf("host %q tags: duplicate tag %q", h.Name, name)
 			}
 			tags[name] = true
-		}
-		services := map[string]bool{}
-		orders := map[int]string{}
-		for _, a := range h.Services {
-			if _, ok := in.Services[a.Name]; !ok {
-				return fmt.Errorf("host %q services: unknown service %q", h.Name, a.Name)
-			}
-			if services[a.Name] {
-				return fmt.Errorf("host %q services: duplicate assignment %q", h.Name, a.Name)
-			}
-			services[a.Name] = true
-			if other, ok := orders[a.Order]; ok {
-				return fmt.Errorf("host %q services: order %d is shared by services %q and %q", h.Name, a.Order, other, a.Name)
-			}
-			orders[a.Order] = a.Name
-			if a.State != "" && a.State != "present" && a.State != "absent" {
-				return fmt.Errorf("host %q service %q state: expected present or absent", h.Name, a.Name)
-			}
 		}
 	}
 	return nil

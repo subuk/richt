@@ -83,9 +83,10 @@ def main():
         return result
 
     def file_inventory(configs, hosts=None):
-        return {"services": {"files": {"configs": configs}}, "hosts": hosts or [
+        return {"tags": {"files": {"services": {"files": {}}}},
+                "services": {"files": {"order": 10, "configs": configs}}, "hosts": hosts or [
             {"name": name, "transport": {"type": "ssh", "host": alias, "sudo": True},
-             "services": [{"name": "files", "order": 10}]}
+             "tags": ["files"]}
             for name, alias in aliases.items()]}
 
     def config(path, content):
@@ -120,8 +121,7 @@ def main():
         services = fixture.read_text().split("\nhosts:", 1)[0]
         hosts = "\nhosts:\n" + "".join(
             "  - name: " + name + "\n    transport: {type: ssh, host: " + json.dumps(alias) +
-            ", sudo: true}\n    services:\n      - {name: repository, order: 10}\n"
-            "      - {name: demo, order: 20}\n" for name, alias in aliases.items())
+            ", sudo: true}\n    tags: [example]\n" for name, alias in aliases.items())
         _, target, prepared = diff("first", services + hosts)
         check("both SSH hosts prepare package requests", all(
             any(task["operation"] == "rpm" for task in host["tasks"]) for host in prepared["hosts"]))
@@ -166,7 +166,7 @@ def main():
             old_ids = remote(args.host_a, "printf '%s:%s\\n' \"$(id -u " + quoted_identity +
                              ")\" \"$(getent group " + quoted_identity + " | cut -d: -f3)\"").stdout.strip()
             host_a = [{"name": "a-target", "transport": {"type": "ssh", "host": args.host_a, "sudo": True},
-                       "services": [{"name": "files", "order": 10}]}]
+                       "tags": ["files"]}]
             named = config(root + "/named-ids", "names resolve at apply\n")
             named.update(owner=identity, group=identity)
             _, target, named_plan = diff("named-ids", file_inventory({"named": named}, hosts=host_a))
@@ -231,12 +231,14 @@ def main():
                    shlex.quote(root + "/parent/child")).stdout == "followed target\nfollowed parent\n"
             for alias in aliases.values()))
 
-        mixed = {"services": {
-            "localfiles": {"configs": {"mixed": {"path": str(work / "mixed-local"), "template": {"inline": "mixed\n"}}}},
-            "remotefiles": {"configs": {"mixed": config(root + "/mixed", "mixed\n")}}}, "hosts": [
-                {"name": "local", "transport": {"type": "local"}, "services": [{"name": "localfiles", "order": 10}]},
+        mixed = {"tags": {
+            "local": {"services": {"localfiles": {}}},
+            "remote": {"services": {"remotefiles": {}}}}, "services": {
+            "localfiles": {"order": 10, "configs": {"mixed": {"path": str(work / "mixed-local"), "template": {"inline": "mixed\n"}}}},
+            "remotefiles": {"order": 10, "configs": {"mixed": config(root + "/mixed", "mixed\n")}}}, "hosts": [
+                {"name": "local", "transport": {"type": "local"}, "tags": ["local"]},
                 {"name": "remote", "transport": {"type": "ssh", "host": args.host_a, "sudo": True},
-                 "services": [{"name": "remotefiles", "order": 10}]}]}
+                 "tags": ["remote"]}]}
         _, target, _ = diff("mixed", mixed)
         apply("mixed", target)
         check("mixed local and SSH plan executes", (work / "mixed-local").read_text() == "mixed\n" and

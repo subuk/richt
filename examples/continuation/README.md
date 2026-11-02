@@ -17,8 +17,10 @@ sed "s|/var/tmp/richt-continuation-example|$work/target|g" \
 bin/richt diff -i "$work/inventory.yaml" -o "$work/plan.json"
 ```
 
-Diff prepares all three files while the target directory is absent. Create a
-regular file at the second file's future parent path **after** preparation:
+The shared `example` tag assigns all three services. Their service definition
+orders 10, 20 and 30 determine execution. Diff prepares all three files while
+the target directory is absent. Create a regular file at the second file's
+future parent path **after** preparation:
 
 ```sh
 mkdir -p "$work/target"

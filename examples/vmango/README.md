@@ -100,8 +100,8 @@ packages, use [the separate config-only example](../continuation/README.md).
 
 ## Explicit removal
 
-Set `state: absent` on **both** assignments in
-`examples/vmango/inventory.yaml`, keeping their orders 10 and 20. Then:
+Set `state: absent` on **both** assignments under `tags.example.services` in
+`examples/vmango/inventory.yaml`, keeping service definition orders 10 and 20. Then:
 
 ```sh
 bin/richt diff -i examples/vmango/inventory.yaml -o /root/vmango-remove.json
