@@ -2,6 +2,7 @@ package plan_test
 
 import (
 	"bytes"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -10,43 +11,23 @@ import (
 	"github.com/subuk/richt/plan"
 )
 
-func TestNewPlanFeaturesRequireVersion12(t *testing.T) {
-	no := false
-	tasks := []plan.Task{
-		{Operation: "file", File: &plan.FileChange{Validate: &plan.FileValidator{Args: []string{"/bin/check", "{candidate}"}, Timeout: "5s"}}},
-		{Operation: "systemd-mask", Process: &plan.ProcessChange{Masked: &no}},
-		{Operation: "systemd", Process: &plan.ProcessChange{Masked: &no}},
-		{Operation: "rpm", RPM: &plan.RPMChange{Version: "1.34.3"}},
-	}
-	for _, task := range tasks {
-		task.ID = "task"
-		task.Progress.Status = "pending"
-		for _, version := range []string{"1.0", "1.1", plan.Version} {
-			p := &plan.Plan{Version: version, Hosts: []plan.Host{{Name: "host", Transport: "local", Tasks: []plan.Task{task}}}}
-			err := p.Validate()
-			if (err != nil) != (version != plan.Version) {
-				t.Fatalf("version %s task %+v: %v", version, task, err)
-			}
+func TestOnlyCurrentPlanVersionIsAccepted(t *testing.T) {
+	for _, version := range []string{"", "1.0", "1.1", "1.2", "999", plan.Version} {
+		p := &plan.Plan{Version: version, Hosts: []plan.Host{}}
+		err := p.Validate()
+		if (err != nil) != (version != plan.Version) {
+			t.Fatalf("version %q: %v", version, err)
 		}
-	}
-}
-
-func TestLegacyPlanRoundTrip(t *testing.T) {
-	for _, version := range []string{"1.0", "1.1"} {
-		p := &plan.Plan{Version: version, Hosts: []plan.Host{{Name: "host", Transport: "local", Tasks: []plan.Task{{ID: "rpm", Operation: "rpm", RPM: &plan.RPMChange{Manager: "dnf", Package: "demo", Version: "0:1.2-1.noarch", State: "present"}, Progress: plan.Progress{Status: "success"}}}}}}
-		filename := filepath.Join(t.TempDir(), "plan.json")
-		if err := plan.Save(filename, p); err != nil {
+		path := filepath.Join(t.TempDir(), "plan.json")
+		if err := os.WriteFile(path, []byte(`{"version":"`+version+`","hosts":[]}`), 0600); err != nil {
 			t.Fatal(err)
 		}
-		s, err := plan.Open(filename)
-		if err != nil {
-			t.Fatal(err)
+		store, err := plan.Open(path)
+		if (err != nil) != (version != plan.Version) {
+			t.Fatalf("open version %q: %v", version, err)
 		}
-		if s.Plan.Version != version || s.Plan.Hosts[0].Tasks[0].Progress.Status != "success" {
-			t.Fatal("legacy data changed")
-		}
-		if err := s.Close(); err != nil {
-			t.Fatal(err)
+		if store != nil {
+			store.Close()
 		}
 	}
 }

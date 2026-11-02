@@ -10,9 +10,9 @@ services:
   ssh-server:
     order: 10
     binaries:
-      server: {type: rpm, package: openssh-server}
+      - {name: server, type: rpm, package: openssh-server}
     configs:
-      main:
+      - name: main
         path: /etc/ssh/sshd_config
         owner: root
         group: root
@@ -22,7 +22,7 @@ services:
           args: [/usr/sbin/sshd, -t, -f, "{candidate}"]
           timeout: 5s
     processes:
-      server:
+      - name: server
         type: systemd
         unit: sshd.service
         state: running

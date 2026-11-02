@@ -14,7 +14,7 @@ services:
   vmango-package:
     order: 20
     binaries:
-      package:
+      - name: package
         type: rpm
         manager: dnf
         package: vmango

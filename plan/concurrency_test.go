@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -306,7 +305,7 @@ func TestHostBindingAndPreflight(t *testing.T) {
 	}
 }
 
-func TestSavedConnectionNamesAndLegacyCompatibility(t *testing.T) {
+func TestSavedConnectionAndOwnershipNames(t *testing.T) {
 	p := manyHosts(1)
 	p.Hosts[0].Transport = "ssh"
 	p.Hosts[0].Connection = &plan.Connection{Host: "alias", User: "alice", Port: 2222, Sudo: true}
@@ -323,26 +322,6 @@ func TestSavedConnectionNamesAndLegacyCompatibility(t *testing.T) {
 		t.Fatal(s.Plan)
 	}
 	s.Close()
-	legacy := `{"version":"1.0","hosts":[{"name":"old","transport":"local","tasks":[{"id":"file","service":"app","component":"config.main","operation":"file","file":{"path":"/tmp/file","state":"present","uid":42,"gid":43},"progress":{"status":"pending"}}]}]}`
-	if err := os.WriteFile(path, []byte(legacy), 0600); err != nil {
-		t.Fatal(err)
-	}
-	s, err = plan.Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if *s.Plan.Hosts[0].Tasks[0].File.UID != 42 {
-		t.Fatal("numeric legacy owner lost")
-	}
-	s.Close()
-	p.Version = "1.0"
-	if err := p.Validate(); err == nil {
-		t.Fatal("legacy version accepted new connection")
-	}
-	p.Hosts[0].Transport, p.Hosts[0].Connection = "local", nil
-	if err := p.Validate(); err == nil {
-		t.Fatal("legacy version accepted ownership names")
-	}
 }
 
 func TestInvalidSavedConnections(t *testing.T) {

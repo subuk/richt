@@ -53,7 +53,7 @@ func TestTargetObservationUsesTargetAccountsAndContent(t *testing.T) {
 	mode := uint32(0640)
 	f := &plan.FileChange{Path: path, State: "present", Owner: "target-user", Group: "target-group", Mode: &mode, Content: "old\x00content\n"}
 	changed, err := target.Observe(context.Background(), f)
-	if err != nil || changed || f.UID != nil || f.GID != nil {
+	if err != nil || changed || f.Owner != "target-user" || f.Group != "target-group" {
 		t.Fatalf("unchanged target with named ownership = %v %v, %#v", changed, err, f)
 	}
 	f.Content = "prepared\ncontent\n"

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,7 +25,8 @@ func directory(t *testing.T) string {
 }
 func resolved(path, content string, sensitive bool) *inventory.Resolved {
 	c := inventory.Config{Path: path, Template: inventory.Template{Inline: ptr("{{.message}}\n")}, Mode: "0640", Sensitive: sensitive}
-	service := inventory.ResolvedService{Assignment: inventory.Assignment{Name: "test", State: "present"}, Definition: inventory.Service{Configs: map[string]inventory.Config{"main": c}}}
+	c.Name = "main"
+	service := inventory.ResolvedService{Assignment: inventory.Assignment{Name: "test", State: "present"}, Definition: inventory.Service{Configs: []inventory.Config{c}}}
 	host := inventory.ResolvedHost{Name: "local", Transport: inventory.Transport{Type: "local"}, Vars: map[string]any{"message": content}, Services: []inventory.ResolvedService{service}}
 	return &inventory.Resolved{Hosts: []inventory.ResolvedHost{host}}
 }
@@ -102,9 +104,9 @@ func TestTemplateFileCanDisappearAfterSave(t *testing.T) {
 	source := filepath.Join(dir, "source.tmpl")
 	os.WriteFile(source, []byte("{{.message}}\n"), 0600)
 	r := resolved(path, "frozen", false)
-	c := r.Hosts[0].Services[0].Definition.Configs["main"]
+	c := r.Hosts[0].Services[0].Definition.Configs[0]
 	c.Template = inventory.Template{File: source}
-	r.Hosts[0].Services[0].Definition.Configs["main"] = c
+	r.Hosts[0].Services[0].Definition.Configs[0] = c
 	p := diff(t, r)
 	saved := filepath.Join(dir, "plan.json")
 	if err := plan.Save(saved, p); err != nil {
@@ -160,9 +162,9 @@ func TestPreparationErrorsBeforeChanges(t *testing.T) {
 	path := filepath.Join(dir, "target")
 	for _, source := range []string{"{{.missing}}", "{{secret \"fake-example\"}}"} {
 		r := resolved(path, "value", false)
-		c := r.Hosts[0].Services[0].Definition.Configs["main"]
+		c := r.Hosts[0].Services[0].Definition.Configs[0]
 		c.Template.Inline = ptr(source)
-		r.Hosts[0].Services[0].Definition.Configs["main"] = c
+		r.Hosts[0].Services[0].Definition.Configs[0] = c
 		if _, err := config.Diff(r); err == nil {
 			t.Fatalf("expected preparation error for %s", source)
 		}
@@ -239,7 +241,7 @@ func TestPreparationPreservesRequestedOwnerNamesAndRemoteLabel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f.Owner != "target-only-user" || f.Group != "target-only-group" || f.UID != nil || f.GID != nil {
+	if f.Owner != "target-only-user" || f.Group != "target-only-group" {
 		t.Fatal(f)
 	}
 	if _, err = (config.Local{}).Resolve(plan.Task{Operation: "file", File: f}); err != nil {
@@ -247,5 +249,57 @@ func TestPreparationPreservesRequestedOwnerNamesAndRemoteLabel(t *testing.T) {
 	}
 	if _, err = config.Prepare(inventory.Config{Path: "/etc/richt-example", SELinux: "bad", Template: inventory.Template{Inline: ptr("text")}}, "present", nil); err == nil {
 		t.Fatal("accepted malformed label")
+	}
+}
+
+func TestConfigListOrderAndOriginalTaskPositions(t *testing.T) {
+	dir := directory(t)
+	r := resolved(filepath.Join(dir, "unused"), "", false)
+	r.Hosts[0].Services[0].Definition.Configs = []inventory.Config{
+		{Name: "zeta", Path: filepath.Join(dir, "first"), Template: inventory.Template{Inline: ptr("first")}},
+		{Path: filepath.Join(dir, "second"), Template: inventory.Template{Inline: ptr("second")}},
+		{Name: "alpha", Path: filepath.Join(dir, "third"), Template: inventory.Template{Inline: ptr("third")}},
+		{Path: filepath.Join(dir, "fourth"), Template: inventory.Template{Inline: ptr("fourth")}},
+	}
+	p := diff(t, r)
+	for i, task := range p.Hosts[0].Tasks {
+		if task.File.Path != r.Hosts[0].Services[0].Definition.Configs[i].Path || task.ID != fmt.Sprintf("test/config/%d", i) {
+			t.Fatalf("task %d lost declaration position: %#v", i, task)
+		}
+	}
+	apply(t, p)
+	// Filtering unchanged files must not renumber remaining task identities.
+	if err := os.WriteFile(filepath.Join(dir, "third"), []byte("changed"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	p = diff(t, r)
+	if len(p.Hosts[0].Tasks) != 1 || p.Hosts[0].Tasks[0].ID != "test/config/2" {
+		t.Fatalf("changed task position: %#v", p.Hosts[0].Tasks)
+	}
+	r.Hosts[0].Services[0].State = "absent"
+	p = diff(t, r)
+	if len(p.Hosts[0].Tasks) != 4 {
+		t.Fatalf("absent tasks: %#v", p.Hosts[0].Tasks)
+	}
+	for i, task := range p.Hosts[0].Tasks {
+		position := 3 - i
+		if task.File.Path != r.Hosts[0].Services[0].Definition.Configs[position].Path || task.ID != fmt.Sprintf("test/config/%d", position) {
+			t.Fatalf("absent task %d lost reverse order: %#v", i, task)
+		}
+	}
+	apply(t, p)
+	for _, c := range r.Hosts[0].Services[0].Definition.Configs {
+		if _, err := os.Stat(c.Path); !os.IsNotExist(err) {
+			t.Fatalf("file remains after removal: %s (%v)", c.Path, err)
+		}
+	}
+}
+
+func TestPrepareConfigType(t *testing.T) {
+	for _, kind := range []string{"", "template", "unknown"} {
+		_, err := config.Prepare(inventory.Config{Type: kind, Path: "/tmp/type-test", Template: inventory.Template{Inline: ptr("content")}}, "present", nil)
+		if (err != nil) != (kind == "unknown") {
+			t.Fatalf("type %q: %v", kind, err)
+		}
 	}
 }

@@ -15,14 +15,14 @@ services:
   app:
     order: 10
     configs:
-      main:
+      - name: main
         path: /etc/app.conf
         template: {file: missing-template}
         validate:
           args: [/does/not/exist, '{candidate}']
           timeout: 3s
     processes:
-      app:
+      - name: app
         type: systemd
         unit: app.service
         state: stopped
@@ -44,7 +44,7 @@ hosts:
 		t.Fatal(err)
 	}
 	s := r.Hosts[0].Services[0].Definition
-	if s.Processes["app"].Masked == nil || !*s.Processes["app"].Masked || s.Configs["main"].Validate.Timeout != "3s" {
+	if s.Processes[0].Masked == nil || !*s.Processes[0].Masked || s.Configs[0].Validate.Timeout != "3s" {
 		t.Fatalf("lost declarations: %#v", s)
 	}
 	for _, replacement := range []string{"unexpected: true", "args: [relative, '{candidate}']"} {

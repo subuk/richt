@@ -90,10 +90,15 @@ func read(filename string, value any) error {
 	if err := stringKeys(&root, make(map[*yaml.Node]bool)); err != nil {
 		return fmt.Errorf("%s: %w", filename, err)
 	}
-	if _, ok := value.(*document); ok {
-		if err := inventorySchema(&root); err != nil {
-			return fmt.Errorf("%s: %w", filename, err)
-		}
+	var schemaErr error
+	switch value.(type) {
+	case *document:
+		schemaErr = inventorySchema(&root)
+	case *inventory.Service:
+		schemaErr = serviceSchema(&root)
+	}
+	if schemaErr != nil {
+		return fmt.Errorf("%s: %w", filename, schemaErr)
 	}
 	d := yaml.NewDecoder(bytes.NewReader(data))
 	d.KnownFields(true)
@@ -158,15 +163,22 @@ func resolvePaths(s *inventory.Service, source string) error {
 		}
 		return c, nil
 	}
-	for _, name := range keys(s.Configs) {
-		c, err := resolve(s.Configs[name])
+	for i, config := range s.Configs {
+		name := config.Name
+		if name == "" {
+			name = fmt.Sprintf("[%d]", i+1)
+		}
+		c, err := resolve(config)
 		if err != nil {
 			return fmt.Errorf("config.%s template.file: %w", name, err)
 		}
-		s.Configs[name] = c
+		s.Configs[i] = c
 	}
-	for _, name := range keys(s.Processes) {
-		p := s.Processes[name]
+	for i, p := range s.Processes {
+		name := p.Name
+		if name == "" {
+			name = fmt.Sprintf("[%d]", i+1)
+		}
 		if p.UnitFile != nil {
 			c := *p.UnitFile
 			if c.Path == "" {
@@ -189,7 +201,7 @@ func resolvePaths(s *inventory.Service, source string) error {
 			}
 			p.Overrides[key] = c
 		}
-		s.Processes[name] = p
+		s.Processes[i] = p
 	}
 	return nil
 }

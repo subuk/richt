@@ -144,7 +144,7 @@ def main():
         for alias in aliases.values():
             check(alias + " config reload executes", wait_reload(alias, before[alias] + 1))
 
-        inventory, target, frozen = diff("frozen", file_inventory({"frozen": config(root + "/frozen", "frozen input\n")}))
+        inventory, target, frozen = diff("frozen", file_inventory([dict(config(root + "/frozen", "frozen input\n"), name="frozen")]))
         check("saved files preserve owner and group names", all(
             task["file"].get("owner") == "root" and task["file"].get("group") == "root" and
             "uid" not in task["file"] and "gid" not in task["file"]
@@ -169,7 +169,7 @@ def main():
                        "tags": ["files"]}]
             named = config(root + "/named-ids", "names resolve at apply\n")
             named.update(owner=identity, group=identity)
-            _, target, named_plan = diff("named-ids", file_inventory({"named": named}, hosts=host_a))
+            _, target, named_plan = diff("named-ids", file_inventory([dict(named, name="named")], hosts=host_a))
             named_file = named_plan["hosts"][0]["tasks"][0]["file"]
             check("changing-ID plan contains names without numeric ownership", named_file.get("owner") == identity and
                   named_file.get("group") == identity and "uid" not in named_file and "gid" not in named_file)
@@ -194,10 +194,8 @@ def main():
                    "\nprintf 'unchanged content\\n' > " + shlex.quote(owner_attributes) +
                    "\nchown root:root -- " + shlex.quote(owner_write) + " " + shlex.quote(owner_attributes) +
                    "\nchmod 0644 -- " + shlex.quote(owner_write) + " " + shlex.quote(owner_attributes))
-            _, target, owner_plan = diff("owner-only", file_inventory({
-                "write": {"path": owner_write, "owner": identity, "template": {"inline": "new content\n"}},
-                "attributes": {"path": owner_attributes, "owner": identity, "mode": "0600",
-                               "template": {"inline": "unchanged content\n"}}}, hosts=host_a))
+            _, target, owner_plan = diff("owner-only", file_inventory([{"name": "write", "path": owner_write, "owner": identity, "template": {"inline": "new content\n"}}, {"name": "attributes", "path": owner_attributes, "owner": identity, "mode": "0600",
+                               "template": {"inline": "unchanged content\n"}}], hosts=host_a))
             check("owner-only plan covers a write and an attribute-only change", sorted(
                 bool(task["file"].get("write")) for task in owner_plan["hosts"][0]["tasks"]) == [False, True] and
                 all("group" not in task["file"] and "gid" not in task["file"]
@@ -222,9 +220,7 @@ def main():
                    "; printf old > " + shlex.quote(root + "/actual") +
                    "; ln -s actual " + shlex.quote(root + "/link") +
                    "; ln -s parent " + shlex.quote(root + "/parent-link"))
-        _, target, _ = diff("symlinks", file_inventory({
-            "target": config(root + "/link", "followed target\n"),
-            "parent": config(root + "/parent-link/child", "followed parent\n")}))
+        _, target, _ = diff("symlinks", file_inventory([dict(config(root + "/link", "followed target\n"), name="target"), dict(config(root + "/parent-link/child", "followed parent\n"), name="parent")]))
         apply("symlinks", target)
         check("target and parent symlinks follow ordinary semantics", all(
             remote(alias, "cat " + shlex.quote(root + "/actual") + " " +
@@ -234,8 +230,8 @@ def main():
         mixed = {"tags": {
             "local": {"services": {"localfiles": {}}},
             "remote": {"services": {"remotefiles": {}}}}, "services": {
-            "localfiles": {"order": 10, "configs": {"mixed": {"path": str(work / "mixed-local"), "template": {"inline": "mixed\n"}}}},
-            "remotefiles": {"order": 10, "configs": {"mixed": config(root + "/mixed", "mixed\n")}}}, "hosts": [
+            "localfiles": {"order": 10, "configs": [{"name": "mixed", "path": str(work / "mixed-local"), "template": {"inline": "mixed\n"}}]},
+            "remotefiles": {"order": 10, "configs": [dict(config(root + "/mixed", "mixed\n"), name="mixed")]}}, "hosts": [
                 {"name": "local", "transport": {"type": "local"}, "tags": ["local"]},
                 {"name": "remote", "transport": {"type": "ssh", "host": args.host_a, "sudo": True},
                  "tags": ["remote"]}]}
@@ -244,10 +240,7 @@ def main():
         check("mixed local and SSH plan executes", (work / "mixed-local").read_text() == "mixed\n" and
               remote(args.host_a, "cat " + shlex.quote(root + "/mixed")).stdout == "mixed\n")
 
-        progress = file_inventory({
-            "a-first": config(root + "/progress-first", "first\n"),
-            "b-fail": config(root + "/progress-fail", "second\n"),
-            "c-blocked": config(root + "/progress-blocked", "third\n")})
+        progress = file_inventory([dict(config(root + "/progress-first", "first\n"), name="a-first"), dict(config(root + "/progress-fail", "second\n"), name="b-fail"), dict(config(root + "/progress-blocked", "third\n"), name="c-blocked")])
         _, target, _ = diff("progress", progress)
         remote(args.host_a, "mkdir " + shlex.quote(root + "/progress-fail"))
         failure = apply("progress-failure", target, parallelism=1, ok=False)
@@ -273,9 +266,7 @@ def main():
             with os.fdopen(os.open(source_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w") as stream:
                 os.fchmod(stream.fileno(), 0o600)
                 json.dump({"database": {"password": value}}, stream)
-        secret_files = file_inventory({
-            "a-first": dict(config(root + "/secret-first", '{{secret "database.password"}}'), mode="0600"),
-            "b-fail": dict(config(root + "/secret-second", '{{secret "database.password" "alternate"}}'), mode="0600")})
+        secret_files = file_inventory([dict(dict(config(root + "/secret-first", '{{secret "database.password"}}'), mode="0600"), name="a-first"), dict(dict(config(root + "/secret-second", '{{secret "database.password" "alternate"}}'), mode="0600"), name="b-fail")])
         secret_files["secret_sources"] = {
             "default": {"type": "yaml", "file": source_default.name},
             "alternate": {"type": "yaml", "file": source_alternate.name}}
@@ -312,7 +303,7 @@ def main():
         if args.auth_failure_host:
             failures.append(("authentication", args.auth_failure_host))
         for label, failure_alias in failures:
-            _, target, failed_connection = diff(label, file_inventory({"connection": config(root + "/" + label, "reachable peer\n")}))
+            _, target, failed_connection = diff(label, file_inventory([dict(config(root + "/" + label, "reachable peer\n"), name="connection")]))
             if failure_alias:
                 failed_connection["hosts"][0]["connection"]["host"] = failure_alias
             else:

@@ -6,7 +6,7 @@ weight: 40
 
 Inventory describes hosts and their connection settings, tags, variables, and
 assignments of reusable [services](services/_index.md). Tags select each
-service's target state; service definitions contain its named components and
+service's target state; service definitions contain its ordered components and
 execution order.
 
 Validate and view the supplied two-host example without network access:
@@ -32,9 +32,10 @@ The example resolves `gena.vmango.cloud_name` to `Home` and
 ## Schema and file references
 
 Inventory contains `tags`, `services`, `hosts`, and optional `secret_sources`.
-Names of hosts, tags, services and components start with a letter or number and
-contain only letters, numbers, hyphens and underscores. Component names are
-stable keys, independent of resource paths, package names and unit names.
+Names of hosts, tags, services and explicitly named components start with a
+letter or number and contain only letters, numbers, hyphens and underscores.
+Component names are optional reference labels, independent of resource paths,
+package names and unit names.
 Unknown fields, duplicate YAML keys, non-string mapping keys, and multiple YAML
 documents are errors. All definitions and references are validated, including
 definitions outside the selected scope.
@@ -89,21 +90,28 @@ assignment does not request resource removal: use explicit `state: absent`.
 
 ## Components
 
-A service definition groups named binary, config, and process components. This
-bare definition can be stored in the `services/app.yaml` referenced above:
+A service definition contains flat ordered lists under `binaries`, `configs`,
+and `processes`. List declaration order controls execution within each
+collection; component names do not sort it. Each item can omit `name`, but an
+explicit name must be a nonempty string and unique within its collection. The
+same name may appear in different collections. Only explicitly named binaries
+and configs can be referenced by `restart_on` or `reload_on`; unnamed items
+still execute normally.
+
+This bare definition can be stored in the `services/app.yaml` referenced above:
 
 ```yaml
 binaries:
-  package:
+  - name: package
     type: rpm
     package: app
 configs:
-  main:
+  - name: main
     path: /etc/app.conf
     mode: "0644"
     template: {file: templates/app.gotmpl}
 processes:
-  web:
+  - name: web
     type: systemd
     unit: app.service
     restart_on: [binary.package]
@@ -123,7 +131,10 @@ SELinux, and optional `validate: {args: [...], timeout: 5s}`, and [systemd proce
 drop-ins, enablement, optional `masked: true|false`, and timeouts. Validator
 executables are not opened or run by inventory inspection; short and exact RPM
 version syntax is checked without contacting hosts or repositories. [Reactions](services/reactions.md) defines
-`restart_on`, `reload_on`, and process `after` references and their validation.
+`restart_on` and `reload_on` references and their validation.
+[Lifecycle and ordering](services/lifecycle.md) defines forward declaration
+order for present services and reverse traversal of each collection for absence.
+Components have no dependency graph.
 
 ## Variable merging
 

@@ -124,11 +124,12 @@ func validateService(s Service) error {
 	if len(s.Binaries)+len(s.Configs)+len(s.Processes) == 0 {
 		return fmt.Errorf("service must contain at least one binary, config or process")
 	}
-	for _, name := range sortedKeys(s.Binaries) {
-		if err := validName("binary", name); err != nil {
+	binaryNames, configNames, processNames := map[string]bool{}, map[string]bool{}, map[string]bool{}
+	for i, b := range s.Binaries {
+		if err := componentName("binary", b.Name, binaryNames); err != nil {
 			return err
 		}
-		b := s.Binaries[name]
+		name := componentLabel(b.Name, i)
 		if b.Type != "rpm" {
 			return fmt.Errorf("binary.%s type: expected rpm", name)
 		}
@@ -142,19 +143,20 @@ func validateService(s Service) error {
 			return fmt.Errorf("binary.%s version: %w", name, err)
 		}
 	}
-	for _, name := range sortedKeys(s.Configs) {
-		if err := validName("config", name); err != nil {
+	for i, c := range s.Configs {
+		if err := componentName("config", c.Name, configNames); err != nil {
 			return err
 		}
-		if err := validateConfig(s.Configs[name]); err != nil {
+		name := componentLabel(c.Name, i)
+		if err := validateConfig(c); err != nil {
 			return fmt.Errorf("config.%s: %w", name, err)
 		}
 	}
-	for _, name := range sortedKeys(s.Processes) {
-		if err := validName("process", name); err != nil {
+	for i, p := range s.Processes {
+		if err := componentName("process", p.Name, processNames); err != nil {
 			return err
 		}
-		p := s.Processes[name]
+		name := componentLabel(p.Name, i)
 		if p.Type != "systemd" {
 			return fmt.Errorf("process.%s type: expected systemd", name)
 		}
@@ -194,9 +196,9 @@ func validateService(s Service) error {
 				if ok {
 					switch kind {
 					case "binary":
-						_, exists = s.Binaries[key]
+						exists = key != "" && binaryNames[key]
 					case "config":
-						_, exists = s.Configs[key]
+						exists = key != "" && configNames[key]
 					}
 				}
 				if !exists {
@@ -207,16 +209,6 @@ func validateService(s Service) error {
 				}
 				seen[ref] = true
 			}
-		}
-		seen := map[string]bool{}
-		for _, ref := range p.After {
-			if _, ok := s.Processes[ref]; !ok {
-				return fmt.Errorf("process.%s after: unknown process %q in this service", name, ref)
-			}
-			if seen[ref] {
-				return fmt.Errorf("process.%s after: duplicate process %q", name, ref)
-			}
-			seen[ref] = true
 		}
 		if p.UnitFile != nil {
 			if err := validateConfig(*p.UnitFile); err != nil {
@@ -239,37 +231,13 @@ func validateService(s Service) error {
 			}
 		}
 	}
-	states := map[string]int{}
-	var stack []string
-	var visit func(string) error
-	visit = func(name string) error {
-		if states[name] == 1 {
-			return fmt.Errorf("process.%s after: cycle %s -> %s", name, strings.Join(stack, " -> "), name)
-		}
-		if states[name] == 2 {
-			return nil
-		}
-		states[name] = 1
-		stack = append(stack, name)
-		refs := append([]string(nil), s.Processes[name].After...)
-		for _, ref := range refs {
-			if err := visit(ref); err != nil {
-				return err
-			}
-		}
-		stack = stack[:len(stack)-1]
-		states[name] = 2
-		return nil
-	}
-	for _, name := range sortedKeys(s.Processes) {
-		if err := visit(name); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
 func validateConfig(c Config) error {
+	if c.Type != "" && c.Type != "template" {
+		return fmt.Errorf("type: expected template or omitted")
+	}
 	if !path.IsAbs(c.Path) || strings.ContainsAny(c.Path, "\x00\r\n") || path.Clean(c.Path) == "/" {
 		return fmt.Errorf("path: expected an absolute file path")
 	}
@@ -308,5 +276,27 @@ func validateConfig(c Config) error {
 			}
 		}
 	}
+	return nil
+}
+
+// componentLabel identifies unnamed items by their one-based declaration position.
+func componentLabel(name string, position int) string {
+	if name != "" {
+		return name
+	}
+	return fmt.Sprintf("[%d]", position+1)
+}
+
+func componentName(kind, name string, seen map[string]bool) error {
+	if name == "" {
+		return nil
+	}
+	if err := validName(kind, name); err != nil {
+		return err
+	}
+	if seen[name] {
+		return fmt.Errorf("%s %q: duplicate name", kind, name)
+	}
+	seen[name] = true
 	return nil
 }

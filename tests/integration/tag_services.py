@@ -62,7 +62,7 @@ def main():
             actual = {host["name"]: host["transport"] for host in inventory["hosts"]}
             valid = len(inventory["hosts"]) == 3 and actual == {
                 name: {"type": "ssh", "host": host, "user": args.user, "sudo": True} for name, host in expected.items()}
-            valid = valid and inventory["services"]["node-exporter"]["processes"]["exporter"]["unit"] == args.exporter_unit
+            valid = valid and inventory["services"]["node-exporter"]["processes"][0]["unit"] == args.exporter_unit
             secret_path = Path(inventory["secret_sources"]["default"]["file"])
             valid = valid and (work / secret_path).resolve() == (work / "secrets.yaml").resolve()
             valid = valid and isinstance(password, str) and bool(re.fullmatch(r"[a-f0-9]{64}", password))
@@ -139,17 +139,15 @@ def main():
         return value
 
     def rpm(*packages):
-        return {name.replace("-", "_"): {"type": "rpm", "package": name} for name in packages}
+        return [{"name": name.replace("-", "_"), "type": "rpm", "package": name} for name in packages]
 
     def unit(name, text):
         result = config(name, "/etc/systemd/system/" + name + ".service", text)
         result.pop("path")
         return result
 
-    def process(name, after=None, unit_file=None):
+    def process(name, unit_file=None):
         result = {"type": "systemd", "unit": name + ".service", "state": "running", "timeout": "120s"}
-        if after:
-            result["after"] = after
         if unit_file:
             result["unit_file"] = unit_file
         return result
@@ -206,7 +204,7 @@ Type=oneshot
 RemainAfterExit=yes
 ExecStart=/bin/sh -c '/usr/sbin/runuser -u postgres -- /usr/bin/psql -X -v ON_ERROR_STOP=1 < /etc/richt-krg91/bootstrap.sql'
 """)
-            pg = process("postgresql", after=["init"])
+            pg = process("postgresql")
             pg["enabled"] = True
             override = config("postgresql-override", "unused", "[Service]\nExecStart=\nExecStart=/usr/bin/postgres -D /var/lib/pgsql/data -c config_file=/etc/richt-krg91/postgresql.conf\n")
             override.pop("path")
@@ -215,19 +213,13 @@ ExecStart=/bin/sh -c '/usr/sbin/runuser -u postgres -- /usr/bin/psql -X -v ON_ER
             repo = lambda section, url: f"[{section}]\nname=Richt KRG-91 {section}\nbaseurl={url}\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=1\ngpgkey={url}repodata/repomd.xml.key\n"
             services = {
                 "epel": {"order": 5, "binaries": rpm("epel-release")},
-                "repositories": {"order": 10, "configs": {
-                    "kubernetes": config("kubernetes-repo", "/etc/yum.repos.d/richt-krg91-kubernetes.repo", repo("richt-krg91-kubernetes", "https://pkgs.k8s.io/core:/stable:/v1.36/rpm/")),
-                    "crio": config("crio-repo", "/etc/yum.repos.d/richt-krg91-crio.repo", repo("richt-krg91-crio", "https://download.opensuse.org/repositories/isv:/cri-o:/stable:/v1.36/rpm/"))}},
+                "repositories": {"order": 10, "configs": [dict(config("kubernetes-repo", "/etc/yum.repos.d/richt-krg91-kubernetes.repo", repo("richt-krg91-kubernetes", "https://pkgs.k8s.io/core:/stable:/v1.36/rpm/")), name="kubernetes"), dict(config("crio-repo", "/etc/yum.repos.d/richt-krg91-crio.repo", repo("richt-krg91-crio", "https://download.opensuse.org/repositories/isv:/cri-o:/stable:/v1.36/rpm/")), name="crio")]},
                 "kubernetes-node": {"order": 30, "binaries": rpm("kubeadm", "kubelet", "kubectl", "cri-o", "postgresql"),
-                                    "processes": {"kubelet": {"type": "systemd", "unit": "kubelet.service", "state": "stopped", "enabled": False}}},
-                "postgresql": {"order": 40, "binaries": rpm("postgresql-server", "postgresql"), "configs": {
-                    "server": config("postgresql", ROOT + "/postgresql.conf", pg_config, postgres=True),
-                    "hba": config("pg-hba", ROOT + "/pg_hba.conf", "local all all peer\nhost all all 192.168.0.0/16 scram-sha-256\n", postgres=True),
-                    "bootstrap": config("bootstrap", ROOT + "/bootstrap.sql", sql, mode="0600", sensitive=True)},
-                    "processes": {"init": process("richt-krg91-pg-init", unit_file=init), "database": pg,
-                                  "bootstrap": process("richt-krg91-pg-bootstrap", after=["database"], unit_file=bootstrap)}},
+                                    "processes": [{"name": "kubelet", "type": "systemd", "unit": "kubelet.service", "state": "stopped", "enabled": False}]},
+                "postgresql": {"order": 40, "binaries": rpm("postgresql-server", "postgresql"), "configs": [dict(config("postgresql", ROOT + "/postgresql.conf", pg_config, postgres=True), name="server"), dict(config("pg-hba", ROOT + "/pg_hba.conf", "local all all peer\nhost all all 192.168.0.0/16 scram-sha-256\n", postgres=True), name="hba"), dict(config("bootstrap", ROOT + "/bootstrap.sql", sql, mode="0600", sensitive=True), name="bootstrap")],
+                    "processes": [dict(process("richt-krg91-pg-init", unit_file=init), name="init"), dict(pg, name="database"), dict(process("richt-krg91-pg-bootstrap", unit_file=bootstrap), name="bootstrap")]},
                 "node-exporter": {"order": 50, "binaries": rpm("node-exporter"),
-                                  "processes": {"exporter": {"type": "systemd", "unit": args.exporter_unit, "enabled": True, "state": "running", "timeout": "30s"}}}}
+                                  "processes": [{"name": "exporter", "type": "systemd", "unit": args.exporter_unit, "enabled": True, "state": "running", "timeout": "30s"}]}}
             secret = private(work / "secrets.yaml", json.dumps({"database": {"password": password}}))
             inventory = {"secret_sources": {"default": {"type": "yaml", "file": str(secret)}},
                          "tags": {"monitoring": {"order": 5, "services": {"epel": {}, "node-exporter": {}}},

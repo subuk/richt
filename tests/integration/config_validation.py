@@ -126,7 +126,7 @@ esac
         path = root + "/managed"
         target("printf 'old\\n' > " + shlex.quote(path) + "; chmod 0640 " + shlex.quote(path))
         before = snapshot(path)
-        _, saved = prepare("success", {"main": config(path)})
+        _, saved = prepare("success", [dict(config(path), name="main")])
         check("diff leaves destination unchanged", snapshot(path) == before)
         apply(saved)
         check("direct argv succeeds with candidate mode0600, directory0700 and cwd root", snapshot(path).startswith("prepared\n640 0 0 "))
@@ -136,7 +136,7 @@ esac
         for behavior in ["failure", "missing", "timeout"]:
             validator = [root + "/missing-checker", "{candidate}"] if behavior == "missing" else None
             before, dirs = snapshot(path), candidates()
-            _, saved = prepare(behavior, {"main": config(path, behavior, "rejected\n", validator)})
+            _, saved = prepare(behavior, [dict(config(path, behavior, "rejected\n", validator), name="main")])
             start = time.monotonic()
             apply(saved, False)
             check(behavior + " leaves destination bytes, owner, mode and inode unchanged", snapshot(path) == before)
@@ -149,32 +149,44 @@ esac
         source.write_text("frozen from deleted source\n")
         c = config(path)
         c["template"] = {"file": str(source)}
-        inv, saved = prepare("frozen", {"main": c})
+        inv, saved = prepare("frozen", [dict(c, name="main")])
         source.unlink()
         inv.unlink()
         apply(saved)
         check("saved validator and bytes survive deleted inventory and template", snapshot(path).startswith("frozen from deleted source\n"))
 
         missing = [root + "/missing-checker", "{candidate}"]
-        inv, _ = prepare("noop", {"main": config(path, content="frozen from deleted source\n", validator=missing)})
+        inv, _ = prepare("noop", [dict(config(path, content="frozen from deleted source\n", validator=missing), name="main")])
         check("matching file skips unavailable checker", "No changes" in run(["diff", "-i", inv]))
-        _, saved = prepare("attributes", {"main": config(path, content="frozen from deleted source\n", validator=missing, mode="0600")})
+        _, saved = prepare("attributes", [dict(config(path, content="frozen from deleted source\n", validator=missing, mode="0600"), name="main")])
         apply(saved)
         check("attribute-only change skips checker", snapshot(path).splitlines()[-1].startswith("600 0 0 "))
-        _, saved = prepare("remove", {"main": config(path, validator=missing)}, "absent")
+        _, saved = prepare("remove", [dict(config(path, validator=missing), name="main")], "absent")
         apply(saved)
         target("test ! -e " + shlex.quote(path))
         check("removal skips checker")
 
-        first, second, later = [root + "/" + name for name in ["first", "second", "later"]]
-        inv, saved = prepare("continuation", {"a": config(first), "b": config(second, "guard"), "c": config(later)})
+        first, second, third, later = [root + "/" + name for name in ["first", "second", "third", "later"]]
+        ordered = [dict(config(first), name="z-last"), config(second, "guard"),
+                   config(third, validator=["/bin/sh", "-c", 'test -f "$1"', "richt-order", second, "{candidate}"]),
+                   dict(config(later, validator=["/bin/sh", "-c", 'test -f "$1"', "richt-order", third, "{candidate}"]), name="a-first")]
+        inv, saved = prepare("continuation", ordered)
+        prepared = json.loads(saved.read_text())["hosts"][0]["tasks"]
+        ids = [task["id"] for task in prepared]
+        check("named and unnamed configs retain declaration order and distinct task IDs",
+              [task["file"]["path"] for task in prepared] == [first, second, third, later] and len(set(ids)) == 4)
         apply(saved, False)
-        statuses = [t["progress"]["status"] for t in json.loads(saved.read_text())["hosts"][0]["tasks"]]
-        check("validation failure persists success and blocks later tasks", statuses == ["success", "error", "pending"])
+        failed = json.loads(saved.read_text())["hosts"][0]["tasks"]
+        check("validation failure persists success and blocks later named and unnamed tasks",
+              [task["progress"]["status"] for task in failed] == ["success", "error", "pending", "pending"] and
+              [task["id"] for task in failed] == ids)
         target("printf 'manual\\n' > " + shlex.quote(first) + "; touch " + shlex.quote(root + "/allow"))
         inv.unlink()
         apply(saved)
-        check("continuation skips successful file and retries unfinished validation", snapshot(first).startswith("manual\n") and snapshot(second).startswith("prepared\n") and snapshot(later).startswith("prepared\n"))
+        completed = json.loads(saved.read_text())["hosts"][0]["tasks"]
+        check("continuation preserves ordered IDs, skips success and retries unfinished validation",
+              snapshot(first).startswith("manual\n") and all(snapshot(path).startswith("prepared\n") for path in [second, third, later]) and
+              [task["id"] for task in completed] == ids and all(task["progress"]["status"] == "success" for task in completed))
         cleaned()
 
         # Read the active config only; both validated writes use an isolated path.
@@ -182,10 +194,10 @@ esac
         ssh_config = target("cat /etc/ssh/sshd_config")
         isolated = root + "/sshd_config"
         actual = ["/usr/sbin/sshd", "-t", "-f", "{candidate}"]
-        _, saved = prepare("real-sshd", {"main": config(isolated, content=ssh_config, validator=actual)})
+        _, saved = prepare("real-sshd", [dict(config(isolated, content=ssh_config, validator=actual), name="main")])
         apply(saved)
         before = snapshot(isolated)
-        _, saved = prepare("bad-sshd", {"main": config(isolated, content=ssh_config + "\nInvalidRichtTestDirective yes\n", validator=actual)})
+        _, saved = prepare("bad-sshd", [dict(config(isolated, content=ssh_config + "\nInvalidRichtTestDirective yes\n", validator=actual), name="main")])
         apply(saved, False)
         check("real sshd accepts copied valid config and rejects invalid candidate before write", snapshot(isolated) == before)
         cleaned()

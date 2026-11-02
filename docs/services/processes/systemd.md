@@ -6,7 +6,7 @@ weight: 10
 
 ```yaml
 processes:
-  web:
+  - name: web
     type: systemd
     unit: example-app.service
     state: running
@@ -14,11 +14,11 @@ processes:
     timeout: 5s
     restart_on: [binary.package]
     reload_on: [config.main]
-    after: []
 ```
 
 | Field | Required | Meaning and default |
 | --- | --- | --- |
+| `name` | no | Nonempty optional label, unique within the process list |
 | `type` | yes | `systemd` |
 | `unit` | yes | A systemd `.service` unit name |
 | `state` | no | `running` (default), or `stopped` |
@@ -27,12 +27,11 @@ processes:
 | `timeout` | no | Positive Go duration; default `5s` |
 | `restart_on` | no | Same-service binary/config references; default empty |
 | `reload_on` | no | Same-service binary/config references; default empty; requires reload capability |
-| `after` | no | Same-service process names; default empty |
 | `unit_file` | no | One owned full-unit config object |
 | `overrides` | no | Mapping of `.conf` basenames to owned drop-in config objects |
 
 [Reactions](../reactions.md) owns reference semantics and lifecycle branches;
-[lifecycle](../lifecycle.md) owns `after` ordering and service phases. Other
+[lifecycle](../lifecycle.md) owns list declaration order and service phases. Other
 process managers and arbitrary script backends are unsupported. See
 [platform requirements](../../installation.md) and [validation](../../validation.md)
 for the verified systemd environment.
@@ -66,7 +65,7 @@ lifecycle task's timeout.
 
 ```yaml
 processes:
-  unwanted:
+  - name: unwanted
     type: systemd
     unit: unwanted.service
     state: stopped
@@ -113,7 +112,7 @@ including templates, owner/group, mode, SELinux, and sensitivity:
 
 ```yaml
 processes:
-  web:
+  - name: web
     type: systemd
     unit: example-app.service
     unit_file:
@@ -172,8 +171,8 @@ for external units it does not remove. Already missing units are accepted.
 It ignores the declared `masked` target and preserves an existing mask. Removing
 an owned full-unit path while it is masked fails preparation: first unmask it
 through a present assignment, then request removal.
-Processes run in reverse dependency order before files and packages are removed;
-see [absent services](../lifecycle.md#absent-services).
+Processes run in reverse list declaration order before files and packages are
+removed; see [absent services](../lifecycle.md#absent-services).
 
 Failed commands or verification block the remainder of the host. Explicit
 [saved-plan continuation](../../continuation.md) skips successful tasks and

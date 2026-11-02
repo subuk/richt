@@ -122,7 +122,7 @@ func TestStoreLockResumeAndVersion(t *testing.T) {
 	if _, err := plan.Open(path); err == nil {
 		t.Fatal("incompatible plan accepted")
 	}
-	for _, text := range []string{`{"version":"1.0","hosts":[],"surprise":true}`, `{"version":"1.0","hosts":[]} {}`} {
+	for _, text := range []string{`{"version":"1.3","hosts":[],"surprise":true}`, `{"version":"1.3","hosts":[]} {}`} {
 		os.WriteFile(path, []byte(text), 0600)
 		if _, err := plan.Open(path); err == nil {
 			t.Fatal("malformed plan accepted")
@@ -184,10 +184,10 @@ func TestMalformedPlanDiagnosticsDoNotQuotePayload(t *testing.T) {
 	marker := "synthetic-confidential-marker"
 	path := filepath.Join(t.TempDir(), "plan.json")
 	for _, payload := range []string{
-		`{"version":"1.1","hosts":[],"` + marker + `":true}`,
-		`{"version":"1.1","hosts":[{"tasks":[{"file":{"sensitive":true,"mode":"` + marker + `"}}]}]}`,
-		`{"version":"1.1","hosts":[{"tasks":[{"file":{"content":{"` + marker + `":true}}}]}]}`,
-		`{"version":"1.1","hosts":[]} {"` + marker + `":true}`,
+		`{"version":"1.3","hosts":[],"` + marker + `":true}`,
+		`{"version":"1.3","hosts":[{"tasks":[{"file":{"sensitive":true,"mode":"` + marker + `"}}]}]}`,
+		`{"version":"1.3","hosts":[{"tasks":[{"file":{"content":{"` + marker + `":true}}}]}]}`,
+		`{"version":"1.3","hosts":[]} {"` + marker + `":true}`,
 	} {
 		if err := os.WriteFile(path, []byte(payload), 0600); err != nil {
 			t.Fatal("could not write test plan")

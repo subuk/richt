@@ -7,7 +7,7 @@ services:
   repository:
     order: 10
     configs:
-      repo:
+      - name: repo
         path: /etc/yum.repos.d/richt-demo.repo
         mode: "0644"
         template:
@@ -20,20 +20,20 @@ services:
   demo:
     order: 20
     binaries:
-      app:
+      - name: app
         type: rpm
         manager: dnf
         package: richt-demo
         version: 0:1.0-1.noarch
     configs:
-      main:
+      - name: main
         path: /etc/richt-demo.conf
         mode: "0644"
         template:
           inline: |
             message=hello
     processes:
-      main:
+      - name: main
         type: systemd
         unit: richt-demo.service
         state: running

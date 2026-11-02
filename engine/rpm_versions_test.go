@@ -15,8 +15,8 @@ import (
 func TestSavedUpstreamRPMRequestResolvesOnlyAtApply(t *testing.T) {
 	for _, installed := range []string{"", "0:1.34.2-1.x86_64", "0:1.35.0-1.x86_64"} {
 		t.Run("installed="+installed, func(t *testing.T) {
-			service := inventory.Service{Binaries: map[string]inventory.Binary{
-				"app": {Type: "rpm", Package: "demo", Version: "1.34.3"},
+			service := inventory.Service{Binaries: []inventory.Binary{
+				{Name: "app", Type: "rpm", Package: "demo", Version: "1.34.3"},
 			}}
 			diffCalls := 0
 			e := Local{RPM: rpm.Backend{Run: func(_ context.Context, name string, args ...string) ([]byte, error) {
@@ -44,7 +44,7 @@ func TestSavedUpstreamRPMRequestResolvesOnlyAtApply(t *testing.T) {
 				t.Fatal(err)
 			}
 			// Applying the saved request must not inspect this now-invalid source.
-			service.Binaries["app"] = inventory.Binary{Type: "rpm", Package: "changed", Version: "invalid-*"}
+			service.Binaries[0] = inventory.Binary{Type: "rpm", Package: "changed", Version: "invalid-*"}
 			store, err := plan.Open(path)
 			if err != nil {
 				t.Fatal(err)
@@ -84,8 +84,8 @@ func TestUpstreamRPMInstalledMatchPreparesNoTask(t *testing.T) {
 		}
 		return nil, fmt.Errorf("unexpected preparation command: %s %q", name, args)
 	}}}
-	p, err := e.Diff(context.Background(), resolved(inventory.Service{Binaries: map[string]inventory.Binary{
-		"app": {Type: "rpm", Package: "demo", Version: "1.34.3"},
+	p, err := e.Diff(context.Background(), resolved(inventory.Service{Binaries: []inventory.Binary{
+		{Name: "app", Type: "rpm", Package: "demo", Version: "1.34.3"},
 	}}))
 	if err != nil || len(p.Hosts[0].Tasks) != 0 {
 		t.Fatalf("plan=%+v error=%v", p, err)

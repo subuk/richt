@@ -100,9 +100,9 @@ func TestSecretDiffCachesSourceAndSavedPlanFreezesBytes(t *testing.T) {
 		}
 		return ""
 	}
-	r.Hosts[0].Services[0].Definition.Configs = map[string]inventory.Config{
-		"a": {Path: filepath.Join(dir, "a"), Template: inventory.Template{Inline: ptr(`{{secret "token"}}{{call .rotate}}`)}},
-		"b": {Path: filepath.Join(dir, "b"), Template: inventory.Template{Inline: ptr(`{{secret "token"}}`)}},
+	r.Hosts[0].Services[0].Definition.Configs = []inventory.Config{
+		{Name: "a", Path: filepath.Join(dir, "a"), Template: inventory.Template{Inline: ptr(`{{secret "token"}}{{call .rotate}}`)}},
+		{Name: "b", Path: filepath.Join(dir, "b"), Template: inventory.Template{Inline: ptr(`{{secret "token"}}`)}},
 	}
 	p := diff(t, r)
 	for _, task := range p.Hosts[0].Tasks {

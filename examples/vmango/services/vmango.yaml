@@ -1,11 +1,11 @@
 binaries:
-  package:
+  - name: package
     type: rpm
     manager: dnf
     package: vmango
     version: "0:0.16.0-1.el10.x86_64"
 configs:
-  main:
+  - name: main
     path: /etc/vmango.conf
     owner: root
     group: root
@@ -13,7 +13,7 @@ configs:
     template:
       file: ../templates/vmango.conf.gotmpl
 processes:
-  web:
+  - name: web
     type: systemd
     unit: vmango.service
     state: running

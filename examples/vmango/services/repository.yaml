@@ -1,5 +1,5 @@
 configs:
-  repository:
+  - name: repository
     path: /etc/yum.repos.d/richt-vmango.repo
     owner: root
     group: root

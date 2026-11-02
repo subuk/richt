@@ -4,6 +4,77 @@ description: "Recorded Linux acceptance results, environment, commands, and limi
 weight: 120
 ---
 
+## Ordered component lists — 2026-11-03
+
+KRG-98 was verified on three independent authorized AlmaLinux 10.2 x86_64
+hosts with SELinux Enforcing, DNF 4.20.0, RPM 4.19.1.1, and systemd 257.
+Local suites used the Linux binary as root; SSH suites used the macOS binary,
+a non-root login, and explicit noninteractive sudo.
+
+| Suite | Local Linux | SSH/sudo |
+| --- | ---: | ---: |
+| Files, SELinux, locking, and saved-plan regression | 17 passed | — |
+| Secret-source example | 4 groups passed | — |
+| Config validators and ordered continuation | 18 passed | 19 passed |
+| Systemd masks and ordered process lifecycle | 24 passed | 24 passed |
+| Published RPM versions and ordered binary lists | 13 passed | — |
+
+Mixed named and unnamed configs retained their declaration order and distinct
+saved task IDs. A deliberate validator failure recorded the earlier success
+and blocked later tasks; continuation after deleting inventory skipped that
+success and executed remaining validators in order, without changing IDs.
+Validators required earlier files to exist, checking actual execution order.
+
+Four systemd processes with mixed optional labels wrote start/stop event logs.
+Starts followed declaration order; absence stopped them in reverse declaration
+order, with each stop preceding its disablement. Saved config removal tasks
+also reversed their own list. Owned units and configs were removed afterwards.
+The same scenarios passed locally and through SSH/sudo, alongside the existing
+mask, unmask, daemon-reload, and continuation checks.
+
+The RPM suite used published Vmango, tree, ed, and lsof packages. All four were
+absent at preflight. Their install tasks followed declaration order, including
+multiple unnamed binaries and named entries whose alphabetical order differed.
+All packages installed successfully, and absence produced reverse binary-list
+order and removed the declared packages and acceptance repository. Existing
+PostgreSQL, Kubernetes/CRI-O, and exporter fixtures were preserved. Custom RPM
+fixture suites were not run.
+
+Reproduce on authorized disposable hosts with the prerequisites described by
+the individual harnesses:
+
+```sh
+python3 tests/integration/files.py --binary ./bin/richt-linux-amd64 --work-root /root --target-root /var/lib
+python3 examples/secrets/verify.py ./bin/richt-linux-amd64
+python3 tests/integration/config_validation.py --binary ./bin/richt-linux-amd64 --work-root /root/richt-ordered-validation
+python3 examples/systemd-mask/verify.py --binary ./bin/richt-linux-amd64 --output /root/richt-ordered-systemd
+python3 examples/rpm-versions/verify.py ./bin/richt-linux-amd64 /root/richt-ordered-rpm --ordered-packages tree ed lsof
+```
+
+For SSH execution, use the controller binary and add `--host USER@HOST` to the
+validator harness or `--ssh-host USER@HOST` to the systemd harness. Supply the
+actual authorized target and a new private evidence directory.
+
+The tested source was `8cc99e5ced6e` plus the KRG-98 changes. Binary SHA-256
+identities were:
+
+| Binary | SHA-256 |
+| --- | --- |
+| Linux amd64 | `6d219f1b0dd55ffc4c48a8d1a9a86e5cbf5856cfdfa143a650b872eccfa1b10a` |
+| macOS controller | `faa9058f47530d6fbf88e3294c4bc4f978f099c57afd53cffd06a591b238f94a` |
+
+Local `make check`, `make docs-check`, release smoke tests, and race tests for
+engine, plan, config, inventory, and YAML loading passed. Go tests additionally
+cover side-effect-free CLI inspection, strict list schemas, optional names,
+reference validation without reordering, unchanged resources retaining their
+original task positions, named/unnamed unit associations, and frozen saved-plan
+order during failure and continuation.
+
+Private logs, saved plans, and JSON reports were retained outside the tracked
+repository. Harnesses removed temporary target files, units, and added packages;
+package-manager-generated application state was not purged. This verifies the
+recorded DNF 4/systemd platform, not other distributions or package managers.
+
 ## RPM versions, masks, and validators — 2026-11-02
 
 KRG-93, KRG-94, and KRG-95 were verified on three independent authorized
@@ -384,7 +455,7 @@ The harness builds real versions `1.0-1` and `2.0-1` of a minimal noarch RPM,
 creates a file repository, and runs the CLI against it. It checks first install
 with a previously absent repo config, exact update/downgrade, no-op diff,
 unversioned policy, merged reactions, no extra restart after start, independent
-enablement and stopped state, multiple processes with `after`, command failure,
+enablement and stopped state, multiple processes in declaration order, command failure,
 a shared command/wait timeout, unsupported reload, persisted process resume,
 YUM 4 exact install/removal, and complete declared-resource removal. It also
 checks initial secret rendering and secret rotation, actual reload reactions,

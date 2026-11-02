@@ -22,7 +22,7 @@ func testInventory(t *testing.T) (string, string) {
 	}
 	target := filepath.Join(dir, "target")
 	path := filepath.Join(dir, "inventory.yaml")
-	text := fmt.Sprintf("tags:\n  example:\n    services: {example: {}}\nservices:\n  example:\n    order: 10\n    configs:\n      main:\n        path: %s\n        template:\n          inline: 'example content'\nhosts:\n  - name: local\n    tags: [example]\n    transport:\n      type: local\n", target)
+	text := fmt.Sprintf("tags:\n  example:\n    services: {example: {}}\nservices:\n  example:\n    order: 10\n    configs:\n      - name: main\n        path: %s\n        template:\n          inline: 'example content'\nhosts:\n  - name: local\n    tags: [example]\n    transport:\n      type: local\n", target)
 	if err := os.WriteFile(path, []byte(text), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -89,15 +89,15 @@ services:
   last:
     order: 30
     configs:
-      main: {path: %q, template: {inline: last}}
+      - {name: main, path: %q, template: {inline: last}}
   second:
     order: 20
     configs:
-      main: {path: %q, template: {inline: second}}
+      - {name: main, path: %q, template: {inline: second}}
   first:
     order: 10
     configs:
-      main: {path: %q, template: {inline: first}}
+      - {name: main, path: %q, template: {inline: first}}
 hosts:
   - {name: a, tags: [worker, shared], transport: {type: local}}
   - {name: b, tags: [shared], transport: {type: local}}
@@ -240,7 +240,7 @@ services:
   example:
     order: 10
     configs:
-      main:
+      - name: main
         path: %s
         sensitive: false
         template:
@@ -363,7 +363,7 @@ services:
   example:
     order: 10
     configs:
-      main:
+      - name: main
         path: %s
         template:
           inline: '%s'
@@ -387,5 +387,97 @@ hosts:
 		if _, err := os.Stat(filepath.Join(dir, "target")); !os.IsNotExist(err) {
 			t.Fatal("failed preparation changed the target")
 		}
+	}
+}
+
+func TestCLIInventoryShowPreservesOrderedOptionalComponentNames(t *testing.T) {
+	dir := t.TempDir()
+	filename := filepath.Join(dir, "inventory.yaml")
+	source := `tags:
+  example:
+    services: {example: {}}
+services:
+  example:
+    order: 10
+    binaries:
+      - {name: z-last, type: rpm, package: first}
+      - {type: rpm, package: second}
+      - {type: rpm, package: third}
+      - {name: a-first, type: rpm, package: fourth}
+    configs:
+      - {name: z-last, type: template, path: /etc/first, template: {file: missing-first}}
+      - {path: /etc/second, template: {file: missing-second}}
+      - {path: /etc/third, template: {file: missing-third}}
+      - {name: a-first, path: /etc/fourth, template: {file: missing-fourth}}
+    processes:
+      - {name: z-last, type: systemd, unit: first.service, restart_on: [binary.z-last, config.a-first]}
+      - {type: systemd, unit: second.service}
+      - {type: systemd, unit: third.service}
+      - {name: a-first, type: systemd, unit: fourth.service}
+hosts:
+  - name: unreachable
+    tags: [example]
+    transport: {type: ssh, host: unreachable.invalid}
+secret_sources:
+  default: {type: yaml, file: missing-secrets.yaml}
+`
+	if err := os.WriteFile(filename, []byte(source), 0600); err != nil {
+		t.Fatal(err)
+	}
+	// Inspection must succeed without any transport executable or input files.
+	t.Setenv("PATH", dir)
+	code, stdout, stderr := run(t, "inventory", "show", "-i", filename)
+	if code != 0 {
+		t.Fatalf("inspection tried to use unprepared resources: %d %s", code, stderr)
+	}
+	var result struct {
+		Hosts []struct {
+			Services []struct {
+				Definition map[string]json.RawMessage `json:"definition"`
+			} `json:"services"`
+		} `json:"hosts"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Hosts) != 1 || len(result.Hosts[0].Services) != 1 {
+		t.Fatalf("unexpected selection: %s", stdout)
+	}
+	for _, collection := range []struct {
+		name, field string
+		values      []string
+	}{
+		{"binaries", "package", []string{"first", "second", "third", "fourth"}},
+		{"configs", "path", []string{"/etc/first", "/etc/second", "/etc/third", "/etc/fourth"}},
+		{"processes", "unit", []string{"first.service", "second.service", "third.service", "fourth.service"}},
+	} {
+		t.Run(collection.name, func(t *testing.T) {
+			var items []map[string]any
+			if err := json.Unmarshal(result.Hosts[0].Services[0].Definition[collection.name], &items); err != nil {
+				t.Fatalf("collection is not a JSON array: %v", err)
+			}
+			if len(items) != 4 {
+				t.Fatalf("items: %#v", items)
+			}
+			for i, item := range items {
+				if item[collection.field] != collection.values[i] {
+					t.Fatalf("declaration order changed at position %d: %#v", i, item)
+				}
+				switch i {
+				case 0:
+					if item["name"] != "z-last" {
+						t.Fatalf("first name changed: %#v", item)
+					}
+				case 3:
+					if item["name"] != "a-first" {
+						t.Fatalf("last name changed: %#v", item)
+					}
+				default:
+					if _, ok := item["name"]; ok {
+						t.Fatalf("unnamed component acquired a name: %#v", item)
+					}
+				}
+			}
+		})
 	}
 }

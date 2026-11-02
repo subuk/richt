@@ -61,6 +61,19 @@ failure, saved inputs and continuation, then removes the declared package and
 repository. It retains command logs and `acceptance.json` in the new work
 directory. A failure leaves evidence and managed resources for diagnosis.
 
+To additionally verify mixed named and unnamed binary order, supply three
+published packages that are available in the target's enabled repositories and
+are not installed. For example, on a prepared disposable AlmaLinux host:
+
+```sh
+python3 examples/rpm-versions/verify.py bin/richt-linux-amd64 /root/richt-rpm-ordered \
+  --ordered-packages tree ed lsof
+```
+
+The harness checks declaration order in the saved install plan, successful
+installation of all four packages, reverse binary-list order during absence,
+and removal of the added packages. It rejects preexisting test packages.
+
 Validation on 2026-11-02 passed on AlmaLinux 10.2 x86_64 with DNF/YUM 4.20.0,
 RPM 4.19.1.1, and SELinux Enforcing. The local harness passed all 10 checks;
 separate SSH with non-root login and `sudo -n` checks passed short install,

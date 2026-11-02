@@ -38,7 +38,7 @@ def write_inv(configs, state='present'):
  with open(inv,'w') as f:
   f.write('tags:\n  vars:\n    order: 10\n    services:\n      example: {state: '+state+'}\n    vars:\n      greeting: example-one\nservices:\n  example:\n    order: 10\n    configs:\n')
   for name,path,extra in configs:
-   f.write('      '+name+':\n        path: '+path+'\n        template:\n          file: config.tmpl\n'+extra)
+   f.write('      - name: '+name+'\n        path: '+path+'\n        template:\n          file: config.tmpl\n'+extra)
   f.write('hosts:\n  - name: local\n    tags: [vars]\n    transport:\n      type: local\n')
 def tty_apply(answer,expect_ok,hold=False):
  master,slave=pty.openpty();p=subprocess.Popen([cli,'apply',saved],stdin=slave,stdout=slave,stderr=slave,close_fds=True);os.close(slave);out=b'';deadline=time.monotonic()+10
@@ -97,9 +97,7 @@ try:
       'default':dict(type='yaml',file='default.yaml'),
       'production':dict(type='yaml',file='production.yaml')},
       tags=dict(example=dict(services=dict(example={}))),
-      services=dict(example=dict(order=10,configs={
-       'a':secret_config(first_secret,'{{secret "database.password"}}'),
-       'b':secret_config(second_secret,'{{secret "database.password" "production"}}')})),
+      services=dict(example=dict(order=10,configs=[dict(secret_config(first_secret,'{{secret "database.password"}}'), name='a'), dict(secret_config(second_secret,'{{secret "database.password" "production"}}'), name='b')])),
       hosts=[dict(name='local',tags=['example'],transport=dict(type='local'))])
     with open(inv,'w') as f: json.dump(secret_inventory,f)
     out=run(['diff','-i',inv,'-o',saved])
@@ -120,7 +118,7 @@ try:
     assert open(second_secret).read()==production_value and os.stat(second_secret).st_mode&0o777==0o600
     assert 'system_u:object_r:etc_t:s0' in subprocess.check_output(['ls','-Z',second_secret],text=True)
     checks.append('secret plan resumes without sources, skips successes, and writes frozen bytes with mode and SELinux')
-    secret_inventory['services']['example']['configs']={'main':dict(path=second_secret,sensitive=True,template=dict(inline='public replacement\n'))}
+    secret_inventory['services']['example']['configs']=[dict(dict(path=second_secret,sensitive=True,template=dict(inline='public replacement\n')), name='main')]
     with open(inv,'w') as f: json.dump(secret_inventory,f)
     out=run(['diff','-i',inv,'-o',saved]);assert 'Content hidden' in out
     run(['apply','-y',saved]);assert open(second_secret).read()=='public replacement\n'

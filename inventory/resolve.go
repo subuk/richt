@@ -111,8 +111,8 @@ func stringSet(values []string) map[string]bool {
 }
 
 func normalizedService(s Service) Service {
-	// Copy maps before applying defaults so repeated resolutions are independent.
-	binaries := make(map[string]Binary, len(s.Binaries))
+	// Copy slices before applying defaults so repeated resolutions are independent.
+	binaries := make([]Binary, len(s.Binaries))
 	for k, b := range s.Binaries {
 		if b.Manager == "" {
 			b.Manager = "dnf"
@@ -120,7 +120,7 @@ func normalizedService(s Service) Service {
 		binaries[k] = b
 	}
 	s.Binaries = binaries
-	processes := make(map[string]Process, len(s.Processes))
+	processes := make([]Process, len(s.Processes))
 	for k, p := range s.Processes {
 		if p.Timeout == "" {
 			p.Timeout = "5s"

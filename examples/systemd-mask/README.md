@@ -66,3 +66,32 @@ The checks cover masking after stop/disable, matching targets, omission,
 runtime-to-persistent conversion, removal of both masks, hidden enablement links,
 missing units, owned-unit safety, and saved-plan continuation after an intentional
 mask failure and deletion of the inventory.
+
+The same harness also prepares and applies an ordered service with four configs
+and four owned processes. It mixes reverse-alphabetical names (`z-first`, then
+`a-third`) with two unnamed items in each list. This demonstrates that declaration
+order controls execution, while names remain optional reference labels. Configs
+use both the omitted type default and explicit `type: template`.
+
+The generated process list has this shape; each unit includes an owned definition
+that records its start and stop in a unique event file:
+
+```yaml
+processes:
+  - name: z-first
+    type: systemd
+    unit: example-first.service
+  - type: systemd
+    unit: example-second.service
+  - name: a-third
+    type: systemd
+    unit: example-third.service
+  - type: systemd
+    unit: example-fourth.service
+```
+
+The checks compare prepared config and process order, actual start events, reverse
+config removal order, and actual stop events. Absence visits the process list
+from fourth to first, stopping each before disabling it, and removes configs in
+reverse config-list order. Services continue to run in ascending service order.
+The event log, configs, and owned units are cleaned up in `finally`.

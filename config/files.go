@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"text/template"
@@ -38,18 +37,21 @@ func Diff(r *inventory.Resolved) (*plan.Plan, error) {
 			if len(s.Definition.Binaries) > 0 || len(s.Definition.Processes) > 0 {
 				return nil, fmt.Errorf("host %s service %s: binary/process backends are not supported yet", h.Name, s.Name)
 			}
-			names := make([]string, 0, len(s.Definition.Configs))
-			for n := range s.Definition.Configs {
-				names = append(names, n)
-			}
-			sort.Strings(names)
-			for _, name := range names {
-				c := s.Definition.Configs[name]
+			for position := range s.Definition.Configs {
+				index := position
+				if s.State == "absent" {
+					index = len(s.Definition.Configs) - 1 - position
+				}
+				c := s.Definition.Configs[index]
+				label := c.Name
+				if label == "" {
+					label = fmt.Sprintf("[%d]", index+1)
+				}
 				f, err := Prepare(c, s.State, h.Vars, lookup)
 				if err != nil {
-					return nil, fmt.Errorf("host %s service %s config %s: %w", h.Name, s.Name, name, err)
+					return nil, fmt.Errorf("host %s service %s config %s: %w", h.Name, s.Name, label, err)
 				}
-				ph.Tasks = append(ph.Tasks, plan.Task{ID: s.Name + "/config/" + name, Service: s.Name, Component: "config/" + name, Operation: "file", File: f, Progress: plan.Progress{Status: "pending"}})
+				ph.Tasks = append(ph.Tasks, plan.Task{ID: fmt.Sprintf("%s/config/%d", s.Name, index), Service: s.Name, Component: "config/" + label, Operation: "file", File: f, Progress: plan.Progress{Status: "pending"}})
 			}
 		}
 		p.Hosts = append(p.Hosts, ph)
@@ -72,7 +74,7 @@ func Diff(r *inventory.Resolved) (*plan.Plan, error) {
 		}
 		h.Tasks = tasks
 	}
-	return p, nil
+	return p, p.Validate()
 }
 
 // SecretLookup retrieves a string from the explicitly selected secret source.
@@ -83,6 +85,9 @@ type SecretLookup interface {
 // Prepare freezes rendered content and requested ownership names for a file task.
 // The optional lookup is shared across all preparations in a diff.
 func Prepare(c inventory.Config, state string, vars map[string]any, lookups ...SecretLookup) (*plan.FileChange, error) {
+	if c.Type != "" && c.Type != "template" {
+		return nil, errors.New("config type: expected template")
+	}
 	if state == "" {
 		state = "present"
 	}
@@ -305,12 +310,6 @@ func validateLabelSyntax(label string) error {
 // Names are resolved on the managed host each time, rather than saved as IDs.
 func ownership(f *plan.FileChange) (int, int, error) {
 	uid, gid := -1, -1
-	if f.UID != nil {
-		uid = *f.UID
-	}
-	if f.GID != nil {
-		gid = *f.GID
-	}
 	if f.Owner != "" {
 		u, err := user.Lookup(f.Owner)
 		if err != nil {
@@ -344,7 +343,7 @@ func (Local) Resolve(t plan.Task) ([]plan.Action, error) {
 	if !filepath.IsAbs(f.Path) || filepath.Clean(f.Path) != f.Path || f.Path == "/" {
 		return nil, errors.New("invalid file path in plan")
 	}
-	if f.UID != nil && *f.UID < 0 || f.GID != nil && *f.GID < 0 || f.Mode != nil && *f.Mode > 07777 {
+	if f.Mode != nil && *f.Mode > 07777 {
 		return nil, errors.New("invalid file attributes in plan")
 	}
 	if _, err := validatorDuration(f.Validate); err != nil {
@@ -365,7 +364,7 @@ func (Local) Resolve(t plan.Task) ([]plan.Action, error) {
 	if f.Write {
 		actions = append(actions, plan.Action{Kind: "overwrite-file", File: f})
 	}
-	if f.Owner != "" || f.Group != "" || f.UID != nil || f.GID != nil || f.Mode != nil || f.SELinux != "" {
+	if f.Owner != "" || f.Group != "" || f.Mode != nil || f.SELinux != "" {
 		actions = append(actions, plan.Action{Kind: "set-file-attributes", File: f})
 	}
 	return actions, nil

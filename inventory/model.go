@@ -47,13 +47,14 @@ type Assignment struct {
 }
 
 type Service struct {
-	Binaries   map[string]Binary  `json:"binaries,omitempty" yaml:"binaries"`
-	Configs    map[string]Config  `json:"configs,omitempty" yaml:"configs"`
-	Processes  map[string]Process `json:"processes,omitempty" yaml:"processes"`
-	SourceFile string             `json:"source_file,omitempty" yaml:"-"`
+	Binaries   []Binary  `json:"binaries,omitempty" yaml:"binaries"`
+	Configs    []Config  `json:"configs,omitempty" yaml:"configs"`
+	Processes  []Process `json:"processes,omitempty" yaml:"processes"`
+	SourceFile string    `json:"source_file,omitempty" yaml:"-"`
 }
 
 type Binary struct {
+	Name    string `json:"name,omitempty" yaml:"name"`
 	Type    string `json:"type" yaml:"type"`
 	Manager string `json:"manager,omitempty" yaml:"manager"`
 	Package string `json:"package" yaml:"package"`
@@ -66,6 +67,8 @@ type Template struct {
 }
 
 type Config struct {
+	Name      string     `json:"name,omitempty" yaml:"name"`
+	Type      string     `json:"type,omitempty" yaml:"type"`
 	Path      string     `json:"path" yaml:"path"`
 	Owner     string     `json:"owner,omitempty" yaml:"owner"`
 	Group     string     `json:"group,omitempty" yaml:"group"`
@@ -83,6 +86,7 @@ type Validator struct {
 }
 
 type Process struct {
+	Name      string            `json:"name,omitempty" yaml:"name"`
 	Type      string            `json:"type" yaml:"type"`
 	Unit      string            `json:"unit" yaml:"unit"`
 	State     string            `json:"state" yaml:"state"`
@@ -91,7 +95,6 @@ type Process struct {
 	Timeout   string            `json:"timeout" yaml:"timeout"`
 	RestartOn []string          `json:"restart_on,omitempty" yaml:"restart_on"`
 	ReloadOn  []string          `json:"reload_on,omitempty" yaml:"reload_on"`
-	After     []string          `json:"after,omitempty" yaml:"after"`
 	UnitFile  *Config           `json:"unit_file,omitempty" yaml:"unit_file"`
 	Overrides map[string]Config `json:"overrides,omitempty" yaml:"overrides"`
 }

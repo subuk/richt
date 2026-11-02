@@ -33,11 +33,11 @@ func fakeSystemd(active string, canReload bool) systemd.Backend {
 		return []byte(fmt.Sprintf("LoadState=loaded\nActiveState=%s\nUnitFileState=disabled\nCanReload=%v\n", active, map[bool]string{true: "yes", false: "no"}[canReload])), nil
 	}}
 }
-func TestRealInputsMergeAndProcessAfter(t *testing.T) {
+func TestRealInputsMergeAndDeclaredProcessOrder(t *testing.T) {
 	path := filepath.Join(tempDir(t), "app.conf")
-	s := inventory.Service{Binaries: map[string]inventory.Binary{"app": {Type: "rpm", Package: "demo", Version: "0:2.0-1.noarch"}}, Configs: map[string]inventory.Config{"main": {Path: path, Template: inventory.Template{Inline: inline("new")}}}, Processes: map[string]inventory.Process{
-		"z-first": {Unit: "first.service", RestartOn: []string{"binary.app"}, ReloadOn: []string{"config.main"}},
-		"a-last":  {Unit: "last.service", After: []string{"z-first"}, ReloadOn: []string{"config.main"}},
+	s := inventory.Service{Binaries: []inventory.Binary{{Name: "app", Type: "rpm", Package: "demo", Version: "0:2.0-1.noarch"}}, Configs: []inventory.Config{{Name: "main", Path: path, Template: inventory.Template{Inline: inline("new")}}}, Processes: []inventory.Process{
+		{Name: "z-first", Unit: "first.service", RestartOn: []string{"binary.app"}, ReloadOn: []string{"config.main"}},
+		{Name: "a-last", Unit: "last.service", ReloadOn: []string{"config.main"}},
 	}}
 	e := Local{RPM: rpm.Backend{Run: func(_ context.Context, name string, args ...string) ([]byte, error) {
 		if name == "dnf" {
@@ -78,7 +78,7 @@ func TestResumeKeepsPendingReactionAfterSuccessfulConfig(t *testing.T) {
 	path := filepath.Join(tempDir(t), "app.conf")
 	calls := 0
 	fail := true
-	s := inventory.Service{Configs: map[string]inventory.Config{"main": {Path: path, Template: inventory.Template{Inline: inline("frozen")}}}, Processes: map[string]inventory.Process{"main": {Unit: "demo.service", ReloadOn: []string{"config.main"}}}}
+	s := inventory.Service{Configs: []inventory.Config{{Name: "main", Path: path, Template: inventory.Template{Inline: inline("frozen")}}}, Processes: []inventory.Process{{Name: "main", Unit: "demo.service", ReloadOn: []string{"config.main"}}}}
 	e := Local{Systemd: systemd.Backend{Run: func(_ context.Context, _ string, args ...string) ([]byte, error) {
 		if args[0] == "show" {
 			return []byte("LoadState=loaded\nActiveState=active\nUnitFileState=disabled\nCanReload=yes\n"), nil
@@ -116,7 +116,7 @@ func TestResumeKeepsPendingReactionAfterSuccessfulConfig(t *testing.T) {
 	}
 }
 func TestMissingPackageUnitRequiresReloadProof(t *testing.T) {
-	s := inventory.Service{Binaries: map[string]inventory.Binary{"app": {Type: "rpm", Package: "demo"}}, Configs: map[string]inventory.Config{"main": {Path: filepath.Join(tempDir(t), "c"), Template: inventory.Template{Inline: inline("x")}}}, Processes: map[string]inventory.Process{"main": {Unit: "new.service", ReloadOn: []string{"config.main"}}}}
+	s := inventory.Service{Binaries: []inventory.Binary{{Name: "app", Type: "rpm", Package: "demo"}}, Configs: []inventory.Config{{Name: "main", Path: filepath.Join(tempDir(t), "c"), Template: inventory.Template{Inline: inline("x")}}}, Processes: []inventory.Process{{Name: "main", Unit: "new.service", ReloadOn: []string{"config.main"}}}}
 	e := Local{RPM: rpm.Backend{Run: func(_ context.Context, name string, args ...string) ([]byte, error) {
 		if name == "dnf" {
 			return []byte("4.20.0"), nil
@@ -128,9 +128,9 @@ func TestMissingPackageUnitRequiresReloadProof(t *testing.T) {
 	if _, err := e.Diff(context.Background(), resolved(s)); err == nil || !strings.Contains(err.Error(), "cannot be verified") {
 		t.Fatal(err)
 	}
-	v := s.Processes["main"]
+	v := s.Processes[0]
 	v.Overrides = map[string]inventory.Config{"reload.conf": {Path: filepath.Join(tempDir(t), "reload.conf"), Template: inventory.Template{Inline: inline("[Service]\nExecReload=/bin/true\n")}}}
-	s.Processes["main"] = v
+	s.Processes[0] = v
 	p, err := e.Diff(context.Background(), resolved(s))
 	if err != nil {
 		t.Fatal(err)
@@ -145,7 +145,7 @@ func TestMissingPackageUnitRequiresReloadProof(t *testing.T) {
 }
 func TestEnablementHasIndependentProgressTask(t *testing.T) {
 	yes := true
-	s := inventory.Service{Processes: map[string]inventory.Process{"main": {Unit: "demo.service", Enabled: &yes}}}
+	s := inventory.Service{Processes: []inventory.Process{{Name: "main", Unit: "demo.service", Enabled: &yes}}}
 	e := Local{Systemd: fakeSystemd("active", false)}
 	p, err := e.Diff(context.Background(), resolved(s))
 	if err != nil {
@@ -161,7 +161,7 @@ func TestPreparationBeforeObservationAndManagerAvailability(t *testing.T) {
 		calls++
 		return nil, errors.New("missing dnf")
 	}}}
-	s := inventory.Service{Binaries: map[string]inventory.Binary{"app": {Type: "rpm", Package: "demo"}}, Configs: map[string]inventory.Config{"bad": {Path: filepath.Join(tempDir(t), "c"), Template: inventory.Template{Inline: inline("{{.missing}}")}}}}
+	s := inventory.Service{Binaries: []inventory.Binary{{Name: "app", Type: "rpm", Package: "demo"}}, Configs: []inventory.Config{{Name: "bad", Path: filepath.Join(tempDir(t), "c"), Template: inventory.Template{Inline: inline("{{.missing}}")}}}}
 	if _, err := e.Diff(context.Background(), resolved(s)); err == nil || calls != 0 {
 		t.Fatal(err, calls)
 	}
@@ -188,7 +188,7 @@ func TestMixedHostsUseTargetCapabilitiesAndPersistConnections(t *testing.T) {
 			return nil, nil
 		}}, nil
 	}}
-	r := resolved(inventory.Service{Binaries: map[string]inventory.Binary{"main": {Package: "demo"}}})
+	r := resolved(inventory.Service{Binaries: []inventory.Binary{{Name: "main", Package: "demo"}}})
 	h := r.Hosts[0]
 	h.Name = "remote"
 	h.Transport = inventory.Transport{Type: "ssh", Host: "server-alias", User: "deploy", Port: 2222, Sudo: true}
@@ -220,7 +220,7 @@ func TestRemoteTemplatesRenderBeforeAnyTargetBinding(t *testing.T) {
 		connects++
 		return config.Target{}, errors.New("unexpected target contact")
 	}}
-	r := resolved(inventory.Service{Configs: map[string]inventory.Config{"bad": {Path: "/etc/richt-test", Template: inventory.Template{Inline: inline("{{.missing}}")}}}})
+	r := resolved(inventory.Service{Configs: []inventory.Config{{Name: "bad", Path: "/etc/richt-test", Template: inventory.Template{Inline: inline("{{.missing}}")}}}})
 	r.Hosts[0].Transport = inventory.Transport{Type: "ssh", Host: "alias"}
 	if _, err := e.Diff(context.Background(), r); err == nil || !strings.Contains(err.Error(), "render template") || connects != 0 {
 		t.Fatal(err, connects)
@@ -252,7 +252,7 @@ func TestSecretFailureBeforeAnyHostContact(t *testing.T) {
 		return config.Target{}, errors.New("unexpected contact")
 	}}
 	for _, source := range []string{`{{secret "missing"}}`, `{{secret 1}}`, `{{secret "missing" "other"}}`} {
-		r := resolved(inventory.Service{Configs: map[string]inventory.Config{"main": {Path: "/etc/richt-test", Template: inventory.Template{Inline: inline(source)}}}})
+		r := resolved(inventory.Service{Configs: []inventory.Config{{Name: "main", Path: "/etc/richt-test", Template: inventory.Template{Inline: inline(source)}}}})
 		r.Hosts[0].Transport = inventory.Transport{Type: "ssh", Host: "example"}
 		h := r.Hosts[0]
 		h.Name = "second"
@@ -277,7 +277,7 @@ func TestSecretUnitParseFailureBeforeHostContact(t *testing.T) {
 			c.Path += ".d/20-example.conf"
 			process.Overrides = map[string]inventory.Config{"20-example.conf": c}
 		}
-		r := resolved(inventory.Service{Processes: map[string]inventory.Process{"main": process}})
+		r := resolved(inventory.Service{Processes: []inventory.Process{process}})
 		r.SecretSources = map[string]inventory.SecretSource{"default": {Type: "yaml", File: source}}
 		r.Hosts[0].Transport = inventory.Transport{Type: "ssh", Host: "example"}
 		e := Local{Connect: func(inventory.Transport) (config.Target, error) {
@@ -297,8 +297,8 @@ func TestSecretSnapshotSharedByConfigsUnitsDropInsAndHosts(t *testing.T) {
 	}
 	unit := inventory.Config{Path: "/etc/systemd/system/richt-secret-test.service", Template: inventory.Template{Inline: inline("[Service]\nExecReload={{secret \"command\"}}\n")}}
 	r := resolved(inventory.Service{
-		Configs:   map[string]inventory.Config{"main": {Path: "/tmp/richt-secret-test", Template: inventory.Template{Inline: inline(`{{secret "command"}}{{call .rotate}}`)}}},
-		Processes: map[string]inventory.Process{"main": {Unit: "richt-secret-test.service", UnitFile: &unit, ReloadOn: []string{"config.main"}, Overrides: map[string]inventory.Config{"20-reload.conf": {Path: "/etc/systemd/system/richt-secret-test.service.d/20-reload.conf", Template: unit.Template}}}},
+		Configs:   []inventory.Config{{Name: "main", Path: "/tmp/richt-secret-test", Template: inventory.Template{Inline: inline(`{{secret "command"}}{{call .rotate}}`)}}},
+		Processes: []inventory.Process{{Name: "main", Unit: "richt-secret-test.service", UnitFile: &unit, ReloadOn: []string{"config.main"}, Overrides: map[string]inventory.Config{"20-reload.conf": {Path: "/etc/systemd/system/richt-secret-test.service.d/20-reload.conf", Template: unit.Template}}}},
 	})
 	r.SecretSources = map[string]inventory.SecretSource{"default": {Type: "yaml", File: source}}
 	r.Hosts[0].Vars = map[string]any{"rotate": func() string {
@@ -346,7 +346,7 @@ func TestSecretByteChangesTriggerRealReload(t *testing.T) {
 	if err := os.WriteFile(target, []byte("example-current"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	r := resolved(inventory.Service{Configs: map[string]inventory.Config{"main": {Path: target, Template: inventory.Template{Inline: inline(`{{secret "token"}}`)}}}, Processes: map[string]inventory.Process{"main": {Unit: "richt-secret-test.service", ReloadOn: []string{"config.main"}}}})
+	r := resolved(inventory.Service{Configs: []inventory.Config{{Name: "main", Path: target, Template: inventory.Template{Inline: inline(`{{secret "token"}}`)}}}, Processes: []inventory.Process{{Name: "main", Unit: "richt-secret-test.service", ReloadOn: []string{"config.main"}}}})
 	r.SecretSources = map[string]inventory.SecretSource{"default": {Type: "yaml", File: source}}
 	e := Local{Systemd: fakeSystemd("active", true)}
 	p, err := e.Diff(context.Background(), r)
@@ -365,7 +365,7 @@ func TestSecretByteChangesTriggerRealReload(t *testing.T) {
 func TestMaskingHasIndependentSavedProgress(t *testing.T) {
 	yes, no := true, false
 	path := filepath.Join(tempDir(t), "app.conf")
-	s := inventory.Service{Configs: map[string]inventory.Config{"main": {Path: path, Template: inventory.Template{Inline: inline("frozen")}}}, Processes: map[string]inventory.Process{"main": {Unit: "demo.service", State: "stopped", Enabled: &no, Masked: &yes}}}
+	s := inventory.Service{Configs: []inventory.Config{{Name: "main", Path: path, Template: inventory.Template{Inline: inline("frozen")}}}, Processes: []inventory.Process{{Name: "main", Unit: "demo.service", State: "stopped", Enabled: &no, Masked: &yes}}}
 	active, enabled, load := "active", "enabled", "loaded"
 	maskFails := true
 	var commands []string
@@ -436,11 +436,11 @@ func TestUnmaskPrecedesOwnedFullUnitWritesAndEnablement(t *testing.T) {
 		t.Run(fmt.Sprint(ordinary), func(t *testing.T) {
 			unit := inventory.Config{Path: "/etc/systemd/system/richt-mask-test.service", Template: inventory.Template{Inline: inline("[Service]\nExecStart=/bin/true\n")}}
 			process := inventory.Process{Unit: "richt-mask-test.service", Enabled: &no, Masked: &no, UnitFile: &unit}
-			s := inventory.Service{Processes: map[string]inventory.Process{"main": process}}
+			s := inventory.Service{Processes: []inventory.Process{process}}
 			if ordinary {
 				process.UnitFile = nil
-				s.Processes["main"] = process
-				s.Configs = map[string]inventory.Config{"unit": unit}
+				s.Processes[0] = process
+				s.Configs = []inventory.Config{unit}
 			}
 			e := Local{Systemd: systemd.Backend{Run: func(context.Context, string, ...string) ([]byte, error) {
 				return []byte("LoadState=masked\nActiveState=inactive\nUnitFileState=masked\n"), nil
@@ -466,7 +466,7 @@ func TestUnmaskPrecedesOwnedFullUnitWritesAndEnablement(t *testing.T) {
 func TestOwnedMaskedFullUnitRequiresExplicitUnmask(t *testing.T) {
 	for _, absent := range []bool{false, true} {
 		unit := inventory.Config{Path: "/etc/systemd/system/richt-mask-test.service", Template: inventory.Template{Inline: inline("[Service]\nExecStart=/bin/true\n")}}
-		r := resolved(inventory.Service{Processes: map[string]inventory.Process{"main": {Unit: "richt-mask-test.service", State: "stopped", UnitFile: &unit}}})
+		r := resolved(inventory.Service{Processes: []inventory.Process{{Name: "main", Unit: "richt-mask-test.service", State: "stopped", UnitFile: &unit}}})
 		if absent {
 			r.Hosts[0].Services[0].State = "absent"
 		}
@@ -481,7 +481,7 @@ func TestOwnedMaskedFullUnitRequiresExplicitUnmask(t *testing.T) {
 
 func TestMissingExternalUnitCanBeMasked(t *testing.T) {
 	yes, no := true, false
-	s := inventory.Service{Processes: map[string]inventory.Process{"main": {Unit: "missing.service", State: "stopped", Enabled: &no, Masked: &yes}}}
+	s := inventory.Service{Processes: []inventory.Process{{Name: "main", Unit: "missing.service", State: "stopped", Enabled: &no, Masked: &yes}}}
 	e := Local{Systemd: systemd.Backend{Run: func(context.Context, string, ...string) ([]byte, error) {
 		return []byte("LoadState=not-found\nActiveState=inactive\nUnitFileState=\n"), nil
 	}}}
@@ -493,7 +493,7 @@ func TestMissingExternalUnitCanBeMasked(t *testing.T) {
 
 func TestMatchingPersistentMaskAndDisabledObservationAreUnchanged(t *testing.T) {
 	yes, no := true, false
-	s := inventory.Service{Processes: map[string]inventory.Process{"main": {Unit: "demo.service", State: "stopped", Enabled: &no, Masked: &yes}}}
+	s := inventory.Service{Processes: []inventory.Process{{Name: "main", Unit: "demo.service", State: "stopped", Enabled: &no, Masked: &yes}}}
 	e := Local{Systemd: systemd.Backend{Run: func(context.Context, string, ...string) ([]byte, error) {
 		return []byte("LoadState=masked\nActiveState=inactive\nUnitFileState=masked\n"), nil
 	}}}
@@ -505,7 +505,7 @@ func TestMatchingPersistentMaskAndDisabledObservationAreUnchanged(t *testing.T) 
 
 func TestUnmaskSchedulesDisableForHiddenEnablement(t *testing.T) {
 	no := false
-	s := inventory.Service{Processes: map[string]inventory.Process{"main": {Unit: "demo.service", State: "stopped", Enabled: &no, Masked: &no}}}
+	s := inventory.Service{Processes: []inventory.Process{{Name: "main", Unit: "demo.service", State: "stopped", Enabled: &no, Masked: &no}}}
 	load, enabled := "masked", "masked"
 	var commands []string
 	e := Local{Systemd: systemd.Backend{Run: func(_ context.Context, _ string, args ...string) ([]byte, error) {
@@ -535,12 +535,12 @@ func TestUnmaskSchedulesDisableForHiddenEnablement(t *testing.T) {
 func TestMaskOmissionAndAbsentAssignmentsPreserveMasks(t *testing.T) {
 	yes := true
 	for _, absent := range []bool{false, true} {
-		s := inventory.Service{Processes: map[string]inventory.Process{"main": {Unit: "demo.service", State: "stopped"}}}
+		s := inventory.Service{Processes: []inventory.Process{{Name: "main", Unit: "demo.service", State: "stopped"}}}
 		r := resolved(s)
 		if absent {
-			v := s.Processes["main"]
+			v := s.Processes[0]
 			v.Masked = &yes
-			s.Processes["main"] = v
+			s.Processes[0] = v
 			r.Hosts[0].Services[0].State = "absent"
 		}
 		e := Local{Systemd: systemd.Backend{Run: func(context.Context, string, ...string) ([]byte, error) {
@@ -555,7 +555,7 @@ func TestMaskOmissionAndAbsentAssignmentsPreserveMasks(t *testing.T) {
 
 func TestMaskRunsThroughSSHCommandBoundary(t *testing.T) {
 	yes := true
-	r := resolved(inventory.Service{Processes: map[string]inventory.Process{"main": {Unit: "demo.service", State: "stopped", Masked: &yes}}})
+	r := resolved(inventory.Service{Processes: []inventory.Process{{Name: "main", Unit: "demo.service", State: "stopped", Masked: &yes}}})
 	r.Hosts[0].Transport = inventory.Transport{Type: "ssh", Host: "mask-target", Sudo: true}
 	masked, commands := false, 0
 	e := Local{Connect: func(c inventory.Transport) (config.Target, error) {

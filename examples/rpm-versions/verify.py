@@ -14,6 +14,8 @@ def main():
     parser.add_argument("binary", type=Path)
     parser.add_argument("work", type=Path)
     parser.add_argument("--source-revision", default="uncommitted checkout")
+    parser.add_argument("--ordered-packages", nargs=3, metavar="PACKAGE",
+                        help="Three additional published packages, initially absent, to verify list ordering")
     args = parser.parse_args()
     binary = args.binary.resolve()
     work = args.work.resolve()
@@ -23,6 +25,12 @@ def main():
     repo_path = Path("/etc/yum.repos.d/richt-rpm-versions.repo")
     if repo_path.exists() or subprocess.run(["rpm", "-q", "vmango"], capture_output=True).returncode == 0:
         raise RuntimeError("vmango or acceptance repository already exists")
+    if args.ordered_packages:
+        if len(set(args.ordered_packages + ["vmango"])) != 4:
+            raise RuntimeError("ordered packages must be distinct and exclude vmango")
+        for package in args.ordered_packages:
+            if subprocess.run(["rpm", "-q", "--", package], capture_output=True).returncode == 0:
+                raise RuntimeError("ordered acceptance package already exists: " + package)
     evidence = {
         "source_revision": args.source_revision,
         "binary_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
@@ -51,20 +59,29 @@ def main():
     inventory = {
         "tags": {"example": {"services": {"repository": {"state": "present"}, "package": {"state": "present"}}}},
         "services": {
-            "repository": {"order": 10, "configs": {"repository": {
+            "repository": {"order": 10, "configs": [{"name": "repository",
                 "path": str(repo_path), "mode": "0644", "template": {"inline":
                     "[richt-rpm-versions]\nname=Richt upstream RPM acceptance\n"
                     "baseurl=https://download.copr.fedorainfracloud.org/results/subuk/vmango/rhel-10-$basearch/\n"
                     "enabled=1\ngpgcheck=1\n"
                     "gpgkey=https://download.copr.fedorainfracloud.org/results/subuk/vmango/pubkey.gpg\n"
-                    "repo_gpgcheck=0\n"}}}},
-            "package": {"order": 20, "binaries": {"app": {"type": "rpm", "package": "vmango", "version": "0.16.0"}}},
+                    "repo_gpgcheck=0\n"}}]},
+            "package": {"order": 20, "binaries": [{"name": "app", "type": "rpm", "package": "vmango", "version": "0.16.0"}]},
         },
         "hosts": [{"name": "local", "tags": ["example"], "transport": {"type": "local"}}],
     }
 
+    if args.ordered_packages:
+        binaries = inventory["services"]["package"]["binaries"]
+        binaries[0]["name"] = "z-last"
+        for package, name in zip(args.ordered_packages, (None, "a-first", None)):
+            item = {"type": "rpm", "package": package}
+            if name is not None:
+                item["name"] = name
+            binaries.append(item)
+
     def write(version):
-        package = inventory["services"]["package"]["binaries"]["app"]
+        package = inventory["services"]["package"]["binaries"][0]
         if version is None:
             package.pop("version", None)
         else:
@@ -84,11 +101,19 @@ def main():
     plan, prepared, shown = prepare("install", "0.16.0")
     assert not repo_path.exists(), "diff wrote repository configuration"
     package_tasks = [task for task in prepared["hosts"][0]["tasks"] if task.get("rpm")]
-    assert len(package_tasks) == 1 and package_tasks[0]["rpm"]["version"] == "0.16.0"
+    assert package_tasks[0]["rpm"]["version"] == "0.16.0"
+    expected_packages = ["vmango"] + (args.ordered_packages or [])
+    assert [task["rpm"]["package"] for task in package_tasks] == expected_packages
+    if args.ordered_packages:
+        passed("mixed named and unnamed binaries retain declaration order in saved install tasks")
     assert "at apply" in shown and "epoch, release, and architecture" in shown
     passed("short request saved and displayed before repository exists")
     run([binary, "apply", "-y", plan])
     assert upstream() == "0.16.0"
+    if args.ordered_packages:
+        run(["rpm", "-q", "--"] + args.ordered_packages)
+        assert all(task["progress"]["status"] == "success" for task in json.loads(plan.read_text())["hosts"][0]["tasks"])
+        passed("all ordered published package requests execute successfully")
     passed("upstream install resolves published RPM through DNF at apply")
     _, prepared, _ = prepare("noop", "0.16.0")
     assert not prepared["hosts"][0]["tasks"]
@@ -116,11 +141,17 @@ def main():
     run([binary, "apply", "-y", plan])
     passed("saved short request survives removed inventory and successful continuation")
     inventory["tags"]["example"]["services"] = {"repository": {"state": "absent"}, "package": {"state": "absent"}}
-    plan, _, _ = prepare("remove", "0.16.0")
+    plan, prepared, _ = prepare("remove", "0.16.0")
+    package_tasks = [task for task in prepared["hosts"][0]["tasks"] if task.get("rpm")]
+    assert [task["rpm"]["package"] for task in package_tasks] == expected_packages[::-1]
     run([binary, "apply", "-y", plan])
     assert not repo_path.exists()
     run(["rpm", "-q", "vmango"], success=False)
     passed("cleanup removes declared package and repository")
+    if args.ordered_packages:
+        for package in args.ordered_packages:
+            run(["rpm", "-q", "--", package], success=False)
+        passed("absence reverses the binary list and removes every added acceptance package")
 
 
 if __name__ == "__main__":

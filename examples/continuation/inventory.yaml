@@ -9,21 +9,21 @@ services:
   first:
     order: 10
     configs:
-      main:
+      - name: main
         path: /var/tmp/richt-continuation-example/first.conf
         mode: "0644"
         template: {inline: "step=first\n"}
   second:
     order: 20
     configs:
-      main:
+      - name: main
         path: /var/tmp/richt-continuation-example/blocked/second.conf
         mode: "0644"
         template: {inline: "step=second\n"}
   third:
     order: 30
     configs:
-      main:
+      - name: main
         path: /var/tmp/richt-continuation-example/third.conf
         mode: "0644"
         template: {inline: "step=third\n"}

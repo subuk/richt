@@ -17,6 +17,9 @@ func inventorySchema(root *yaml.Node) error {
 		switch key {
 		case "services":
 			return mappingFields(value, func(name string, definition *yaml.Node) error {
+				if err := serviceSchema(definition); err != nil {
+					return fmt.Errorf("service %q: %w", name, err)
+				}
 				return mappingFields(definition, func(field string, value *yaml.Node) error {
 					if field == "order" {
 						return integer(value, fmt.Sprintf("service %q order", name))
@@ -125,4 +128,69 @@ func mappingFields(node *yaml.Node, visit func(string, *yaml.Node) error) error 
 		return nil
 	}
 	return walk(node)
+}
+
+// serviceSchema requires flat, ordered component mappings, including in bare
+// service files. A supplied name must be a nonempty string; omission is valid.
+func serviceSchema(root *yaml.Node) error {
+	if root.Kind == yaml.DocumentNode && len(root.Content) != 0 {
+		root = root.Content[0]
+	}
+	return mappingFields(root, func(field string, node *yaml.Node) error {
+		switch field {
+		case "binaries", "configs", "processes":
+			node = dereference(node)
+			if node.Kind != yaml.SequenceNode {
+				return fmt.Errorf("line %d: %s must be a list of component mappings", node.Line, field)
+			}
+			for i, item := range node.Content {
+				item = dereference(item)
+				if item.Kind != yaml.MappingNode {
+					return fmt.Errorf("line %d: %s item %d must be a component mapping", item.Line, field, i+1)
+				}
+				if field == "configs" {
+					if err := configSchema(item); err != nil {
+						return err
+					}
+				}
+				if err := mappingFields(item, func(key string, value *yaml.Node) error {
+					if field == "processes" {
+						switch key {
+						case "unit_file":
+							if err := configSchema(value); err != nil {
+								return err
+							}
+						case "overrides":
+							if err := mappingFields(value, func(_ string, config *yaml.Node) error { return configSchema(config) }); err != nil {
+								return err
+							}
+						}
+					}
+					if key == "name" {
+						value = dereference(value)
+						if value.Kind != yaml.ScalarNode || value.Tag != "!!str" || value.Value == "" {
+							return fmt.Errorf("line %d: %s item %d name must be a nonempty string when supplied", value.Line, field, i+1)
+						}
+					}
+					return nil
+				}); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
+}
+
+// Omitted type selects the template backend. Explicit values must name it.
+func configSchema(node *yaml.Node) error {
+	return mappingFields(node, func(key string, value *yaml.Node) error {
+		if key == "type" {
+			value = dereference(value)
+			if value.Kind != yaml.ScalarNode || value.Tag != "!!str" || value.Value != "template" {
+				return fmt.Errorf("line %d: config type: expected template when supplied", value.Line)
+			}
+		}
+		return nil
+	})
 }

@@ -73,10 +73,10 @@ run('systemctl', 'daemon-reload')
 run('sh', str(Path(__file__).with_name('build-repository.sh')))
 reload_content = '[Service]\nExecReload=\nExecReload=/bin/kill -HUP $MAINPID\n'
 inventory = dict(tags=dict(example=dict(services=dict(repository={},demo={}))),services=dict(
-    repository=dict(order=10,configs=dict(repo=dict(path='/etc/yum.repos.d/richt-demo.repo', mode='0644', template=dict(inline='[richt-demo]\nname=Richt demo\nbaseurl=file:///var/lib/richt-demo-fixture/repo\nenabled=1\ngpgcheck=0\n')))),
-    demo=dict(order=20,binaries=dict(app=dict(type='rpm', manager='dnf', package='richt-demo', version='0:1.0-1.noarch')),
-              configs=dict(main=dict(path='/etc/richt-demo.conf', mode='0644', template=dict(inline='message=one\n'))),
-              processes=dict(main=dict(type='systemd', unit='richt-demo.service', enabled=True, state='running', timeout='5s', restart_on=['binary.app'], reload_on=['config.main'], overrides={'20-reload.conf': dict(template=dict(inline=reload_content))})))),
+    repository=dict(order=10,configs=[dict(name='repo',path='/etc/yum.repos.d/richt-demo.repo', mode='0644', template=dict(inline='[richt-demo]\nname=Richt demo\nbaseurl=file:///var/lib/richt-demo-fixture/repo\nenabled=1\ngpgcheck=0\n'))]),
+    demo=dict(order=20,binaries=[dict(name='app',type='rpm', manager='dnf', package='richt-demo', version='0:1.0-1.noarch')],
+              configs=[dict(name='main',path='/etc/richt-demo.conf', mode='0644', template=dict(inline='message=one\n'))],
+              processes=[dict(name='main',type='systemd', unit='richt-demo.service', enabled=True, state='running', timeout='5s', restart_on=['binary.app'], reload_on=['config.main'], overrides={'20-reload.conf': dict(template=dict(inline=reload_content))})])),
     hosts=[dict(name='isolated', tags=['example'], transport=dict(type='local'))])
 path, tasks = diff('first', inventory)
 check('diff does not install repository or package', not Path('/etc/yum.repos.d/richt-demo.repo').exists() and run('rpm', '-q', 'richt-demo', ok=False).returncode != 0)
@@ -87,37 +87,37 @@ check('start has no extra restart or reload', events()==['start 1.0'])
 _, tasks = diff('noop', inventory)
 check('repeated diff is empty', tasks==[])
 unversioned = copy.deepcopy(inventory)
-del unversioned['services']['demo']['binaries']['app']['version']
+del unversioned['services']['demo']['binaries'][0]['version']
 _, tasks = diff('unversioned', unversioned)
 check('unversioned installed package is not upgraded despite newer repo RPM', tasks==[] and installed()=='0:1.0-1.noarch')
-inventory['services']['demo']['configs']['main']['template']['inline']='message=two\n'
+inventory['services']['demo']['configs'][0]['template']['inline']='message=two\n'
 path,tasks=diff('config',inventory)
 check('config schedules exactly one reload', [t['process']['reaction'] for t in tasks if t['operation']=='systemd']==['reload'])
 apply('config',path)
 check('config executes one reload without restart', events()==['start 1.0','reload'])
 for label,version in [('upgrade','2.0'),('downgrade','1.0')]:
-    inventory['services']['demo']['binaries']['app']['version']=f'0:{version}-1.noarch'
+    inventory['services']['demo']['binaries'][0]['version']=f'0:{version}-1.noarch'
     path,tasks=diff(label,inventory)
     apply(label,path)
     check(label+' ensures exact NEVRA', installed()==f'0:{version}-1.noarch' and events()[-1]==f'start {version}')
-inventory['services']['demo']['binaries']['app']['version']='0:2.0-1.noarch'
-inventory['services']['demo']['configs']['main']['template']['inline']='message=merged\n'
+inventory['services']['demo']['binaries'][0]['version']='0:2.0-1.noarch'
+inventory['services']['demo']['configs'][0]['template']['inline']='message=merged\n'
 path,tasks=diff('merged',inventory)
 check('restart wins over reload', [t['process']['reaction'] for t in tasks if t['operation']=='systemd']==['restart'])
 before=events();apply('merged',path)
 check('merged changes execute only one restart', events()==before+['start 2.0'])
 run('systemctl','stop','richt-demo.service')
-inventory['services']['demo']['configs']['main']['template']['inline']='message=start\n'
+inventory['services']['demo']['configs'][0]['template']['inline']='message=start\n'
 path,_=diff('stopped-start',inventory);before=events();apply('stopped-start',path)
 check('stopped process with changed inputs only starts', events()==before+['start 2.0'])
-inventory['services']['demo']['processes']['main']['enabled']=False
+inventory['services']['demo']['processes'][0]['enabled']=False
 path,tasks=diff('disable-running',inventory);before=events();apply('disable-running',path)
 check('enabled is independent of running', [t['operation'] for t in tasks]==['systemd-enable'] and active()=='active' and events()==before)
-inventory['services']['demo']['processes']['main']['state']='stopped'
-inventory['services']['demo']['processes']['main']['enabled']=True
+inventory['services']['demo']['processes'][0]['state']='stopped'
+inventory['services']['demo']['processes'][0]['enabled']=True
 path,_=diff('stopped',inventory);apply('stopped',path)
 check('stopped target can remain enabled', active()=='inactive' and run('systemctl','is-enabled','richt-demo.service').stdout.strip()=='enabled')
-inventory['services']['demo']['processes']['main']['state']='running'
+inventory['services']['demo']['processes'][0]['state']='running'
 path,_=diff('running-again',inventory);apply('running-again',path)
 # Real secret rotation still schedules and executes a process reaction. Values
 # are synthetic runtime canaries; neither the test report nor CLI output prints them.
@@ -125,7 +125,7 @@ secret_markers.extend('RICHT_TEST_'+uuid.uuid4().hex for _ in range(2))
 secret_inventory=copy.deepcopy(inventory)
 secret_source=work/'secret-source.yaml'
 secret_inventory['secret_sources']={'default':dict(type='yaml',file=secret_source.name)}
-secret_inventory['services']['demo']['configs']['main'].update(mode='0600',template=dict(inline='message={{secret "token"}}\n'))
+secret_inventory['services']['demo']['configs'][0].update(mode='0600',template=dict(inline='message={{secret "token"}}\n'))
 for index,value in enumerate(secret_markers):
     with os.fdopen(os.open(secret_source,os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600),'w') as stream:
         os.fchmod(stream.fileno(),0o600)
@@ -141,14 +141,14 @@ for index,value in enumerate(secret_markers):
     check(label+' applies frozen bytes and executes the reload',
           Path('/etc/richt-demo.conf').read_text()=='message='+value+'\n' and events()==before+['reload'])
 # The following template removes secret() but must still hide the previous value.
-inventory['services']['demo']['configs']['main']['sensitive']=True
+inventory['services']['demo']['configs'][0]['sensitive']=True
 # Capability exists, but this reload command deliberately fails. Match desired and
 # current drop-in before diff so only config and reload tasks are prepared.
 failing='[Service]\nExecReload=\nExecReload=/bin/false\n'
 Path('/etc/systemd/system/richt-demo.service.d/20-reload.conf').write_text(failing)
 run('systemctl','daemon-reload')
-inventory['services']['demo']['processes']['main']['overrides']['20-reload.conf']['template']['inline']=failing
-inventory['services']['demo']['configs']['main']['template']['inline']='message=resume\n'
+inventory['services']['demo']['processes'][0]['overrides']['20-reload.conf']['template']['inline']=failing
+inventory['services']['demo']['configs'][0]['template']['inline']='message=resume\n'
 path,tasks=diff('resume',inventory)
 p=apply('resume-failure',path,ok=False)
 progress=json.loads(path.read_text())['hosts'][0]['tasks']
@@ -157,26 +157,26 @@ Path('/etc/richt-demo.conf').write_text('changed after failed apply\n')
 Path('/etc/systemd/system/richt-demo.service.d/20-reload.conf').write_text(reload_content)
 run('systemctl','daemon-reload');before=events();apply('resume-success',path)
 check('resume skips config and preserves pending reload', Path('/etc/richt-demo.conf').read_text()=='changed after failed apply\n' and events()==before+['reload'])
-inventory['services']['demo']['processes']['main']['overrides']['20-reload.conf']['template']['inline']=reload_content
-# Multiple processes use after; the second start fails if the first has not finished.
+inventory['services']['demo']['processes'][0]['overrides']['20-reload.conf']['template']['inline']=reload_content
+# Process declaration order is significant; the second start requires the first to finish.
 unit1='[Service]\nType=simple\nExecStart=/usr/bin/sleep infinity\nExecStartPost=/usr/bin/touch /run/richt-order-first\n'
 unit2='[Service]\nType=simple\nExecStartPre=/usr/bin/test -e /run/richt-order-first\nExecStart=/usr/bin/sleep infinity\nExecStartPost=/usr/bin/touch /run/richt-order-second\n'
-multiple=dict(tags=dict(example=dict(services=dict(order={}))),services=dict(order=dict(order=10,processes={'z-first':own_unit('richt-first.service',unit1),'a-second':own_unit('richt-second.service',unit2,after=['z-first'])})),hosts=[dict(name='isolated',tags=['example'],transport=dict(type='local'))])
-path,tasks=diff('after',multiple)
-check('after is reflected in process task order',[t['component'] for t in tasks if t['operation']=='systemd']==['process/z-first','process/a-second'])
-apply('after',path)
-check('multiple processes start in dependency order',active('richt-first.service')=='active' and active('richt-second.service')=='active' and Path('/run/richt-order-second').exists())
+multiple=dict(tags=dict(example=dict(services=dict(order={}))),services=dict(order=dict(order=10,processes=[dict(name='z-first',**own_unit('richt-first.service',unit1)),dict(name='a-second',**own_unit('richt-second.service',unit2))])),hosts=[dict(name='isolated',tags=['example'],transport=dict(type='local'))])
+path,tasks=diff('ordered',multiple)
+check('declaration order is reflected in process task order',[t['component'] for t in tasks if t['operation']=='systemd']==['process/z-first','process/a-second'])
+apply('ordered',path)
+check('multiple processes start in declaration order',active('richt-first.service')=='active' and active('richt-second.service')=='active' and Path('/run/richt-order-second').exists())
 for label,command,timeout in [('timeout','/usr/bin/sleep 2','100ms'),('error','/bin/false','5s')]:
     unit=f'richt-{label}.service'
-    bad=dict(tags=dict(example=dict(services=dict(bad={}))),services=dict(bad=dict(order=10,processes=dict(main=own_unit(unit,f'[Service]\nType=oneshot\nExecStart={command}\nRemainAfterExit=yes\n',timeout=timeout)))),hosts=[dict(name='isolated',tags=['example'],transport=dict(type='local'))])
+    bad=dict(tags=dict(example=dict(services=dict(bad={}))),services=dict(bad=dict(order=10,processes=[dict(name='main',**own_unit(unit,f'[Service]\nType=oneshot\nExecStart={command}\nRemainAfterExit=yes\n',timeout=timeout))])),hosts=[dict(name='isolated',tags=['example'],transport=dict(type='local'))])
     path,_=diff(label,bad);start=time.monotonic();p=apply(label,path,ok=False);elapsed=time.monotonic()-start
     check(label+' stops host and records error',p.returncode!=0 and json.loads(path.read_text())['hosts'][0]['tasks'][-1]['progress']['status']=='error')
     if label=='timeout':check('timeout bounds command and waiting together',elapsed<1.5)
     run('systemctl','stop',unit,ok=False)
 # Unsupported reload fails preparation even when the triggering file is unchanged.
 unsupported=copy.deepcopy(multiple)
-unsupported['services']['order']['configs']=dict(main=dict(path='/etc/richt-demo.conf',template=dict(inline='x')))
-unsupported['services']['order']['processes']['z-first']['reload_on']=['config.main']
+unsupported['services']['order']['configs']=[dict(name='main',path='/etc/richt-demo.conf',template=dict(inline='x'))]
+unsupported['services']['order']['processes'][0]['reload_on']=['config.main']
 p=run(binary,'diff','-i',str(write('unsupported',unsupported)),ok=False)
 check('unsupported reload is rejected in preparation',p.returncode!=0 and 'reload is unsupported' in p.stdout)
 # Full removal stops and disables before removing owned files and package.
@@ -189,8 +189,8 @@ check('absent removes declared package config and drop-in',run('rpm','-q','richt
 check('application state is retained',Path('/run/richt-demo/events').exists())
 # YUM 4 is DNF's compatibility entry point, exercised with the same exact request.
 inventory['tags']['example']['services']['demo']['state']='present'
-inventory['services']['demo']['binaries']['app']['manager']='yum'
-inventory['services']['demo']['binaries']['app']['version']='0:1.0-1.noarch'
+inventory['services']['demo']['binaries'][0]['manager']='yum'
+inventory['services']['demo']['binaries'][0]['version']='0:1.0-1.noarch'
 path,_=diff('yum-install',inventory);apply('yum-install',path)
 check('YUM 4 exact package installation works',installed()=='0:1.0-1.noarch' and active()=='active')
 inventory['tags']['example']['services']['demo']['state']='absent'
@@ -198,7 +198,7 @@ path,_=diff('yum-remove',inventory);apply('yum-remove',path)
 check('YUM 4 package removal works',run('rpm','-q','richt-demo',ok=False).returncode!=0)
 # Clean owned extra units through the same absent mechanism.
 multiple['tags']['example']['services']['order']['state']='absent'
-path,_=diff('after-absent',multiple);apply('after-absent',path)
+path,_=diff('ordered-absent',multiple);apply('ordered-absent',path)
 check('owned full units are removed',not Path('/etc/systemd/system/richt-first.service').exists() and not Path('/etc/systemd/system/richt-second.service').exists())
 (work/'acceptance.json').write_text(json.dumps(dict(checks=checks,passed=len(checks)),indent=2)+'\n')
 print(f'{len(checks)} acceptance checks passed')

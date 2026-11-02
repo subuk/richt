@@ -26,11 +26,11 @@ func TestValidationRunsAfterPackageAndBlocksReactionUntilContinuation(t *testing
 		t.Fatal(err)
 	}
 	s := inventory.Service{
-		Binaries: map[string]inventory.Binary{"package": {Type: "rpm", Package: "example"}},
-		Configs: map[string]inventory.Config{"main": {Path: path, Template: inventory.Template{File: source}, Validate: &inventory.Validator{
+		Binaries: []inventory.Binary{{Name: "package", Type: "rpm", Package: "example"}},
+		Configs: []inventory.Config{{Name: "main", Path: path, Template: inventory.Template{File: source}, Validate: &inventory.Validator{
 			Args: []string{validator, "{candidate}", guard, calls}, Timeout: "5s",
 		}}},
-		Processes: map[string]inventory.Process{"main": {Unit: "example.service", ReloadOn: []string{"config.main"}}},
+		Processes: []inventory.Process{{Name: "main", Unit: "example.service", ReloadOn: []string{"config.main"}}},
 	}
 	transactions, reloads := 0, 0
 	e := Local{

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify isolated systemd-mask fixtures locally or through SSH/sudo."""
+"""Verify isolated systemd masks and ordered components locally or through SSH/sudo."""
 
 import argparse
 import json
@@ -23,6 +23,9 @@ def main():
     unit, owned, missing = [prefix + suffix + ".service" for suffix in ("", "-owned", "-missing")]
     fixture = "/usr/lib/systemd/system/" + unit
     target_config = "/tmp/" + prefix + ".conf"
+    ordered_units = [prefix + f"-ordered-{index}.service" for index in range(4)]
+    ordered_configs = ["/tmp/" + prefix + f"-ordered-{index}.conf" for index in range(4)]
+    ordered_events = "/tmp/" + prefix + "-ordered.events"
     checks = []
 
     def command(argv, success=True):
@@ -52,9 +55,9 @@ def main():
             transport += ", sudo: true}"
         configs = ""
         if config:
-            configs = f"    configs:\n      main:\n        path: {target_config}\n        template: {{inline: frozen}}\n"
+            configs = f"    configs:\n      - name: main\n        path: {target_config}\n        template: {{inline: frozen}}\n"
         path = output / (name + ".yaml")
-        path.write_text(f"tags:\n  test:\n    services:\n      test: {{state: {state}}}\nservices:\n  test:\n    order: 10\n" + configs + "    processes:\n      main:\n        type: systemd\n" + process + f"hosts:\n  - name: target\n    tags: [test]\n    transport: {transport}\n")
+        path.write_text(f"tags:\n  test:\n    services:\n      test: {{state: {state}}}\nservices:\n  test:\n    order: 10\n" + configs + "    processes:\n      - name: main\n        type: systemd\n" + process + f"hosts:\n  - name: target\n    tags: [test]\n    transport: {transport}\n")
         return path
 
     def prepare(name, process, state="present", config=False, success=True):
@@ -72,6 +75,87 @@ def main():
     def status(name):
         result = target("systemctl show -p LoadState -p ActiveState -p UnitFileState -- " + name)
         return dict(line.split("=", 1) for line in result.stdout.splitlines() if "=" in line)
+
+    def verify_ordered_components():
+        transport = {"type": "local"}
+        if args.ssh_host:
+            transport = {"type": "ssh", "host": ssh_host, "sudo": True}
+            if ssh_user:
+                transport["user"] = ssh_user
+        configs, processes = [], []
+        for index, name in enumerate(("z-first", None, "a-third", None)):
+            config = {"path": ordered_configs[index], "template": {"inline": f"item={index}\n"}}
+            # Both explicit template type and its omitted default are supported.
+            if index % 2 == 0:
+                config["type"] = "template"
+            definition = (
+                "[Service]\nType=oneshot\nRemainAfterExit=yes\n"
+                f"ExecStart=/bin/sh -c 'echo start-{index} >> {ordered_events}'\n"
+                f"ExecStop=/bin/sh -c 'echo stop-{index} >> {ordered_events}'\n"
+                "[Install]\nWantedBy=multi-user.target\n"
+            )
+            process = {
+                "type": "systemd", "unit": ordered_units[index], "enabled": True,
+                "unit_file": {"template": {"inline": definition}},
+            }
+            if name is not None:
+                config["name"] = name
+                process["name"] = name
+            configs.append(config)
+            processes.append(process)
+        desired = {
+            "tags": {"test": {"services": {"ordered": {}}}},
+            "services": {"ordered": {"order": 10, "configs": configs, "processes": processes}},
+            "hosts": [{"name": "target", "tags": ["test"], "transport": transport}],
+        }
+
+        def prepare_ordered(name):
+            source = output / (name + "-inventory.json")
+            source.write_text(json.dumps(desired, indent=2) + "\n")
+            saved = output / (name + ".json")
+            result = command([binary, "diff", "-i", str(source), "-o", str(saved)])
+            (output / (name + ".diff")).write_text(result.stdout + result.stderr)
+            return saved, json.loads(saved.read_text())["hosts"][0]["tasks"]
+
+        saved, tasks = prepare_ordered("ordered-present")
+        check("named and unnamed configs preserve declaration order", [
+            task["file"]["path"] for task in tasks
+            if task["operation"] == "file" and task["file"]["path"] in ordered_configs
+        ] == ordered_configs)
+        check("named and unnamed processes preserve declaration order", [
+            task["process"]["unit"] for task in tasks if task["operation"] == "systemd"
+        ] == ordered_units)
+        apply(saved)
+        starts = [f"start-{index}" for index in range(4)]
+        check("systemd starts execute in declaration order", target("cat " + ordered_events).stdout.splitlines() == starts)
+        check("all ordered configs contain prepared bytes", all(
+            target("cat " + path).stdout == f"item={index}\n"
+            for index, path in enumerate(ordered_configs)
+        ))
+        desired["tags"]["test"]["services"]["ordered"]["state"] = "absent"
+        saved, tasks = prepare_ordered("ordered-absent")
+        check("absent configs reverse their own declaration order", [
+            task["file"]["path"] for task in tasks
+            if task["operation"] == "file" and task["file"]["path"] in ordered_configs
+        ] == ordered_configs[::-1])
+        check("absent processes reverse their own declaration order", [
+            task["process"]["unit"] for task in tasks if task["operation"] == "systemd"
+        ] == ordered_units[::-1])
+        check("each absent process stops before disablement", [
+            (task["operation"], task["process"]["unit"]) for task in tasks
+            if task["operation"] in ("systemd", "systemd-enable")
+        ] == [
+            (operation, name) for name in ordered_units[::-1]
+            for operation in ("systemd", "systemd-enable")
+        ])
+        apply(saved)
+        check("systemd stops execute in reverse declaration order", target("cat " + ordered_events).stdout.splitlines() == starts + [
+            f"stop-{index}" for index in reversed(range(4))
+        ])
+        check("ordered removal deletes configs and owned units", all(
+            target("test ! -e " + path, False).returncode == 0
+            for path in ordered_configs + ["/etc/systemd/system/" + name for name in ordered_units]
+        ))
 
     definition = "[Service]\nExecStart=/usr/bin/sleep infinity\n[Install]\nWantedBy=multi-user.target\n"
     try:
@@ -129,10 +213,11 @@ def main():
         target("systemctl stop " + owned + "; systemctl disable " + owned + "; rm /etc/systemd/system/" + owned + "; systemctl daemon-reload; systemctl mask " + owned)
         _, result = prepare("owned-absent-rejected", full, state="absent", success=False)
         check("absence cannot remove an owned full-unit mask", result.returncode != 0 and "explicitly unmask" in result.stderr)
+        verify_ordered_components()
     finally:
-        for name in (unit, owned, missing):
+        for name in (unit, owned, missing, *ordered_units):
             target("systemctl stop " + name + " 2>/dev/null || true; systemctl unmask " + name + " 2>/dev/null || true; systemctl unmask --runtime " + name + " 2>/dev/null || true; systemctl disable " + name + " 2>/dev/null || true; rm -f /etc/systemd/system/" + name + " /run/systemd/system/" + name, False)
-        target("rm -f " + fixture + " " + target_config + "; systemctl daemon-reload", False)
+        target("rm -f " + " ".join([fixture, target_config, ordered_events, *ordered_configs]) + "; systemctl daemon-reload", False)
         report = {"checks": checks, "passed": len(checks), "transport": "ssh-sudo" if args.ssh_host else "local-root"}
         (output / "acceptance.json").write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report, indent=2))

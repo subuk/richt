@@ -6,7 +6,7 @@ services:
   masked:
     order: 10
     processes:
-      example:
+      - name: example
         type: systemd
         unit: richt-mask-example.service
         masked: false

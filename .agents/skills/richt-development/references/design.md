@@ -22,8 +22,11 @@ diff, displays an executable plan, and explicitly applies that plan. NetBox,
 Argo CD, and Ansible are not required dependencies of the local core.
 
 A host has a stable name, tags, and connection
-settings. A service is a reusable logical unit containing zero or more named
-binary, config, and process components; at least one set must be nonempty.
+settings. A service is a reusable logical unit containing flat ordered lists of
+binary, config, and process components; at least one list must be nonempty.
+Items have optional nonempty string `name` labels, unique within each
+collection; only explicitly named binaries/configs can be referenced. Names
+do not determine execution order or task identifiers.
 Config-only services can establish repositories before later package services;
 binary-only and process-only services are equally valid. A service and an
 individual managed process are different concepts.
@@ -106,9 +109,10 @@ Important invariants across those contracts:
   neither assigns it nor automatically includes other services. Filters apply
   only during plan construction and are argument errors for saved-plan apply.
 - Services run in service-definition order; present phases are binary, config, process.
-  `restart_on`/`reload_on` refer to `binary.<name>` or `config.<name>` in the same
-  service; `after` orders its processes. Unknown/cyclic references fail validation.
-  There are no cross-service links or arbitrary service dependency graphs.
+  Each collection executes in declaration order. `restart_on`/`reload_on` refer
+  to explicitly named `binary.<name>` or `config.<name>` in the same service.
+  Unknown/duplicate references fail validation. There is no component dependency
+  graph or cross-service link.
 - Actual linked changes combine into one lifecycle reaction per process;
   restart wins over reload. A stopped process targeting running gets only start;
   an active one gets the combined reaction or no action. Target stopped never
@@ -143,8 +147,10 @@ Important invariants across those contracts:
   Validation and writing share one task, and failure preserves the destination
   and blocks later reactions. Matching content, attribute-only changes, and
   removal do not run validation. Validator output is never included in diagnostics.
-- `absent` stops and verifies processes in reverse dependency order, disables
-  them before removing owned units/drop-ins and configs, then removes packages.
+- `absent` traverses processes in reverse declaration order, stopping and
+  verifying each before disabling it. These tasks precede removal of owned
+  units/drop-ins and configs. Configs use reverse config-list order, then
+  packages use reverse binary-list order.
   Other services retain service-definition order; no special cross-service deletion
   graph. External units are still stopped/disabled. DNF may remove dependencies;
   RPM handles package configs and possible `.rpmsave`. Richt does not purge
@@ -169,10 +175,12 @@ not reasons to recalculate tasks. Other incompatible backend semantics fail. Pro
 result verification remain execution operations. Successful tasks are not
 rechecked during continuation.
 
-The current saved format is strict, indented JSON schema version `1.2` (with
-`1.0` and `1.1` plans still accepted under their original contracts) with
-validation of operations and progress. Its compatibility rules, task shapes,
-atomic writes, same-plan locking, and restrictive plan/lock permissions are
+The current saved format is strict, indented JSON schema version `1.3`; only
+that version is accepted, with validation of operations and progress. Task IDs
+use original zero-based list positions and operations, never optional name
+labels, and remain stable within a saved plan rather than across inventory
+reordering. Its task shapes, atomic writes, same-plan locking, and restrictive
+plan/lock permissions are
 implemented contracts, not undecided design. Extend them deliberately when new
 capabilities require additional executable inputs.
 
@@ -224,8 +232,8 @@ These are implemented first-version contracts:
 - Bound simultaneous hosts to 20 by default, with a per-apply override including
   saved plans; 1 means sequential. The limit is executor configuration, never a
   selector or a reason to rebuild/change hosts, tasks, inputs, or progress.
-- Preserve sequential services and process `after` within each host. A failing
-  host must not stop other active or queued hosts. Await all hosts before the
+- Preserve sequential services and component list declaration order within each
+  host. A failing host must not stop other active or queued hosts. Await all hosts before the
   final summary. Synchronize shared progress and atomic persistence so parallel
   updates cannot lose another host's results; persistence failure still stops
   further work globally. No automatic retry.
@@ -325,9 +333,9 @@ Inventory and Services are the central documentation concepts. Inventory
 describes hosts, tags, assignments, variables, and selection; Services explains
 reusable component composition, execution order, and reactions before the
 implementation references. RPM and systemd are current implementations of
-binary and process components. Configs currently use templated files without a
-type discriminator. New implementations extend their component reference lists;
-the documentation must not advertise them before they are supported.
+binary and process components. Configs use templated files with an optional
+`type: template` discriminator, which is also the default when omitted. New
+implementations extend their component reference lists; the documentation must not advertise them before they are supported.
 
 For subsequent changes, keep help, examples, and guides synchronized. Ship
 reproducible examples, short usage/verification instructions, and relevant tests

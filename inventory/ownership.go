@@ -31,19 +31,21 @@ func (in *Inventory) validateOwnership(host string, assignments []Assignment) er
 	for _, a := range assignments {
 		s := in.Services[a.Name]
 		processUnits := map[string]string{}
-		for _, name := range sortedKeys(s.Binaries) {
+		for i, b := range s.Binaries {
+			name := componentLabel(b.Name, i)
 			// DNF and YUM both own packages in the RPM database.
-			if err := claim("package rpm:"+s.Binaries[name].Package, a.Name, "binary."+name); err != nil {
+			if err := claim("package rpm:"+b.Package, a.Name, "binary."+name); err != nil {
 				return err
 			}
 		}
-		for _, name := range sortedKeys(s.Configs) {
-			if err := claimFile(s.Configs[name], a.Name, "config."+name); err != nil {
+		for i, c := range s.Configs {
+			name := componentLabel(c.Name, i)
+			if err := claimFile(c, a.Name, "config."+name); err != nil {
 				return err
 			}
 		}
-		for _, name := range sortedKeys(s.Processes) {
-			p := s.Processes[name]
+		for i, p := range s.Processes {
+			name := componentLabel(p.Name, i)
 			component := "process." + name
 			if previous, ok := processUnits[p.Unit]; ok {
 				return fmt.Errorf("host %q: systemd unit %s is managed by both %s/process.%s and %s/%s", host, p.Unit, a.Name, previous, a.Name, component)

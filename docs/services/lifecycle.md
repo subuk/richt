@@ -1,6 +1,6 @@
 ---
 title: "Lifecycle and ordering"
-description: "Understand service phases, process dependencies, removal, and failure."
+description: "Understand ordered component lists, service phases, removal, and failure."
 weight: 10
 ---
 
@@ -19,15 +19,15 @@ Selecting a service does not select its prerequisites.
 
 A `present` assignment prepares changes in these phases:
 
-1. **Binaries:** apply changed package requests.
+1. **Binaries:** apply changed package requests in list declaration order.
 2. **Unmask, when requested:** remove persistent and runtime masks before
    writing an owned full unit or operating on the process.
-3. **Configs:** write changed configs, owned units, and drop-ins with their
-   prepared contents and attributes.
+3. **Configs:** write changed configs in list declaration order, then owned
+   units and drop-ins with their prepared contents and attributes.
 4. **Daemon reload, when required:** make changed systemd definitions visible.
-5. **Processes:** apply independent enablement, lifecycle, and mask tasks in process
-   dependency order. For a present process, its enablement task precedes its
-   lifecycle task; a requested persistent mask follows both. Unmask tasks run
+5. **Processes:** apply independent enablement, lifecycle, and mask tasks in
+   process list declaration order. For a present process, its enablement task
+   precedes its lifecycle task; a requested persistent mask follows both. Unmask tasks run
    earlier so a full-unit file write cannot follow a mask link into `/dev/null`.
 
 Only changed resources need write or package tasks. Lifecycle tasks contain
@@ -35,21 +35,20 @@ prepared branches, selected using runtime state during apply; a reaction can
 therefore become a start when the process is stopped. See [change
 reactions](reactions.md) for the branch table.
 
-`after: [other-process]` orders processes within the same service. Referenced
-processes execute first; independent processes use deterministic name ordering.
-Unknown references, duplicates, and dependency cycles fail inventory validation.
-`after` orders Richt's tasks; it does not create systemd unit dependencies or
-check application readiness.
+Each collection is an ordered list. The first item executes before the second,
+regardless of their names; unnamed items participate in the same order. To run
+an API before a worker, declare it first. Components have no dependency graph.
+This orders Richt's tasks without creating systemd unit
+dependencies or checking application readiness.
 
 ```yaml
 processes:
-  api:
+  - name: api
     type: systemd
     unit: example-api.service
-  worker:
+  - name: worker
     type: systemd
     unit: example-worker.service
-    after: [api]
 ```
 
 Changes to owned units/drop-ins schedule daemon reload and a restart reaction
@@ -72,10 +71,12 @@ tags:
       app: {state: absent}
 ```
 
-Within that service, Richt stops and verifies each process in reverse `after`
-order, then disables it. These process tasks precede removal of owned units,
-drop-ins, and declared configs. Declared packages are removed last, followed by
-any required daemon reload. An already missing unit is accepted; an external
+Within that service, Richt traverses the process list in reverse declaration
+order, stopping and verifying each process before disabling it. These process
+tasks precede removal of owned units/drop-ins and configs. Configs are removed
+in reverse config-list order, then packages in reverse binary-list order,
+followed by any required daemon reload. Thus absence reverses each collection separately and visits processes,
+configs, then binaries. An already missing unit is accepted; an external
 unit that remains installed is still stopped and disabled.
 The declared mask target is ignored for absence, preserving existing masks.
 An owned full-unit path that is currently masked must be explicitly unmasked

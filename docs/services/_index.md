@@ -5,8 +5,8 @@ weight: 45
 ---
 
 A Richt **service** is a reusable named definition of host configuration. It
-contains named [binaries](binaries/_index.md), [configs](configs/_index.md), and
-[processes](processes/_index.md). Any nonempty combination is valid: a service
+contains ordered lists of [binaries](binaries/_index.md),
+[configs](configs/_index.md), and [processes](processes/_index.md). Any nonempty combination is valid: a service
 can manage only a repository file, only a package, only a process, or all three.
 An individual process, such as `rsyslog.service`, is one component of a service;
 it is not the service definition itself.
@@ -37,11 +37,11 @@ services:
   system-logging:
     order: 10
     binaries:
-      package:
+      - name: package
         type: rpm
         package: rsyslog
     configs:
-      main:
+      - name: main
         path: /etc/rsyslog.d/30-richt-example.conf
         owner: root
         group: root
@@ -49,7 +49,7 @@ services:
         template:
           inline: "local0.* {{ .log_file }}\n"
     processes:
-      daemon:
+      - name: daemon
         type: systemd
         unit: rsyslog.service
         enabled: true

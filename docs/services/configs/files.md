@@ -6,7 +6,7 @@ weight: 10
 
 ```yaml
 configs:
-  main:
+  - name: main
     path: /etc/example-app.conf
     owner: root
     group: root
@@ -22,6 +22,8 @@ configs:
 
 | Field | Required | Meaning and default |
 | --- | --- | --- |
+| `name` | no | Nonempty reference label, unique within the config list |
+| `type` | no | `template` (default); no other config backend is supported |
 | `path` | yes | Absolute target file path, normalized during resolution |
 | `template` | yes | Exactly one of `file` or `inline`; an empty inline string is valid |
 | `owner` | no | Target user name; omission preserves existing ownership |
@@ -31,11 +33,14 @@ configs:
 | `sensitive` | no | Defaults to false; template secret lookup automatically makes it true |
 | `validate` | no | Target-side validator argv and positive timeout; timeout defaults to `5s` |
 
-These fields also describe [systemd-owned units and
+The file fields also describe [systemd-owned units and
 drop-ins](../processes/systemd.md#owned-units-and-drop-ins), whose paths can be
-derived from the process. Ordinary configs require `path`. Configs have no
-`type` field or separate per-file target state; they use the service assignment's
-`present` or `absent` state.
+derived from the process. Ordinary configs require `path`. Config list items
+accept `type: template`; omission has the same meaning. Configs have no separate
+per-file target state; they use the service assignment's `present` or `absent`
+state. `unit_file` remains one object, and `overrides` remains a mapping of
+drop-in basenames to file objects. Owned file objects also accept optional
+`type: template`. Only config-list entries provide labels for reaction references.
 
 ## Templates and preparation
 

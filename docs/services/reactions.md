@@ -5,13 +5,15 @@ weight: 20
 ---
 
 A process's `restart_on` and `reload_on` list `binary.<name>` or `config.<name>`
-references in the same service. Component names are inventory keys, independent
-of package names and file paths. Unknown or duplicate references fail validation;
-cross-service references are unsupported.
+references in the same service. These names are explicit optional `name` labels
+on binary and config list items, independent of package names and file paths.
+Unnamed items cannot be referenced. Names must be unique within their collection;
+unknown or duplicate references fail validation. Cross-service references are
+unsupported.
 
 ```yaml
 processes:
-  web:
+  - name: web
     type: systemd
     unit: example.service
     restart_on: [binary.package]
@@ -24,8 +26,9 @@ Multiple reload inputs merge into one reload; any restart input wins over reload
 Changes to a process's owned unit or drop-ins also request its restart. Sensitive
 files compare real bytes, so hiding their display does not suppress reactions.
 
-`after` is a separate ordering rule between processes. It neither subscribes to
-changes nor implies a reaction. See [lifecycle and ordering](lifecycle.md).
+Declaration order controls component execution independently of change
+subscriptions. A preceding component does not imply a reaction. See
+[lifecycle and ordering](lifecycle.md).
 
 ## Prepared lifecycle branches
 

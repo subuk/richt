@@ -50,8 +50,8 @@ func targetFileError(err error) error {
 }
 
 const targetAccounts = `
-uid=$4
-gid=$5
+uid=-
+gid=-
 if [ -n "$2" ]; then
   record=$(getent passwd -- "$2") || exit 72
   uid=$(printf '%s' "$record" | cut -d: -f3)
@@ -62,20 +62,13 @@ if [ -n "$3" ]; then
   gid=$(printf '%s' "$record" | cut -d: -f3)
   case "$gid" in ''|*[!0-9]*) exit 73;; esac
 fi
-if [ -n "$6" ]; then
+if [ -n "$4" ]; then
   [ -e /sys/fs/selinux/enforce ] || exit 74
 fi
 `
 
 func targetFileArguments(f *plan.FileChange) []string {
-	uid, gid := "-", "-"
-	if f.UID != nil {
-		uid = strconv.Itoa(*f.UID)
-	}
-	if f.GID != nil {
-		gid = strconv.Itoa(*f.GID)
-	}
-	return []string{f.Path, f.Owner, f.Group, uid, gid, f.SELinux, f.State}
+	return []string{f.Path, f.Owner, f.Group, f.SELinux, f.State}
 }
 
 // Observe computes the patch and attribute changes on the target. Owner/group
@@ -92,7 +85,7 @@ func (t Target) Observe(ctx context.Context, f *plan.FileChange) (changed bool, 
 	out, err := t.run(ctx, `set -eu
 `+targetAccounts+`
 path=$1
-if [ "$7" = absent ] && [ -L "$path" ]; then
+if [ "$5" = absent ] && [ -L "$path" ]; then
   printf 'present\n0\n0\n0\n%s\n%s\n\n' "$uid" "$gid"
 elif [ ! -e "$path" ]; then
   printf 'missing\n0\n0\n0\n%s\n%s\n\n' "$uid" "$gid"
@@ -103,7 +96,7 @@ else
 %u
 %g' -- "$path"
   printf '%s\n%s\n' "$uid" "$gid"
-  if [ -n "$6" ]; then stat -Lc '%C' -- "$path"; else printf '\n'; fi
+  if [ -n "$4" ]; then stat -Lc '%C' -- "$path"; else printf '\n'; fi
   cat -- "$path"
 fi
 `, targetFileArguments(f)...)
@@ -243,8 +236,8 @@ if [ "$uid" != - ] || [ "$gid" != - ]; then
   else ownership=+$uid:+$gid; fi
   chown -- "$ownership" "$path"
 fi
-[ -z "$8" ] || chmod -- "$8" "$path"
-[ -z "$6" ] || chcon -- "$6" "$path"
+[ -z "$6" ] || chmod -- "$6" "$path"
+[ -z "$4" ] || chcon -- "$4" "$path"
 sync -f -- "$path"
 `, append(targetFileArguments(f), mode)...)
 		return err

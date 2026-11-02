@@ -28,7 +28,7 @@ func fixture() *Inventory {
 			"home":   {Order: 20, Services: map[string]ServiceAssignment{"app": {}}, Vars: map[string]any{"app": map[string]any{"name": "Home"}, "list": []any{"new"}}},
 			"net":    {Order: 20, Services: map[string]ServiceAssignment{"app": {State: "absent"}}, Vars: map[string]any{"app": map[string]any{"name": "Net"}}},
 		},
-		Services: map[string]ServiceDefinition{"app": definition(20, Service{Configs: map[string]Config{"main": inlineConfig("/etc/app.conf")}}), "repo": definition(10, Service{Configs: map[string]Config{"repo": inlineConfig("/etc/yum.repos.d/app.repo")}})},
+		Services: map[string]ServiceDefinition{"app": definition(20, Service{Configs: []Config{namedConfig("main", inlineConfig("/etc/app.conf"))}}), "repo": definition(10, Service{Configs: []Config{namedConfig("repo", inlineConfig("/etc/yum.repos.d/app.repo"))}})},
 		Hosts:    []Host{{Name: "gena", Tags: []string{"home", "common"}, Transport: Transport{Type: "local"}}, {Name: "lanst", Tags: []string{"common", "net"}, Transport: Transport{Type: "ssh", Host: "lanst.example", Sudo: true}}},
 	}
 }
@@ -169,11 +169,11 @@ func TestOwnershipChecksAllAssignments(t *testing.T) {
 		first, second Service
 		resource      string
 	}{
-		{"file", Service{Configs: map[string]Config{"a": inlineConfig("/etc/app/../same")}}, Service{Configs: map[string]Config{"b": inlineConfig("/etc/same")}}, "file /etc/same"},
-		{"package", Service{Binaries: map[string]Binary{"a": {Type: "rpm", Manager: "dnf", Package: "shared"}}}, Service{Binaries: map[string]Binary{"b": {Type: "rpm", Manager: "yum", Package: "shared"}}}, "package rpm:shared"},
-		{"unit", Service{Processes: map[string]Process{"a": {Type: "systemd", Unit: "shared.service"}}}, Service{Processes: map[string]Process{"b": {Type: "systemd", Unit: "shared.service"}}}, "systemd unit shared.service"},
-		{"unit-file", Service{Configs: map[string]Config{"unit": inlineConfig("/usr/lib/systemd/system/shared.service")}}, Service{Processes: map[string]Process{"b": {Type: "systemd", Unit: "shared.service"}}}, "systemd unit shared.service"},
-		{"dropin", Service{Configs: map[string]Config{"override": inlineConfig("/etc/systemd/system/shared.service.d/override.conf")}}, Service{Processes: map[string]Process{"b": {Type: "systemd", Unit: "shared.service"}}}, "systemd unit shared.service"},
+		{"file", Service{Configs: []Config{namedConfig("a", inlineConfig("/etc/app/../same"))}}, Service{Configs: []Config{namedConfig("b", inlineConfig("/etc/same"))}}, "file /etc/same"},
+		{"package", Service{Binaries: []Binary{{Name: "a", Type: "rpm", Manager: "dnf", Package: "shared"}}}, Service{Binaries: []Binary{{Name: "b", Type: "rpm", Manager: "yum", Package: "shared"}}}, "package rpm:shared"},
+		{"unit", Service{Processes: []Process{{Name: "a", Type: "systemd", Unit: "shared.service"}}}, Service{Processes: []Process{{Name: "b", Type: "systemd", Unit: "shared.service"}}}, "systemd unit shared.service"},
+		{"unit-file", Service{Configs: []Config{namedConfig("unit", inlineConfig("/usr/lib/systemd/system/shared.service"))}}, Service{Processes: []Process{{Name: "b", Type: "systemd", Unit: "shared.service"}}}, "systemd unit shared.service"},
+		{"dropin", Service{Configs: []Config{namedConfig("override", inlineConfig("/etc/systemd/system/shared.service.d/override.conf"))}}, Service{Processes: []Process{{Name: "b", Type: "systemd", Unit: "shared.service"}}}, "systemd unit shared.service"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			in := fixture()
@@ -209,9 +209,9 @@ func TestDuplicateResourcesWithinService(t *testing.T) {
 		service Service
 		want    string
 	}{
-		{"file", Service{Configs: map[string]Config{"a": inlineConfig("/etc/same"), "b": inlineConfig("/etc/dir/../same")}}, "file /etc/same"},
-		{"package", Service{Binaries: map[string]Binary{"a": {Type: "rpm", Package: "same"}, "b": {Type: "rpm", Package: "same", Version: "2"}}}, "package rpm:same"},
-		{"process", Service{Processes: map[string]Process{"a": {Type: "systemd", Unit: "same.service"}, "b": {Type: "systemd", Unit: "same.service"}}}, "systemd unit same.service"},
+		{"file", Service{Configs: []Config{namedConfig("a", inlineConfig("/etc/same")), namedConfig("b", inlineConfig("/etc/dir/../same"))}}, "file /etc/same"},
+		{"package", Service{Binaries: []Binary{{Name: "a", Type: "rpm", Package: "same"}, {Name: "b", Type: "rpm", Package: "same", Version: "2"}}}, "package rpm:same"},
+		{"process", Service{Processes: []Process{{Name: "a", Type: "systemd", Unit: "same.service"}, {Name: "b", Type: "systemd", Unit: "same.service"}}}, "systemd unit same.service"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			in := fixture()
@@ -227,13 +227,13 @@ func TestDuplicateResourcesWithinService(t *testing.T) {
 func TestProcessCanOwnItsUnitAndMultipleDropins(t *testing.T) {
 	in := fixture()
 	unit := inlineConfig("/etc/systemd/system/app.service")
-	setService(in, "app", Service{Processes: map[string]Process{"web": {Type: "systemd", Unit: "app.service", UnitFile: &unit, Overrides: map[string]Config{"a.conf": inlineConfig("/etc/systemd/system/app.service.d/a.conf"), "b.conf": inlineConfig("/etc/systemd/system/app.service.d/b.conf")}}}})
+	setService(in, "app", Service{Processes: []Process{{Name: "web", Type: "systemd", Unit: "app.service", UnitFile: &unit, Overrides: map[string]Config{"a.conf": inlineConfig("/etc/systemd/system/app.service.d/a.conf"), "b.conf": inlineConfig("/etc/systemd/system/app.service.d/b.conf")}}}})
 	if _, err := in.Resolve(Selectors{}); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestServiceReferencesCyclesAndFields(t *testing.T) {
+func TestServiceReferencesAndFields(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		mutate func(*Inventory)
@@ -241,20 +241,14 @@ func TestServiceReferencesCyclesAndFields(t *testing.T) {
 	}{
 		{"empty", func(in *Inventory) { setService(in, "app", Service{}) }, "at least one"},
 		{"component-name", func(in *Inventory) {
-			setService(in, "app", Service{Configs: map[string]Config{"bad.name": inlineConfig("/etc/a")}})
+			setService(in, "app", Service{Configs: []Config{namedConfig("bad.name", inlineConfig("/etc/a"))}})
 		}, "config"},
 		{"reaction", func(in *Inventory) {
-			setService(in, "app", Service{Processes: map[string]Process{"web": {Type: "systemd", Unit: "a.service", RestartOn: []string{"config.missing"}}}})
+			setService(in, "app", Service{Processes: []Process{{Name: "web", Type: "systemd", Unit: "a.service", RestartOn: []string{"config.missing"}}}})
 		}, "restart_on"},
 		{"cross-service", func(in *Inventory) {
-			setService(in, "app", Service{Processes: map[string]Process{"web": {Type: "systemd", Unit: "a.service", ReloadOn: []string{"repo.config.main"}}}})
+			setService(in, "app", Service{Processes: []Process{{Name: "web", Type: "systemd", Unit: "a.service", ReloadOn: []string{"repo.config.main"}}}})
 		}, "reload_on"},
-		{"after", func(in *Inventory) {
-			setService(in, "app", Service{Processes: map[string]Process{"web": {Type: "systemd", Unit: "a.service", After: []string{"unknown"}}}})
-		}, "after"},
-		{"cycle", func(in *Inventory) {
-			setService(in, "app", Service{Processes: map[string]Process{"web": {Type: "systemd", Unit: "a.service", After: []string{"db"}}, "db": {Type: "systemd", Unit: "b.service", After: []string{"web"}}}})
-		}, "cycle"},
 		{"order", func(in *Inventory) {
 			d := in.Services["repo"]
 			d.Order = in.Services["app"].Order
@@ -263,10 +257,10 @@ func TestServiceReferencesCyclesAndFields(t *testing.T) {
 		{"unknown-service", func(in *Inventory) { in.Tags["home"].Services["unknown"] = ServiceAssignment{} }, "unknown service"},
 		{"unknown-tag", func(in *Inventory) { in.Hosts[0].Tags = append(in.Hosts[0].Tags, "unknown") }, "unknown tag"},
 		{"timeout", func(in *Inventory) {
-			setService(in, "app", Service{Processes: map[string]Process{"web": {Type: "systemd", Unit: "a.service", Timeout: "0s"}}})
+			setService(in, "app", Service{Processes: []Process{{Name: "web", Type: "systemd", Unit: "a.service", Timeout: "0s"}}})
 		}, "timeout"},
 		{"relative-file", func(in *Inventory) {
-			setService(in, "app", Service{Configs: map[string]Config{"main": inlineConfig("relative")}})
+			setService(in, "app", Service{Configs: []Config{namedConfig("main", inlineConfig("relative"))}})
 		}, "absolute"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -280,18 +274,18 @@ func TestServiceReferencesCyclesAndFields(t *testing.T) {
 	}
 }
 
-func TestProcessDefaultsAndValidGraph(t *testing.T) {
+func TestProcessDefaultsAndValidReferences(t *testing.T) {
 	in := fixture()
-	setService(in, "app", Service{Configs: map[string]Config{"main": inlineConfig("/etc/app")}, Binaries: map[string]Binary{"rpm": {Type: "rpm", Package: "app"}}, Processes: map[string]Process{"db": {Type: "systemd", Unit: "db.service"}, "web": {Type: "systemd", Unit: "web.service", After: []string{"db"}, RestartOn: []string{"binary.rpm"}, ReloadOn: []string{"config.main"}}}})
+	setService(in, "app", Service{Configs: []Config{namedConfig("main", inlineConfig("/etc/app"))}, Binaries: []Binary{{Name: "rpm", Type: "rpm", Package: "app"}}, Processes: []Process{{Name: "db", Type: "systemd", Unit: "db.service"}, {Name: "web", Type: "systemd", Unit: "web.service", RestartOn: []string{"binary.rpm"}, ReloadOn: []string{"config.main"}}}})
 	out, err := in.Resolve(Selectors{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := out.Hosts[0].Services[1].Definition.Processes["web"]
+	p := out.Hosts[0].Services[1].Definition.Processes[1]
 	if p.State != "running" || p.Timeout != "5s" {
 		t.Fatalf("defaults: %#v", p)
 	}
-	if in.Services["app"].Processes["web"].State != "" {
+	if in.Services["app"].Processes[1].State != "" {
 		t.Fatal("defaults mutated inventory")
 	}
 }
@@ -324,9 +318,9 @@ func TestSSHInspectionDoesNotOpenTemplatesOrSecrets(t *testing.T) {
 	in := fixture()
 	in.SecretSources = map[string]SecretSource{"example": {Type: "yaml", File: "/does-not-exist/richt-secret.yaml"}}
 	s := in.Services["app"]
-	c := s.Configs["main"]
+	c := s.Configs[0]
 	c.Template = Template{File: "/does-not-exist/richt-template"}
-	s.Configs["main"] = c
+	s.Configs[0] = c
 	in.Services["app"] = s
 	if _, err := in.Resolve(Selectors{Hosts: []string{"lanst"}}); err != nil {
 		t.Fatal(err)
@@ -364,7 +358,7 @@ func TestAssignmentConflictsOnlyOnSelectedHosts(t *testing.T) {
 	for _, kind := range []string{"duplicate", "order", "ownership"} {
 		t.Run(kind, func(t *testing.T) {
 			in := fixture()
-			extra := Service{Configs: map[string]Config{"extra": inlineConfig("/etc/extra")}}
+			extra := Service{Configs: []Config{namedConfig("extra", inlineConfig("/etc/extra"))}}
 			switch kind {
 			case "duplicate":
 				in.Tags["extra"] = Tag{Services: map[string]ServiceAssignment{"app": {}}}
@@ -372,7 +366,7 @@ func TestAssignmentConflictsOnlyOnSelectedHosts(t *testing.T) {
 				in.Services["extra"] = definition(20, extra)
 				in.Tags["extra"] = Tag{Services: map[string]ServiceAssignment{"extra": {}}}
 			case "ownership":
-				extra.Configs["extra"] = inlineConfig("/etc/app.conf")
+				extra.Configs[0] = inlineConfig("/etc/app.conf")
 				in.Services["extra"] = definition(30, extra)
 				in.Tags["extra"] = Tag{Services: map[string]ServiceAssignment{"extra": {}}}
 			}
@@ -392,7 +386,7 @@ func TestAssignmentConflictsOnlyOnSelectedHosts(t *testing.T) {
 
 func TestServiceOrderRequiredGloballyAndExplicitZeroValid(t *testing.T) {
 	in := fixture()
-	in.Services["unused"] = definition(0, Service{Configs: map[string]Config{"unused": inlineConfig("/etc/unused")}})
+	in.Services["unused"] = definition(0, Service{Configs: []Config{namedConfig("unused", inlineConfig("/etc/unused"))}})
 	d := in.Services["app"]
 	zero := 0
 	d.Order = &zero
@@ -494,3 +488,6 @@ func TestHostWithoutTagAssignmentsResolvesEmptyServices(t *testing.T) {
 		}
 	}
 }
+
+func namedConfig(name string, c Config) Config    { c.Name = name; return c }
+func namedProcess(name string, p Process) Process { p.Name = name; return p }

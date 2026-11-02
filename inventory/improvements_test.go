@@ -25,9 +25,9 @@ func TestMaskTargetsValidatedWithoutObservation(t *testing.T) {
 			p := tt.process
 			p.Type = "systemd"
 			p.Unit = "demo.service"
-			s := Service{Processes: map[string]Process{"demo": p}}
+			s := Service{Processes: []Process{namedProcess("demo", p)}}
 			if tt.config {
-				s.Configs = map[string]Config{"unit": inlineConfig("/etc/systemd/system/demo.service")}
+				s.Configs = []Config{namedConfig("unit", inlineConfig("/etc/systemd/system/demo.service"))}
 			}
 			err := validateService(s)
 			if (err != nil) != tt.invalid {

@@ -77,9 +77,9 @@ def exercise(binary, work, version):
     template.write_text("release smoke {{ .greeting }}\n")
     inventory.write_text(json.dumps({
         "tags": {"smoke": {"services": {"greeting": {}}, "vars": {"greeting": "passed"}}},
-        "services": {"greeting": {"order": 10, "configs": {"main": {
+        "services": {"greeting": {"order": 10, "configs": [{"name": "main",
             "path": str(target), "mode": "0600", "template": {"file": str(template)}
-        }}}},
+        }]}},
         "hosts": [{"name": "local", "tags": ["smoke"], "transport": {"type": "local"}}],
     }))
     run(binary, work, "inventory", "validate", "-i", inventory)

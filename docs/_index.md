@@ -7,8 +7,8 @@ weight: 10
 Richt is a standalone Go CLI for Linux host configuration. Its two core
 concepts are [Inventory](inventory.md) and [Services](services/_index.md).
 Inventory describes hosts, tags, variables, and assignments. A service groups
-named binaries, configs, and processes into a reusable unit; any nonempty
-combination is valid. Tags assign a service's target state to hosts, while the
+ordered lists of binaries, configs, and processes into a reusable unit; any
+nonempty combination is valid. Tags assign a service's target state to hosts, while the
 service definition sets execution order.
 
 Inspect the resolved inventory without contacting hosts. Then use `diff` to

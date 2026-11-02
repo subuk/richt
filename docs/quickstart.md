@@ -33,7 +33,7 @@ services:
   greeting:
     order: 10
     configs:
-      main:
+      - name: main
         path: $demo_dir/target/greeting.conf
         mode: "0644"
         template: {file: greeting.gotmpl}

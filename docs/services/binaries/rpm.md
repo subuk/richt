@@ -6,7 +6,7 @@ weight: 10
 
 ```yaml
 binaries:
-  package:
+  - name: package
     type: rpm
     manager: dnf
     package: example-app
@@ -15,6 +15,7 @@ binaries:
 
 | Field | Required | Meaning and default |
 | --- | --- | --- |
+| `name` | no | Nonempty reference label, unique within the binary list |
 | `type` | yes | `rpm` |
 | `manager` | no | `dnf` (default), or `yum` backed by DNF 4 |
 | `package` | yes | RPM NAME, without an architecture selector |

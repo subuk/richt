@@ -11,7 +11,7 @@ import (
 	"unicode"
 )
 
-const Version = "1.2"
+const Version = "1.3"
 
 type Plan struct {
 	Version string `json:"version"`
@@ -51,8 +51,6 @@ type FileChange struct {
 	Write     bool           `json:"write,omitempty"`
 	Owner     string         `json:"owner,omitempty"`
 	Group     string         `json:"group,omitempty"`
-	UID       *int           `json:"uid,omitempty"`
-	GID       *int           `json:"gid,omitempty"`
 	Mode      *uint32        `json:"mode,omitempty"`
 	SELinux   string         `json:"selinux,omitempty"`
 	Validate  *FileValidator `json:"validate,omitempty"`
@@ -106,8 +104,8 @@ type HostExecutor interface {
 	ForHost(Host) (Executor, error)
 }
 
-// Bind is shared by preparation, display, and apply. Legacy executors remain
-// usable for unprivileged local plans.
+// Bind is shared by preparation, display, and apply. Executors without host
+// binding support unprivileged local plans.
 func Bind(h Host, e Executor) (Executor, error) {
 	if hostExecutor, ok := e.(HostExecutor); ok {
 		return hostExecutor.ForHost(h)
@@ -119,8 +117,8 @@ func Bind(h Host, e Executor) (Executor, error) {
 }
 
 func (p *Plan) Validate() error {
-	if p.Version != Version && p.Version != "1.0" && p.Version != "1.1" {
-		return fmt.Errorf("incompatible plan version %q (supported 1.0, 1.1 and %s)", p.Version, Version)
+	if p.Version != Version {
+		return fmt.Errorf("incompatible plan version %q (supported %s)", p.Version, Version)
 	}
 	seenHosts := map[string]bool{}
 	for _, h := range p.Hosts {
@@ -130,9 +128,6 @@ func (p *Plan) Validate() error {
 		seenHosts[h.Name] = true
 		if h.Transport != "local" && h.Transport != "ssh" {
 			return fmt.Errorf("host %s: unsupported transport %q", h.Name, h.Transport)
-		}
-		if p.Version == "1.0" && (h.Transport != "local" || h.Connection != nil) {
-			return fmt.Errorf("host %s: version 1.0 supports plain local connections only", h.Name)
 		}
 		if h.Connection != nil {
 			c := h.Connection
@@ -156,21 +151,9 @@ func (p *Plan) Validate() error {
 				return fmt.Errorf("host %s: empty or duplicate task ID", h.Name)
 			}
 			ids[t.ID] = true
-			if p.Version != Version && (t.Operation == "systemd-mask" ||
-				t.Process != nil && t.Process.Masked != nil ||
-				t.File != nil && t.File.Validate != nil ||
-				t.RPM != nil && t.RPM.Version != "" && !strings.Contains(t.RPM.Version, ":")) {
-				return fmt.Errorf("task %s: masking, file validators and short RPM versions require plan version %s", t.ID, Version)
-			}
 			payloads := 0
 			if t.File != nil {
 				payloads++
-				if p.Version == "1.0" && (t.File.Owner != "" || t.File.Group != "") {
-					return fmt.Errorf("task %s: ownership names require plan version 1.1 or later", t.ID)
-				}
-				if (t.File.Owner != "" && t.File.UID != nil) || (t.File.Group != "" && t.File.GID != nil) {
-					return fmt.Errorf("task %s: ownership name and numeric ID are mutually exclusive", t.ID)
-				}
 			}
 			if t.RPM != nil {
 				payloads++
@@ -256,12 +239,6 @@ func display(w io.Writer, p *Plan, e Executor) error {
 				}
 				if f.Group != "" {
 					fmt.Fprintf(w, " group=%s", f.Group)
-				}
-				if f.UID != nil {
-					fmt.Fprintf(w, " uid=%d", *f.UID)
-				}
-				if f.GID != nil {
-					fmt.Fprintf(w, " gid=%d", *f.GID)
 				}
 				if f.Mode != nil {
 					fmt.Fprintf(w, " mode=%04o", *f.Mode)
