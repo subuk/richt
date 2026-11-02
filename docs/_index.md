@@ -34,3 +34,6 @@ The focused contracts are:
 Read [limitations](limitations.md) before using a saved plan as an operational
 artifact. Plans contain prepared executable inputs, potentially including
 secrets; apply does not recompute changes or check targets for drift.
+
+For contributors, [CI and releases](ci.md) explains the shared checks, binary
+archives, manual publication, and required repository protection settings.

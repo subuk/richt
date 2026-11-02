@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml
+    with:
+      # On pull requests this is GitHub's merge commit, including the base branch.
+      source_ref: ${{ github.sha }}
+      version: ci-${{ github.run_number }}-${{ github.sha }}
+
+  ci:
+    name: CI
+    if: always()
+    needs: [build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every dependency to succeed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+
+          results = json.loads(os.environ['RESULTS'])
+          if not results or any(job['result'] != 'success' for job in results.values()):
+              raise SystemExit('CI requires every dependency to succeed')
+          PY

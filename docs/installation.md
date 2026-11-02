@@ -1,9 +1,69 @@
 ---
 title: "Installation and requirements"
 linkTitle: "Installation"
-description: "Build Richt, choose a controller and target platform, and configure privileges."
+description: "Install a release archive or build Richt, choose controller and target platforms, and configure privileges."
 weight: 20
 ---
+
+## Install a release archive
+
+When a release is available, download its archive and `SHA256SUMS` from
+[GitHub releases](https://github.com/subuk/richt/releases). The workflow produces
+these controller binaries:
+
+| Controller | Archive target |
+| --- | --- |
+| Linux x86_64 | `linux-amd64` |
+| Linux arm64 | `linux-arm64` |
+| macOS Intel | `darwin-amd64` |
+| macOS Apple Silicon | `darwin-arm64` |
+
+The commands below use `X.Y.Z` as a placeholder; replace it with the published
+version, without the tag's leading `v`, and choose your archive target. They do
+not imply that a particular version has already been released.
+
+```sh
+VERSION=X.Y.Z
+TARGET=linux-amd64
+ARCHIVE="richt-$VERSION-$TARGET.tar.gz"
+curl -fLO "https://github.com/subuk/richt/releases/download/v$VERSION/$ARCHIVE"
+curl -fLO "https://github.com/subuk/richt/releases/download/v$VERSION/SHA256SUMS"
+awk -v archive="$ARCHIVE" '$2 == archive { print }' SHA256SUMS > "$ARCHIVE.sha256"
+test -s "$ARCHIVE.sha256"
+```
+
+Verify the selected archive before extracting. On Linux:
+
+```sh
+sha256sum -c "$ARCHIVE.sha256"
+```
+
+On macOS:
+
+```sh
+shasum -a 256 -c "$ARCHIVE.sha256"
+```
+
+Stop if verification fails. Each archive contains a directory matching its
+filename without `.tar.gz`, with the `richt` executable and `README.md`:
+
+```sh
+tar -xzf "$ARCHIVE"
+mkdir -p "$HOME/.local/bin"
+install -m 0755 "richt-$VERSION-$TARGET/richt" "$HOME/.local/bin/richt"
+export PATH="$HOME/.local/bin:$PATH"
+richt --version
+richt --help
+```
+
+Add that `PATH` setting to your shell configuration to keep it for future
+sessions. Release binaries need no Go toolchain. SSH execution still requires
+the system OpenSSH `ssh` client in `PATH` and configured authentication and host
+trust; see the [SSH guide](ssh.md). Controller binaries do not expand supported
+target resources: RPM and systemd operations still require a suitable Linux
+target. Windows controller support is deferred to
+[KRG-92](https://linear.app/krglv/issue/KRG-92/support-windows-as-an-ssh-only-controller).
+This release workflow does not publish DEB, RPM, or Docker artifacts.
 
 ## Build from source
 
@@ -60,8 +120,11 @@ agent, central server, NetBox, or Argo CD.
 The recorded full-stack platform is AlmaLinux 10.2 x86_64, DNF 4.20.0,
 YUM 4 compatibility, systemd 257, with file/label acceptance on SELinux Enforcing.
 Other distributions, versions, architectures, and package managers are not
-established by that result. A Linux cross-build proves compilation only. See
-[validation](validation.md) for the exact scenarios and evidence.
+established by that result. CI cross-compiles all four controller binaries on
+one Linux runner with `CGO_ENABLED=0` and smoke-tests only the unpacked native
+Linux amd64 archive. This does not establish macOS runtime behavior or full
+Linux host acceptance. See [CI and releases](ci.md) for build coverage and
+[validation](validation.md) for the exact acceptance scenarios and evidence.
 
 Only selected resources need their backend capabilities. File-only use does
 not require DNF or systemd. Python 3 is used by repository example verifiers and

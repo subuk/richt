@@ -1,0 +1,149 @@
+name: Release binaries
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version without v (for example 1.2.3 or 1.2.3-rc.1)'
+        required: true
+        type: string
+      source_ref:
+        description: 'Reviewed source branch, tag or commit SHA'
+        required: true
+        default: main
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      sha: ${{ steps.source.outputs.sha }}
+    steps:
+      - name: Validate release request
+        env:
+          VERSION: ${{ inputs.version }}
+          SOURCE_REF: ${{ inputs.source_ref }}
+          WORKFLOW_REF: ${{ github.ref }}
+        run: |
+          test "$WORKFLOW_REF" = refs/heads/main || {
+            echo 'Run the release workflow from the maintained main branch' >&2
+            exit 1
+          }
+          python3 - <<'PY'
+          import os
+          import re
+
+          version = os.environ['VERSION']
+          number = r'(0|[1-9][0-9]*)'
+          identifier = r'(0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)'
+          if not re.fullmatch(rf'{number}\.{number}\.{number}(-{identifier}(\.{identifier})*)?', version):
+              raise SystemExit('Expected X.Y.Z or X.Y.Z-prerelease, without v')
+          PY
+          git check-ref-format --branch "$SOURCE_REF" >/dev/null
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_ref }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Resolve source and check existing tag
+        id: source
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          sha=$(git rev-parse --verify 'HEAD^{commit}')
+          if git show-ref --verify --quiet "refs/tags/v$VERSION"; then
+            test "$(git rev-parse --verify "refs/tags/v$VERSION^{commit}")" = "$sha" || {
+              echo 'Existing release tag points to a different commit' >&2
+              exit 1
+            }
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: prepare
+    uses: ./.github/workflows/build.yml
+    with:
+      source_ref: ${{ needs.prepare.outputs.sha }}
+      version: ${{ inputs.version }}
+
+  publish:
+    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      # Only artifacts from this run; no source checkout or source-selected scripts.
+      - uses: actions/download-artifact@v8
+        with:
+          name: binaries
+          path: dist
+      - name: Publish the complete release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ inputs.version }}
+          SOURCE_SHA: ${{ needs.prepare.outputs.sha }}
+        working-directory: dist
+        run: |
+          assets=("richt-$VERSION-linux-amd64.tar.gz"
+                  "richt-$VERSION-linux-arm64.tar.gz"
+                  "richt-$VERSION-darwin-amd64.tar.gz"
+                  "richt-$VERSION-darwin-arm64.tar.gz")
+          shopt -s nullglob dotglob
+          files=(*)
+          test "${#files[@]}" -eq "${#assets[@]}" || {
+            echo 'Expected exactly the four release archives' >&2
+            exit 1
+          }
+          for asset in "${assets[@]}"; do
+            test -f "$asset" && test ! -L "$asset" && test -s "$asset" || {
+              echo "Missing or invalid release archive: $asset" >&2
+              exit 1
+            }
+          done
+          sha256sum "${assets[@]}" > SHA256SUMS
+
+          # A failed API request is an error, never evidence that a tag/release is absent.
+          check_tag() {
+            local tag_ref tag_sha
+            tag_ref=$(gh api "repos/$GH_REPO/git/matching-refs/tags/v$VERSION" \
+              --jq ".[] | select(.ref == \"refs/tags/v$VERSION\") | .ref")
+            if [ -n "$tag_ref" ]; then
+              tag_sha=$(gh api "repos/$GH_REPO/commits/v$VERSION" --jq .sha)
+              test "$tag_sha" = "$SOURCE_SHA" || {
+                echo 'Existing release tag points to a different commit' >&2
+                exit 1
+              }
+            fi
+          }
+          check_tag
+          existing=$(gh api --paginate "repos/$GH_REPO/releases" \
+            --jq ".[] | select(.tag_name == \"v$VERSION\") | .id")
+          test -z "$existing" || {
+            echo 'A release or draft already exists; inspect it before rerunning' >&2
+            exit 1
+          }
+          args=()
+          latest=legacy
+          if [[ "$VERSION" == *-* ]]; then
+            args+=(--prerelease)
+            latest=false
+          fi
+          gh release create "v$VERSION" \
+            --target "$SOURCE_SHA" --title "Richt $VERSION" \
+            --draft --generate-notes "${args[@]}" \
+            "${assets[@]}" SHA256SUMS
+          # Recheck after the upload, immediately before exposing the release.
+          check_tag
+          release_id=$(gh api "repos/$GH_REPO/releases/tags/v$VERSION" --jq .id)
+          gh api --method PATCH "repos/$GH_REPO/releases/$release_id" \
+            -F draft=false -f "make_latest=$latest" >/dev/null

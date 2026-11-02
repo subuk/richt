@@ -1,0 +1,64 @@
+name: Build binaries
+
+on:
+  workflow_call:
+    inputs:
+      source_ref:
+        description: Exact source commit SHA
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  GOTOOLCHAIN: local
+  PYTHONDONTWRITEBYTECODE: '1'
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Require an exact source commit
+        env:
+          SOURCE_SHA: ${{ inputs.source_ref }}
+        run: |
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || {
+            echo 'Build source_ref must be an exact commit SHA' >&2
+            exit 1
+          }
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_ref }}
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          # Selectable release source must not populate shared executable caches.
+          cache: false
+      - name: Run the full validation suite
+        run: |
+          make check
+          go test -race ./...
+          python3 -m unittest discover -s scripts/release -p 'test_*.py'
+      - name: Cross-compile and package all targets
+        env:
+          VERSION: ${{ inputs.version }}
+          CGO_ENABLED: '0'
+        run: python3 scripts/release/package.py --version "$VERSION" --output-dir dist
+      - name: Smoke-test the native Linux archive
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          test "$(go env GOOS)/$(go env GOARCH)" = linux/amd64
+          python3 scripts/release/smoke.py --archive "dist/richt-$VERSION-linux-amd64.tar.gz" --version "$VERSION"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: binaries
+          path: dist/*.tar.gz
+          if-no-files-found: error
+          compression-level: 0

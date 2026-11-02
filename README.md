@@ -9,7 +9,15 @@ noninteractive sudo, bounded host concurrency, and local YAML secret sources.
 
 ## Start here
 
-Build from a checkout with Go 1.27.3 or newer and Make:
+If you are reading this README in an unpacked release archive, run
+`./richt --help` or `./richt --version`. Follow the
+[online installation guide](https://subuk.github.io/richt/docs/installation/)
+and [quickstart](https://subuk.github.io/richt/docs/quickstart/) for setup and
+usage; SSH execution also needs the system OpenSSH client.
+
+Use a [release archive](docs/installation.md#install-a-release-archive) for Linux
+or macOS on amd64 or arm64 when a release is available. To build from a checkout,
+install Go 1.27.3 or newer and Make:
 
 ```sh
 make build
@@ -19,7 +27,7 @@ make build
 
 Follow the [config-only quickstart](docs/quickstart.md) to create, review, apply,
 update, and remove a file in a private temporary directory without root. See
-[installation](docs/installation.md) for `make install`, cross-builds, controller/
+[installation](docs/installation.md) for downloads, `make install`, cross-builds, controller/
 target requirements, and privileges. Full-stack Linux acceptance is recorded on
 AlmaLinux 10.2 x86_64 with DNF 4/YUM 4, systemd, and SELinux Enforcing; see
 [validation](docs/validation.md) for scope and evidence.
@@ -70,12 +78,17 @@ These commands build or serve local files; they do not publish a site.
 
 ```sh
 make check
+go test -race ./...
+make release-check
 ```
 
-This checks formatting, runs vet and all Go tests, exercises CLI smoke behavior,
-and cross-builds Linux amd64. It does not access hosts or prove runtime RPM,
-systemd, root, or SELinux behavior. [Linux validation](docs/validation.md) describes
-the separate disposable-host acceptance workflows.
+`make check` checks formatting, runs vet and all Go tests, exercises CLI smoke
+behavior, and cross-builds Linux amd64. The additional commands check races and
+release tooling. [CI and releases](docs/ci.md) describes the shared build for
+pull requests, pushes to `main`, and manual releases, including four-platform
+archives and smoke testing the unpacked Linux amd64 archive. These checks do not
+prove runtime RPM, systemd, root, or SELinux behavior. [Linux validation](docs/validation.md)
+describes the separate disposable-host acceptance workflows.
 
 Public Go packages separate inventory/domain validation, YAML loading, executable
 plans, files, RPM, systemd, transport, and orchestration. The CLI uses Kong.
