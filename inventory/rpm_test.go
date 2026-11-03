@@ -18,3 +18,22 @@ func TestValidateRPMVersion(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateRPMDisableExcludes(t *testing.T) {
+	for _, value := range []string{"", "all", "main", "epel", "Vendor_Repo-9.2:arch", "123", ".", "-"} {
+		if err := ValidateRPMDisableExcludes(value); err != nil {
+			t.Errorf("%q: %v", value, err)
+		}
+	}
+	for _, value := range []string{" ", " all", "all\n", "repo\tname", "repo*", "repo?", "[repo]", "one,two", "one two", "a/b", "épel", "repo=all", "$(id)", "a\x00b"} {
+		t.Run(value, func(t *testing.T) {
+			if ValidateRPMDisableExcludes(value) == nil {
+				t.Fatal("accepted invalid exclude selector")
+			}
+			service := Service{Binaries: []Binary{{Type: "rpm", Package: "app", DisableExcludes: value}}}
+			if validateService(service) == nil {
+				t.Fatal("service validation accepted invalid exclude selector")
+			}
+		})
+	}
+}

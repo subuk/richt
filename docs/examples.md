@@ -17,6 +17,7 @@ execution. Recorded results and their limits live in [validation](validation.md)
 | Plain files and directories | [Typed config paths](../examples/typed-configs/README.md) | Local existence and attribute management, preserved unmanaged contents, and explicit recursive removal. No block devices. |
 | Weighted variables and selection | [Two-host inventory](../examples/inventory/richt.yaml) | Safe to inspect with `inventory validate/show`; one local and one illustrative SSH host. Execution changes host configuration. |
 | Full package/config/process lifecycle | [Ready vmango package](../examples/vmango/README.md) | Disposable DNF 4/systemd Linux target, ready repository RPMs, required privileges. No custom RPM build. |
+| Repository exclusion override | [Kubernetes packages](../examples/kubernetes/README.md) | DNF 4 target with root privileges; repository setup followed by pinned kubelet/kubeadm requests. Package setup only. |
 | Failure and manual continuation | [Continuation example](../examples/continuation/README.md) | Config-only deliberate partial failure, repair, and saved-plan resume. |
 | Two independent secret sources | [Secrets example](../examples/secrets/README.md) | Python 3 verifier and local Richt; dummy values, private temporary targets, frozen saved bytes, and automatic cleanup. |
 | Change-triggered command | [Oneshot sysctl](../examples/oneshot/README.md) | Disposable Linux target with sysctl and root privileges; writes one sysctl config and applies it without a systemd unit. |

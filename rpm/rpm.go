@@ -74,6 +74,9 @@ func Validate(c *plan.RPMChange) error {
 	if err := inventory.ValidateRPMVersion(c.Version); err != nil {
 		return err
 	}
+	if err := inventory.ValidateRPMDisableExcludes(c.DisableExcludes); err != nil {
+		return err
+	}
 	if c.State != "present" && c.State != "absent" {
 		return errors.New("invalid RPM state")
 	}
@@ -86,7 +89,7 @@ func Prepare(v inventory.Binary, state string) (*plan.RPMChange, error) {
 	if state == "" {
 		state = "present"
 	}
-	c := &plan.RPMChange{Manager: v.Manager, Package: v.Package, Version: v.Version, State: state}
+	c := &plan.RPMChange{Manager: v.Manager, Package: v.Package, Version: v.Version, DisableExcludes: v.DisableExcludes, State: state}
 	return c, Validate(c)
 }
 
@@ -145,16 +148,20 @@ func upstreamRequest(c *plan.RPMChange) bool {
 
 // Arguments returns DNF transaction arguments for the prepared package request.
 func Arguments(c *plan.RPMChange) []string {
+	args := []string{"-y"}
+	if c.DisableExcludes != "" {
+		args = append(args, "--disableexcludes="+c.DisableExcludes)
+	}
 	if c.State == "absent" {
-		return []string{"-y", "remove", "--", c.Package}
+		return append(args, "remove", "--", c.Package)
 	}
 	if upstreamRequest(c) {
-		return []string{"-y", "install", "--", c.Package + "-" + c.Version}
+		return append(args, "install", "--", c.Package+"-"+c.Version)
 	}
 	if c.Version != "" {
-		return []string{"-y", "install-nevra", "--", c.Package + "-" + c.Version}
+		return append(args, "install-nevra", "--", c.Package+"-"+c.Version)
 	}
-	return []string{"-y", "install-n", "--", c.Package}
+	return append(args, "install-n", "--", c.Package)
 }
 func (b Backend) Resolve(t plan.Task) ([]plan.Action, error) {
 	if t.File != nil || t.Process != nil || t.Oneshot != nil {

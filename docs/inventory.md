@@ -133,7 +133,8 @@ drop-ins, enablement, optional `masked: true|false`, and timeouts.
 [Oneshot processes](services/processes/oneshot.md) declare a direct `command` argv,
 nonempty `run_on` references, and an optional timeout. Validator
 executables are not opened or run by inventory inspection; short and exact RPM
-version syntax is checked without contacting hosts or repositories. [Reactions](services/reactions.md) defines
+version syntax and optional `disable_excludes` scope are checked without
+contacting hosts or repositories. [Reactions](services/reactions.md) defines
 `restart_on`, `reload_on`, and `run_on` references and their validation.
 [Lifecycle and ordering](services/lifecycle.md) defines forward declaration
 order for present services and reverse traversal of each collection for absence.

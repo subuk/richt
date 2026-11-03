@@ -61,6 +61,27 @@ failure, saved inputs and continuation, then removes the declared package and
 repository. It retains command logs and `acceptance.json` in the new work
 directory. A failure leaves evidence and managed resources for diagnosis.
 
+Add `--disable-excludes` to exercise a repository with `excludepkgs=vmango*`.
+For both DNF 4 and YUM 4, the harness checks omitted-override failures followed
+by successful unversioned, upstream, and exact installations using saved
+overrides after deleting the inventory. It checks successful continuation,
+override-only no-op, removal with the override, and unchanged repository bytes.
+Live scopes are the repository ID and `all`; `main` is covered by Go argument
+tests without changing the host's global DNF configuration.
+
+```sh
+python3 examples/rpm-versions/verify.py bin/richt-linux-amd64 /root/richt-rpm-excludes \
+  --disable-excludes --source-revision YOUR_REVISION
+# On a controller with a native Richt binary and trusted SSH host:
+python3 examples/rpm-versions/verify.py bin/richt /tmp/richt-rpm-excludes-ssh \
+  --disable-excludes --host deploy@rpm-test.example --source-revision YOUR_REVISION
+```
+
+SSH mode uses the target's RPM database and repository files through explicit
+`sudo -n`, while the controller retains plans and logs. Use a fresh evidence
+directory for each run. Serialize runs against the same target: different work
+directories do not isolate the fixed package and repository names.
+
 To additionally verify mixed named and unnamed binary order, supply three
 published packages that are available in the target's enabled repositories and
 are not installed. For example, on a prepared disposable AlmaLinux host:

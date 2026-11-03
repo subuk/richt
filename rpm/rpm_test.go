@@ -11,8 +11,138 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/subuk/richt/inventory"
 	"github.com/subuk/richt/plan"
 )
+
+func TestDisableExcludesCommands(t *testing.T) {
+	for _, manager := range []string{"dnf", "yum"} {
+		for _, request := range []struct {
+			name, version, state, command, target string
+		}{
+			{name: "unversioned", state: "present", command: "install-n", target: "demo"},
+			{name: "upstream", version: "1.34.3", state: "present", command: "install", target: "demo-1.34.3"},
+			{name: "exact", version: "2:1.34.3-1.noarch", state: "present", command: "install-nevra", target: "demo-2:1.34.3-1.noarch"},
+			{name: "removal", version: "1.34.3", state: "absent", command: "remove", target: "demo"},
+		} {
+			for _, value := range []string{"", "main", "all", "repo_1.el9:updates-test"} {
+				t.Run(manager+"/"+request.name+"/"+value, func(t *testing.T) {
+					c := &plan.RPMChange{Manager: manager, Package: "demo", Version: request.version, DisableExcludes: value, State: request.state}
+					want := []string{"-y"}
+					if value != "" {
+						want = append(want, "--disableexcludes="+value)
+					}
+					want = append(want, request.command, "--", request.target)
+					if got := Arguments(c); !reflect.DeepEqual(got, want) {
+						t.Fatalf("arguments=%q; want=%q", got, want)
+					}
+					calls := 0
+					b := Backend{Run: func(_ context.Context, name string, args ...string) ([]byte, error) {
+						calls++
+						if name != manager || !reflect.DeepEqual(args, want) {
+							t.Fatalf("unexpected command: %s %q", name, args)
+						}
+						return nil, nil
+					}}
+					actions, err := b.Resolve(plan.Task{Operation: "rpm", RPM: c})
+					if err != nil {
+						t.Fatal(err)
+					}
+					if calls != 0 || len(actions) != 1 || actions[0].Description[0] != manager+" "+strings.Join(want, " ") {
+						t.Fatalf("resolve calls=%d; actions=%+v", calls, actions)
+					}
+					if err := b.Execute(context.Background(), actions[0]); err != nil {
+						t.Fatal(err)
+					}
+					if calls != 1 {
+						t.Fatalf("execution calls=%d", calls)
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestPrepareDisableExcludes(t *testing.T) {
+	for _, value := range []string{"", "main", "all", "repo_1.el9:updates-test", "-repo"} {
+		for _, state := range []string{"", "present", "absent"} {
+			t.Run(value+"/"+state, func(t *testing.T) {
+				c, err := Prepare(inventory.Binary{Package: "demo", DisableExcludes: value}, state)
+				if err != nil {
+					t.Fatal(err)
+				}
+				wantState := state
+				if wantState == "" {
+					wantState = "present"
+				}
+				if c.Manager != "dnf" || c.State != wantState || c.DisableExcludes != value {
+					t.Fatalf("prepared request=%+v", c)
+				}
+			})
+		}
+	}
+}
+
+func TestInvalidDisableExcludesFailsBeforeSideEffects(t *testing.T) {
+	b := Backend{Run: func(context.Context, string, ...string) ([]byte, error) {
+		t.Fatal("invalid disable_excludes reached target")
+		return nil, nil
+	}}
+	for _, value := range []string{" ", " all", "all ", "main,updates", "repo*", "repo?", "repo/name", "repo+name", "repo=all", "all\n", "all\t", "$(id)", "all;id", "répo"} {
+		t.Run(value, func(t *testing.T) {
+			for _, state := range []string{"present", "absent"} {
+				c := &plan.RPMChange{Manager: "dnf", Package: "demo", DisableExcludes: value, State: state}
+				if err := Validate(c); err == nil {
+					t.Fatal("validation accepted invalid value")
+				}
+				if _, err := Prepare(inventory.Binary{Package: "demo", DisableExcludes: value}, state); err == nil {
+					t.Fatal("preparation accepted invalid value")
+				}
+				if _, err := b.Observe(context.Background(), c); err == nil {
+					t.Fatal("observation accepted invalid value")
+				}
+				if actions, err := b.Resolve(plan.Task{Operation: "rpm", RPM: c}); err == nil || len(actions) != 0 {
+					t.Fatal("resolution displayed invalid value")
+				}
+				if err := b.Execute(context.Background(), plan.Action{Kind: "rpm", RPM: c}); err == nil {
+					t.Fatal("execution accepted invalid value")
+				}
+			}
+		})
+	}
+}
+
+func TestDisableExcludesDoesNotChangeInstalledObservation(t *testing.T) {
+	for _, request := range []struct {
+		name, version, state, installed string
+	}{
+		{name: "unversioned", state: "present", installed: "7:1.34.3-1.noarch"},
+		{name: "upstream", version: "1.34.3", state: "present", installed: "7:1.34.3-1.noarch"},
+		{name: "exact", version: "7:1.34.3-1.noarch", state: "present", installed: "7:1.34.3-1.noarch"},
+		{name: "absent", state: "absent"},
+	} {
+		for _, value := range []string{"", "main", "all", "updates"} {
+			t.Run(request.name+"/"+value, func(t *testing.T) {
+				calls := 0
+				b := Backend{Run: func(_ context.Context, name string, args ...string) ([]byte, error) {
+					calls++
+					want := []string{"-qa", "--qf", "%{NAME}\t%{EPOCHNUM}:%{VERSION}-%{RELEASE}.%{ARCH}\n"}
+					if name != "rpm" || !reflect.DeepEqual(args, want) {
+						t.Fatalf("unexpected observation: %s %q", name, args)
+					}
+					if request.installed == "" {
+						return nil, nil
+					}
+					return []byte("demo\t" + request.installed + "\n"), nil
+				}}
+				changed, err := b.Observe(context.Background(), &plan.RPMChange{Manager: "dnf", Package: "demo", Version: request.version, DisableExcludes: value, State: request.state})
+				if err != nil || changed || calls != 1 {
+					t.Fatalf("changed=%v; calls=%d; error=%v", changed, calls, err)
+				}
+			})
+		}
+	}
+}
 
 func TestInstalledVersionPolicy(t *testing.T) {
 	for _, tc := range []struct {

@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/subuk/richt/inventory"
 )
 
 const Version = "1.5"
@@ -76,10 +78,38 @@ type Progress struct {
 
 // RPMChange fixes a package request, while the target resolves repository dependencies.
 type RPMChange struct {
-	Manager string `json:"manager"`
-	Package string `json:"package"`
-	Version string `json:"version,omitempty"`
-	State   string `json:"state"`
+	Manager         string `json:"manager"`
+	Package         string `json:"package"`
+	Version         string `json:"version,omitempty"`
+	DisableExcludes string `json:"disable_excludes,omitempty"`
+	State           string `json:"state"`
+}
+
+// UnmarshalJSON distinguishes omission from an explicitly empty or null setting.
+func (c *RPMChange) UnmarshalJSON(data []byte) error {
+	type plain RPMChange
+	var decoded plain
+	wire := struct {
+		*plain
+		DisableExcludes json.RawMessage `json:"disable_excludes"`
+	}{plain: &decoded}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&wire); err != nil {
+		return errors.New("invalid RPM JSON")
+	}
+	if wire.DisableExcludes != nil {
+		var value *string
+		if err := json.Unmarshal(wire.DisableExcludes, &value); err != nil || value == nil || *value == "" {
+			return errors.New("RPM disable_excludes must be a nonempty string when supplied")
+		}
+		if err := inventory.ValidateRPMDisableExcludes(*value); err != nil {
+			return err
+		}
+		decoded.DisableExcludes = *value
+	}
+	*c = RPMChange(decoded)
+	return nil
 }
 
 // ProcessChange contains both permitted branches; apply only selects a branch.
@@ -229,6 +259,9 @@ func (p *Plan) Validate() error {
 			}
 			if t.RPM != nil {
 				payloads++
+				if err := inventory.ValidateRPMDisableExcludes(t.RPM.DisableExcludes); err != nil {
+					return fmt.Errorf("task %s: %w", t.ID, err)
+				}
 			}
 			if t.Process != nil {
 				payloads++

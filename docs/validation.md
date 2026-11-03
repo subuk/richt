@@ -566,6 +566,35 @@ requested target mode and SELinux label, and explicit sensitivity when replacing
 old secret content. The suite removes its temporary directories after completion.
 The later 2026-11-02 run and its retained directories are recorded above.
 
+## RPM transaction exclusion overrides
+
+KRG-99 validation on 2026-11-03 passed on disposable AlmaLinux 10.2 x86_64
+with DNF/YUM 4.20.0, RPM 4.19.1.1, and SELinux Enforcing. The extended
+[published RPM harness](../examples/rpm-versions/README.md) passed 29 checks in
+local mode and 29 through SSH with a non-root login and explicit `sudo -n`.
+The two modes ran sequentially against the same isolated target, with package
+and repository cleanup between runs.
+
+For each manager, exclusion tests cover unversioned, upstream VERSION, and
+exact NEVRA installation requests. Omitting the override fails while the
+repository excludes the package; a saved repository-ID or `all` override
+installs it after the source inventory is deleted. Subsequent successful
+continuation skips the task, override-only edits remain no-ops, and removal
+retains the override. Repository bytes remain unchanged by transactions.
+All RPMs are published Vmango packages; no custom fixture RPMs were built.
+
+Go tests cover `main`, validation of malformed YAML/JSON, frozen values after
+source changes, failure/continuation, local/SSH target binding, and absence of
+process reactions for an override-only change. Live acceptance does not change
+global DNF configuration to test `[main]` filters. The Kubernetes example is
+schema-validated; these results do not claim Kubernetes cluster validation.
+
+`make check`, focused engine race tests, and `make docs-check` passed. The
+existing local file/SELinux acceptance suite also passed all 17 checks,
+including saved inputs, progress, confirmation, and secret handling. The
+package and repository fixtures were removed; private evidence includes plans,
+command logs, binary SHA-256 values, platform details, and `acceptance.json`.
+
 ## RPM and systemd fixture regression
 
 The following harness is a separate developer regression tool. Its custom RPM

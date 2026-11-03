@@ -1,0 +1,43 @@
+# Package setup on a disposable DNF 4 host; see README.md before applying.
+tags:
+  example:
+    services:
+      kubernetes-repository: {}
+      kubernetes-packages: {}
+services:
+  kubernetes-repository:
+    order: 10
+    configs:
+      - name: repository
+        path: /etc/yum.repos.d/richt-kubernetes.repo
+        owner: root
+        group: root
+        mode: "0644"
+        template:
+          inline: |
+            [kubernetes]
+            name=Kubernetes v1.34
+            baseurl=https://pkgs.k8s.io/core:/stable:/v1.34/rpm/
+            enabled=1
+            gpgcheck=1
+            gpgkey=https://pkgs.k8s.io/core:/stable:/v1.34/rpm/repodata/repomd.xml.key
+            exclude=kubelet kubeadm kubectl cri-tools kubernetes-cni
+  kubernetes-packages:
+    order: 20
+    binaries:
+      - name: kubelet
+        type: rpm
+        manager: dnf
+        package: kubelet
+        version: "1.34.3"
+        disable_excludes: kubernetes
+      - name: kubeadm
+        type: rpm
+        manager: dnf
+        package: kubeadm
+        version: "1.34.3"
+        disable_excludes: kubernetes
+hosts:
+  - name: localhost
+    tags: [example]
+    transport: {type: local, sudo: true}

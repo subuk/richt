@@ -93,6 +93,8 @@ module:
         - rpm-versions/README.md
         - rpm-versions/inventory.yaml
         - rpm-versions/verify.py
+        - kubernetes/README.md
+        - kubernetes/inventory.yaml
         - systemd-mask/README.md
         - systemd-mask/inventory.yaml
         - systemd-mask/running.yaml

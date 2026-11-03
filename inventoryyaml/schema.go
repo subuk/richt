@@ -160,6 +160,12 @@ func serviceSchema(root *yaml.Node) error {
 					}
 				}
 				if err := mappingFields(item, func(key string, value *yaml.Node) error {
+					if field == "binaries" && key == "disable_excludes" {
+						value = dereference(value)
+						if value.Kind != yaml.ScalarNode || value.Tag != "!!str" || value.Value == "" {
+							return fmt.Errorf("line %d: binaries item %d disable_excludes must be a nonempty string when supplied", value.Line, i+1)
+						}
+					}
 					if field == "processes" {
 						switch key {
 						case "unit_file":

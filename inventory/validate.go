@@ -142,6 +142,9 @@ func validateService(s Service) error {
 		if err := ValidateRPMVersion(b.Version); err != nil {
 			return fmt.Errorf("binary.%s version: %w", name, err)
 		}
+		if err := ValidateRPMDisableExcludes(b.DisableExcludes); err != nil {
+			return fmt.Errorf("binary.%s disable_excludes: %w", name, err)
+		}
 	}
 	for i, c := range s.Configs {
 		if err := componentName("config", c.Name, configNames); err != nil {

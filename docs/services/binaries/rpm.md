@@ -20,6 +20,7 @@ binaries:
 | `manager` | no | `dnf` (default), or `yum` backed by DNF 4 |
 | `package` | yes | RPM NAME, without an architecture selector |
 | `version` | no | Literal upstream VERSION such as `1.34.3`, or exact `epoch:version-release.arch`; omission keeps any installed version |
+| `disable_excludes` | no | Disable DNF exclusion/inclusion filters for one repository ID, `main`, or `all`, for this transaction only |
 
 The supported backend is DNF 4, including its YUM 4 compatibility command.
 YUM 3, DNF 5, and other package managers are unsupported. See
@@ -69,7 +70,49 @@ and downgrades; its package-spec matching and transaction policy apply. See the
 Names and versions are validated as individual arguments. Local execution
 passes arguments directly; SSH safely quotes them for the target shell.
 
-The plan fixes the requested package and supplied version string. For a short
+## Transaction exclusion overrides
+
+Set `disable_excludes: kubernetes` to install a package from a repository that
+normally excludes it, without changing the repository file:
+
+```yaml
+binaries:
+  - name: kubelet
+    type: rpm
+    package: kubelet
+    version: "1.34.3"
+    disable_excludes: kubernetes
+```
+
+The setting accepts one nonempty string: a repository ID made of ASCII letters,
+digits, `-`, `_`, `.`, and `:`, or the reserved scopes `main` and `all`. Lists,
+globs, whitespace, null, and explicitly empty values are rejected. Omit the
+field to preserve DNF's normal filtering. Repository existence is left to DNF
+at apply; inventory inspection and diff do not query repositories.
+
+DNF's [exclusion override](https://dnf.readthedocs.io/en/stable/command_ref.html#options)
+disables both `excludepkgs` (also called `exclude`) and `includepkgs` in the
+selected scope. A repository ID selects that repository; `main` selects the
+`[main]` configuration; `all` selects both main and repository configurations.
+The override applies to the entire requested transaction, including dependency
+resolution. It does not edit configuration or change later transactions.
+
+Richt adds one argument before the transaction command, for example
+`dnf -y --disableexcludes=kubernetes install -- kubelet-1.34.3`.
+The same option works with `install-n`, `install-nevra`, and `remove`, and with
+the YUM 4 compatibility command. Local and SSH execution use the same validated
+argument and existing explicit sudo settings.
+
+The override is not installed package state. A matching installed package stays
+a no-op when only `disable_excludes` changes; this does not reinstall it or
+trigger linked processes. See the [Kubernetes repository example](../../../examples/kubernetes/README.md)
+for repository ordering and pinned package requests.
+
+## Saved requests
+
+The plan fixes the requested package, supplied version string, and
+`disable_excludes` value. The reviewed action shows the actual override; saved
+apply uses it even after the inventory changes or disappears. For a short
 version, the displayed action explicitly defers epoch, release, and architecture
 selection until apply; the saved request remains short after execution. An
 exact version fixes the NEVRA. The plan does not freeze repository metadata,
@@ -87,6 +130,10 @@ managed files. DNF may remove dependent packages. RPM controls package-owned
 config handling, including possible `.rpmsave` files. RPM removal does not purge
 application state, unrelated files, or `.rpmsave` files. See [absent
 services](../lifecycle.md#absent-services) for ordering and assignment semantics.
+
+When supplied, `disable_excludes` is retained for removal and passed to
+`remove` with the same scope as installation. Removal still targets the package
+name, regardless of its requested version; an already absent package is a no-op.
 
 The [ready vmango walkthrough](../../../examples/vmango/README.md) demonstrates
 repository configuration, exact upgrade/downgrade, unversioned preservation,

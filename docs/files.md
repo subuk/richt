@@ -31,8 +31,9 @@ explicit removal without rendering templates or reading secret sources.
 
 A saved plan fixes selected hosts, explicit connection inputs, task order,
 operations, rendered file contents and patches, requested attributes and
-owner/group names, file validators and their timeouts, package requests, masking
-targets, allowed systemd process branches, and oneshot argv, timeouts, and
+owner/group names, file validators and their timeouts, package requests (including
+their `disable_excludes` override), masking targets, allowed systemd process
+branches, and oneshot argv, timeouts, and
 changed trigger references. Typed configs also fix path attributes, storage
 identities and deletion scope, filesystem creation requests, and mount/fstab
 operations. It contains progress for each task. Review its displayed actions, parameters, targets,

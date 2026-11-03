@@ -54,11 +54,12 @@ type Service struct {
 }
 
 type Binary struct {
-	Name    string `json:"name,omitempty" yaml:"name"`
-	Type    string `json:"type" yaml:"type"`
-	Manager string `json:"manager,omitempty" yaml:"manager"`
-	Package string `json:"package" yaml:"package"`
-	Version string `json:"version,omitempty" yaml:"version"`
+	Name            string `json:"name,omitempty" yaml:"name"`
+	Type            string `json:"type" yaml:"type"`
+	Manager         string `json:"manager,omitempty" yaml:"manager"`
+	Package         string `json:"package" yaml:"package"`
+	Version         string `json:"version,omitempty" yaml:"version"`
+	DisableExcludes string `json:"disable_excludes,omitempty" yaml:"disable_excludes"`
 }
 
 type Template struct {

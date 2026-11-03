@@ -160,6 +160,16 @@ Important invariants across those contracts:
 
 ## Executable plans and progress
 
+RPM requests optionally retain `disable_excludes`, a single DNF repository ID
+or the reserved `main`/`all` scopes. The validated `--disableexcludes=VALUE`
+argument applies to each requested install or removal transaction through DNF4
+or YUM4 without editing repository policy. It disables both exclusion and
+inclusion filters in that scope. Omission preserves backend defaults; changing
+only the override never changes installed-package matching or triggers a
+reinstall/reaction. Prepared plans display and freeze the value. This additive
+optional input retains saved format 1.5; readers predating the field reject it
+as unknown when supplied.
+
 Preparation and diff do not change managed resources. A plan fixes host targets,
 task order, operations, ready file contents/patches and attributes, explicit
 inventory connection inputs, and allowed process branches. Show real actions, parameters,
