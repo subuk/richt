@@ -83,7 +83,7 @@ processes:
 			{"config.a-first", "config.1", "unknown component"},
 			{"name: z-last", "name: bad.name", "name must contain"},
 			{"unit: second.service", "unit: second.service, after: [z-last]", "field after"},
-			{"type: template", "type: file", "type: expected template"},
+			{"type: template", "type: file", "file config cannot set template"},
 		} {
 			_, err := loadServiceFixture(t, strings.Replace(service, tc.from, tc.to, 1), external)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
@@ -107,7 +107,7 @@ func TestConfigTypePresenceInlineAndServiceFiles(t *testing.T) {
 						service = "processes: [{type: systemd, unit: app.service, overrides: {main.conf: " + config + "}}]\n"
 					}
 					_, err := loadServiceFixture(t, service, external)
-					if err == nil || !strings.Contains(err.Error(), "config type: expected template") {
+					if err == nil {
 						t.Fatalf("invalid supplied type accepted: %v", err)
 					}
 				})

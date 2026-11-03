@@ -220,7 +220,7 @@ func validateService(s Service) error {
 			}
 		}
 		if p.UnitFile != nil {
-			if err := validateConfig(*p.UnitFile); err != nil {
+			if err := validateOwnedConfig(*p.UnitFile); err != nil {
 				return fmt.Errorf("process.%s unit_file: %w", name, err)
 			}
 			if path.Clean(p.UnitFile.Path) != "/etc/systemd/system/"+p.Unit {
@@ -232,7 +232,7 @@ func validateService(s Service) error {
 				return fmt.Errorf("process.%s overrides %q: expected a .conf filename", name, key)
 			}
 			c := p.Overrides[key]
-			if err := validateConfig(c); err != nil {
+			if err := validateOwnedConfig(c); err != nil {
 				return fmt.Errorf("process.%s overrides %q: %w", name, key, err)
 			}
 			if path.Clean(c.Path) != "/etc/systemd/system/"+p.Unit+".d/"+key {
@@ -267,16 +267,49 @@ func validateProcessReferences(name, field string, refs []string, binaryNames, c
 	return nil
 }
 
-func validateConfig(c Config) error {
+func validateOwnedConfig(c Config) error {
 	if c.Type != "" && c.Type != "template" {
-		return fmt.Errorf("type: expected template or omitted")
+		return fmt.Errorf("type: systemd-owned config requires template")
 	}
-	if !path.IsAbs(c.Path) || strings.ContainsAny(c.Path, "\x00\r\n") || path.Clean(c.Path) == "/" {
-		return fmt.Errorf("path: expected an absolute file path")
+	return validateConfig(c)
+}
+
+func validateConfig(c Config) error {
+	typ := c.Type
+	if typ == "" {
+		typ = "template"
 	}
-	if (c.Template.File != "") == (c.Template.Inline != nil) {
-		return fmt.Errorf("template: specify exactly one of file or inline")
+	switch typ {
+	case "template", "file", "directory", "mdadm", "lvm-vg", "lvm-lv", "mount":
+	default:
+		return fmt.Errorf("type: expected template, file, directory, mdadm, lvm-vg, lvm-lv or mount")
 	}
+
+	common := c.Path != "" || c.Owner != "" || c.Group != "" || c.Mode != "" || c.Template.File != "" || c.Template.Inline != nil || c.Sensitive || c.SELinux != "" || c.Validate != nil
+	storage := c.Array != "" || c.Level != "" || c.Metadata != "" || c.Members != nil || c.VG != "" || c.Devices != nil || c.LV != "" || c.Size != "" || c.Filesystem != "" || c.Source != "" || c.Target != "" || c.Options != nil
+	if typ == "template" || typ == "file" || typ == "directory" {
+		if storage {
+			return fmt.Errorf("%s config cannot set storage or mount fields", typ)
+		}
+		if !path.IsAbs(c.Path) || strings.ContainsAny(c.Path, "\x00\r\n") || path.Clean(c.Path) == "/" {
+			return fmt.Errorf("path: expected an absolute file path")
+		}
+		if typ == "template" {
+			if (c.Template.File != "") == (c.Template.Inline != nil) {
+				return fmt.Errorf("template: specify exactly one of file or inline")
+			}
+		} else if c.Template.File != "" || c.Template.Inline != nil || c.Sensitive || c.SELinux != "" || c.Validate != nil {
+			return fmt.Errorf("%s config cannot set template, sensitive, selinux or validate", typ)
+		}
+	} else {
+		if common {
+			return fmt.Errorf("%s config cannot set file attributes or template fields", typ)
+		}
+		if err := validateStorageConfig(c); err != nil {
+			return err
+		}
+	}
+
 	if c.Mode != "" {
 		n, err := strconv.ParseUint(c.Mode, 8, 32)
 		if err != nil || n > 07777 {

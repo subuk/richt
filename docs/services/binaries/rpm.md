@@ -84,7 +84,7 @@ frozen-input contract.
 
 An `absent` service requests removal by package name, after its processes and
 managed files. DNF may remove dependent packages. RPM controls package-owned
-config handling, including possible `.rpmsave` files. Richt does not purge
+config handling, including possible `.rpmsave` files. RPM removal does not purge
 application state, unrelated files, or `.rpmsave` files. See [absent
 services](../lifecycle.md#absent-services) for ordering and assignment semantics.
 

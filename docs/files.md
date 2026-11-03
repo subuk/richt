@@ -33,14 +33,16 @@ A saved plan fixes selected hosts, explicit connection inputs, task order,
 operations, rendered file contents and patches, requested attributes and
 owner/group names, file validators and their timeouts, package requests, masking
 targets, allowed systemd process branches, and oneshot argv, timeouts, and
-changed trigger references. It contains progress for each task. Review its displayed actions, parameters, targets,
+changed trigger references. Typed configs also fix path attributes, storage
+identities and deletion scope, filesystem creation requests, and mount/fstab
+operations. It contains progress for each task. Review its displayed actions, parameters, targets,
 checks, and branches, and trust its source before applying it.
 
 ## Frozen inputs and execution boundaries
 
 Apply uses those prepared inputs even after the inventory, templates, or secret
 sources change or disappear. It does not reread them, render again, recalculate
-changes, or check resources for intervening drift. A prepared file write can
+changes, or perform a general drift comparison. A prepared template write can
 overwrite edits made since diff. Reprepare and review a new plan when you need
 current observations or changed desired inputs.
 
@@ -60,9 +62,21 @@ Some operations deliberately use execution-time information:
 - Oneshot tasks execute their saved argv without rechecking linked changes.
   The target executable and its supporting files are used at apply time;
   executable bytes are not embedded in JSON.
+- Plain files preserve existing contents, including a file that appeared after
+  preparation. Directory operations manage only the directory's own attributes.
+- Storage operations check prepared device/resource identities, signatures and
+  consumers immediately before creation or deletion, then verify their results.
+  An unfinished creation recognizes its own prepared UUID or operation tag;
+  it cannot adopt an unrelated replacement or reformat an existing filesystem.
+- Mount operations verify the prepared source identity and allowed active state.
+  Their frozen fstab edits compose in declared config order, accepting only the
+  expected before/after contents. Unexpected fstab edits fail instead of being
+  overwritten. These preconditions do not recompute the diff.
 
 See [file configs](services/configs/files.md), [RPM binaries](services/binaries/rpm.md),
 [process lifecycle](services/lifecycle.md), and [SSH](ssh.md) for these boundaries.
+The [storage config reference](services/configs/storage.md) explains device,
+filesystem, mount and destructive removal checks.
 Unsupported transports and backends fail before changes.
 
 ## Confirmation and scope
@@ -116,7 +130,7 @@ partial-failure example.
 
 ## Plan format and security
 
-Saved plans use strict, indented JSON schema version `1.4`; only that version
+Saved plans use strict, indented JSON schema version `1.5`; only that version
 is accepted. Unknown fields, incompatible versions, invalid operations, and
 malformed progress are rejected.
 
@@ -130,6 +144,10 @@ Unnamed components display their one-based list position, such as `[1]`.
 A oneshot task uses operation `oneshot`; its `oneshot` payload holds `command`,
 `timeout`, and `triggers` containing the actual changed references. Services
 can also include orchestration tasks such as daemon reload.
+Operations `path`, `storage`, and `mount` carry their corresponding typed
+payloads. Preparation can account for a device or empty filesystem produced by
+an earlier config without probing a resource that does not exist yet. Applying
+that plan still follows its original list order and verifies the saved inputs.
 
 Saved JSON contains real rendered text and patches, including old and new
 secret bytes. Sensitive display does not remove them from executable inputs.

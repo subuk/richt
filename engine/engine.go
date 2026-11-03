@@ -11,10 +11,12 @@ import (
 
 	"github.com/subuk/richt/config"
 	"github.com/subuk/richt/inventory"
+	"github.com/subuk/richt/mount"
 	"github.com/subuk/richt/oneshot"
 	"github.com/subuk/richt/plan"
 	"github.com/subuk/richt/rpm"
 	"github.com/subuk/richt/secrets"
+	"github.com/subuk/richt/storage"
 	"github.com/subuk/richt/systemd"
 	"github.com/subuk/richt/transport"
 )
@@ -24,6 +26,8 @@ type Local struct {
 	Systemd systemd.Backend
 	Oneshot oneshot.Backend
 	Files   *config.Target
+	Storage storage.Backend
+	Mount   mount.Backend
 	// Connect optionally supplies a target command boundary for SSH and sudo.
 	Connect func(inventory.Transport) (config.Target, error)
 }
@@ -65,6 +69,8 @@ func (e Local) ForHost(h plan.Host) (plan.Executor, error) {
 		}}
 	}
 	e.Files = &target
+	e.Storage = storage.Backend{Run: target.Run}
+	e.Mount = mount.Backend{Run: target.Run, RunInput: target.RunInput}
 	e.RPM = rpm.Backend{Run: target.Run}
 	e.Systemd = systemd.Backend{Run: target.Run, ReadFile: target.ReadFile, Glob: target.Glob}
 	return e, nil
@@ -80,13 +86,31 @@ func host(h inventory.ResolvedHost) plan.Host {
 }
 
 func (e Local) Resolve(t plan.Task) ([]plan.Action, error) {
-	if t.Operation == "daemon-reload" && (t.File != nil || t.RPM != nil || t.Process != nil || t.Oneshot != nil) {
+	resources := 0
+	for _, present := range []bool{t.File != nil, t.Path != nil, t.Storage != nil, t.Mount != nil, t.RPM != nil, t.Process != nil, t.Oneshot != nil} {
+		if present {
+			resources++
+		}
+	}
+	if resources > 1 {
+		return nil, errors.New("task contains mixed resource payloads")
+	}
+	if t.Path != nil && t.Operation != "path" || t.Storage != nil && t.Operation != "storage" || t.Mount != nil && t.Operation != "mount" {
+		return nil, errors.New("resource payload does not match operation")
+	}
+	if t.Operation == "daemon-reload" && (t.File != nil || t.RPM != nil || t.Process != nil || t.Oneshot != nil || t.Path != nil || t.Storage != nil || t.Mount != nil) {
 		return nil, errors.New("daemon-reload task must not contain a resource payload")
 	}
 	if t.Oneshot != nil && t.Operation != "oneshot" {
 		return nil, errors.New("unexpected oneshot payload")
 	}
 	switch t.Operation {
+	case "path":
+		return (config.Local{}).ResolvePath(t)
+	case "storage":
+		return e.Storage.Resolve(t)
+	case "mount":
+		return e.Mount.Resolve(t)
 	case "file":
 		return (config.Local{}).Resolve(t)
 	case "oneshot":
@@ -101,6 +125,15 @@ func (e Local) Resolve(t plan.Task) ([]plan.Action, error) {
 }
 func (e Local) Execute(ctx context.Context, a plan.Action) error {
 	switch a.Kind {
+	case "ensure-path", "remove-path":
+		if e.Files != nil {
+			return e.Files.ExecutePath(ctx, a)
+		}
+		return (config.Local{}).ExecutePath(ctx, a)
+	case "storage":
+		return e.Storage.Execute(ctx, a)
+	case "mount":
+		return e.Mount.Execute(ctx, a)
 	case "oneshot":
 		return e.Oneshot.Execute(ctx, a)
 	case "rpm":
@@ -119,6 +152,7 @@ func Diff(r *inventory.Resolved) (*plan.Plan, error) { return (Local{}).Diff(con
 type preparedFile struct {
 	id, component, ref, process string
 	file                        *plan.FileChange
+	definition                  *inventory.Config
 	changed                     bool
 }
 type preparedService struct {
@@ -174,6 +208,10 @@ func (e Local) Diff(ctx context.Context, r *inventory.Resolved) (*plan.Plan, err
 		for _, s := range h.Services {
 			ps := preparedService{service: s}
 			add := func(id, component, ref, process string, c inventory.Config) error {
+				if c.Type != "" && c.Type != "template" {
+					ps.files = append(ps.files, preparedFile{id: id, component: component, ref: ref, definition: &c})
+					return nil
+				}
 				f, err := config.Prepare(c, s.State, h.Vars, lookup)
 				if err != nil {
 					return fmt.Errorf("host %s service %s %s: %w", h.Name, s.Name, component, err)
@@ -261,8 +299,12 @@ func (e Local) Diff(ctx context.Context, r *inventory.Resolved) (*plan.Plan, err
 	}
 	for hi, h := range r.Hosts {
 		ph := host(h)
+		sequence := newConfigSequence()
+		if err := bound[hi].checkConfigPaths(ctx, prepared[hi]); err != nil {
+			return nil, fmt.Errorf("host %s: %w", h.Name, err)
+		}
 		for _, ps := range prepared[hi] {
-			tasks, err := bound[hi].observe(ctx, ps)
+			tasks, err := bound[hi].observe(ctx, ps, sequence)
 			if err != nil {
 				return nil, fmt.Errorf("host %s service %s: %w", h.Name, ps.service.Name, err)
 			}
@@ -272,7 +314,7 @@ func (e Local) Diff(ctx context.Context, r *inventory.Resolved) (*plan.Plan, err
 	}
 	return p, p.Validate()
 }
-func (e Local) observe(ctx context.Context, ps preparedService) ([]plan.Task, error) {
+func (e Local) observe(ctx context.Context, ps preparedService, sequence *configSequence) ([]plan.Task, error) {
 	s := ps.service
 	absent := s.State == "absent"
 	changed := map[string]bool{}
@@ -328,7 +370,7 @@ func (e Local) observe(ctx context.Context, ps preparedService) ([]plan.Task, er
 		_, status, err := e.Systemd.NeedsChange(ctx, c)
 		if err != nil {
 			for _, f := range ps.files {
-				if f.process == name && f.file.Sensitive {
+				if f.file != nil && f.process == name && f.file.Sensitive {
 					err = errors.New("sensitive unit observation failed")
 				}
 			}
@@ -338,6 +380,24 @@ func (e Local) observe(ctx context.Context, ps preparedService) ([]plan.Task, er
 	}
 	for i := range ps.files {
 		f := &ps.files[i]
+		if f.definition != nil {
+			t, yes, err := e.observeTyped(ctx, s, *f, sequence)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", f.component, err)
+			}
+			f.changed = yes
+			if yes {
+				files = append(files, t)
+				if f.ref != "" {
+					changed[f.ref] = true
+				}
+			}
+			continue
+		}
+		hidden, err := e.hiddenConfigPath(ctx, sequence, f.file.Path, f.file.State)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", f.component, err)
+		}
 		unmaskFullUnit := false
 		if c := processChanges[f.process]; c != nil && f.file.Path == "/etc/systemd/system/"+c.Unit {
 			if c.Masked != nil && *c.Masked {
@@ -351,10 +411,9 @@ func (e Local) observe(ctx context.Context, ps preparedService) ([]plan.Task, er
 			}
 		}
 		var yes bool
-		var err error
-		if unmaskFullUnit && e.Files != nil {
+		if (unmaskFullUnit || hidden) && e.Files != nil {
 			yes, err = e.Files.ObserveMissing(ctx, f.file)
-		} else if unmaskFullUnit {
+		} else if unmaskFullUnit || hidden {
 			yes, err = config.ObserveMissing(f.file)
 		} else if e.Files != nil {
 			yes, err = e.Files.Observe(ctx, f.file)
@@ -413,7 +472,7 @@ func (e Local) observe(ctx context.Context, ps preparedService) ([]plan.Task, er
 		var unitFiles []*plan.FileChange
 		hasFullUnit := false
 		for _, f := range ps.files {
-			if f.process == name {
+			if f.file != nil && f.process == name {
 				unitFiles = append(unitFiles, f.file)
 				hasFullUnit = hasFullUnit || f.file.Path == "/etc/systemd/system/"+v.Unit
 			}

@@ -52,7 +52,7 @@ func TestComponentNameUniquenessAndExplicitReferences(t *testing.T) {
 		{"package is not name", Service{Binaries: []Binary{{Type: "rpm", Package: "app"}}, Processes: []Process{{Type: "systemd", Unit: "app.service", RestartOn: []string{"binary.app"}}}}, "unknown component"},
 		{"position is not name", Service{Configs: []Config{inlineConfig("/etc/app")}, Processes: []Process{{Type: "systemd", Unit: "app.service", ReloadOn: []string{"config.0"}}}}, "unknown component"},
 		{"empty name is not reference", Service{Binaries: []Binary{{Type: "rpm", Package: "app"}}, Processes: []Process{{Type: "systemd", Unit: "app.service", RestartOn: []string{"binary."}}}}, "unknown component"},
-		{"invalid config type", Service{Configs: []Config{{Type: "file", Path: "/etc/app"}}}, "type: expected template"},
+		{"invalid config type", Service{Configs: []Config{{Type: "invalid", Path: "/etc/app"}}}, "type: expected template"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := validateService(tc.service)

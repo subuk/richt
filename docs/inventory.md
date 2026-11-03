@@ -126,7 +126,8 @@ capabilities are checked during preparation or execution.
 
 [Services](services/_index.md) owns component behavior and the present/absent
 lifecycle. See [RPM binaries](services/binaries/rpm.md) for package requests,
-[file configs](services/configs/files.md) for templates, attributes, sensitivity,
+[typed configs](services/configs/_index.md) for paths, storage, mounts, and
+[file templates](services/configs/files.md) for attributes, sensitivity,
 SELinux, and optional `validate: {args: [...], timeout: 5s}`, and [systemd processes](services/processes/systemd.md) for units,
 drop-ins, enablement, optional `masked: true|false`, and timeouts.
 [Oneshot processes](services/processes/oneshot.md) declare a direct `command` argv,
@@ -165,6 +166,17 @@ Managed unit files and drop-ins also claim their unit, including ordinary
 configs under standard systemd system directories. Exact duplicate file/package
 components within one service and two processes managing the same unit are
 also rejected. A process may own its unit file and multiple drop-ins.
+
+Typed configs also claim their normalized target paths, arrays, VG/LV identities,
+and mount targets. Device consumer declarations cannot share a member or PV
+device. Storage outputs may be inputs of later configs; this declares sequence,
+without adding dependencies. Two mount entries may manage different targets in
+`/etc/fstab`; whole-file ownership of `/etc/fstab` conflicts with entry management.
+Target-side preparation also checks aliases that resolve to the same resource.
+Inventory inspection performs only structural checks and never probes devices.
+An absent directory cannot contain a declared path owned by another assigned
+service; service filtering does not waive that deletion-scope conflict.
+
 
 For a reproducible file conflict, change the repository config target to
 `/etc/vmango.conf` in a copy of the example. Validation identifies the host and

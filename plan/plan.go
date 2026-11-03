@@ -15,7 +15,7 @@ import (
 	"unicode"
 )
 
-const Version = "1.4"
+const Version = "1.5"
 
 type Plan struct {
 	Version string `json:"version"`
@@ -45,6 +45,9 @@ type Task struct {
 	RPM       *RPMChange     `json:"rpm,omitempty"`
 	Process   *ProcessChange `json:"process,omitempty"`
 	Oneshot   *OneshotChange `json:"oneshot,omitempty"`
+	Path      *PathChange    `json:"path,omitempty"`
+	Storage   *StorageChange `json:"storage,omitempty"`
+	Mount     *MountChange   `json:"mount,omitempty"`
 	Progress  Progress       `json:"progress"`
 }
 type FileChange struct {
@@ -157,6 +160,9 @@ type Action struct {
 	RPM         *RPMChange
 	Process     *ProcessChange
 	Oneshot     *OneshotChange
+	Path        *PathChange
+	Storage     *StorageChange
+	Mount       *MountChange
 	Description []string
 }
 type Executor interface {
@@ -230,8 +236,37 @@ func (p *Plan) Validate() error {
 			if t.Oneshot != nil {
 				payloads++
 			}
+			if t.Path != nil {
+				payloads++
+			}
+			if t.Storage != nil {
+				payloads++
+			}
+			if t.Mount != nil {
+				payloads++
+			}
 			if payloads > 1 {
 				return fmt.Errorf("task %s: mixed operation payloads", t.ID)
+			}
+			if (t.Path != nil) != (t.Operation == "path") ||
+				(t.Storage != nil) != (t.Operation == "storage") ||
+				(t.Mount != nil) != (t.Operation == "mount") {
+				return fmt.Errorf("task %s: resource payload does not match operation", t.ID)
+			}
+			if t.Path != nil {
+				if err := t.Path.Validate(); err != nil {
+					return fmt.Errorf("task %s: %w", t.ID, err)
+				}
+			}
+			if t.Mount != nil {
+				if err := t.Mount.Validate(); err != nil {
+					return fmt.Errorf("task %s: %w", t.ID, err)
+				}
+			}
+			if t.Storage != nil {
+				if err := t.Storage.Validate(); err != nil {
+					return fmt.Errorf("task %s: %w", t.ID, err)
+				}
 			}
 			if t.Operation == "oneshot" {
 				if err := t.Oneshot.Validate(); err != nil {

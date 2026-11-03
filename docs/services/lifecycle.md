@@ -22,7 +22,7 @@ A `present` assignment prepares changes in these phases:
 1. **Binaries:** apply changed package requests in list declaration order.
 2. **Unmask, when requested:** remove persistent and runtime masks before
    writing an owned full unit or operating on the process.
-3. **Configs:** write changed configs in list declaration order, then owned
+3. **Configs:** apply changed typed configs in list declaration order, then owned
    units and drop-ins with their prepared contents and attributes.
 4. **Daemon reload, when required:** make changed systemd definitions visible.
 5. **Processes:** execute triggered oneshot commands and apply systemd
@@ -31,7 +31,7 @@ A `present` assignment prepares changes in these phases:
    precedes its lifecycle task; a requested persistent mask follows both. Unmask tasks run
    earlier so a full-unit file write cannot follow a mask link into `/dev/null`.
 
-Only changed resources need write or package tasks. Oneshot commands need an
+Only changed resources need resource or package tasks. Oneshot commands need an
 actual linked change; each has one task in its process-list position.
 Systemd lifecycle tasks contain prepared branches, selected using runtime state during apply; a reaction can
 therefore become a start when the process is stopped. See [change
@@ -40,6 +40,15 @@ reactions](reactions.md) for the branch table.
 Each collection is an ordered list. The first item executes before the second,
 regardless of their names; unnamed items participate in the same order. To run
 an API before a worker, declare it first. Components have no dependency graph.
+Storage inputs are literal paths and VG/LV names. Declare an array before its
+VG, the VG before its LV, and the LV before its mount. Preparation uses these
+planned outputs so a new stack can be prepared without creating it. An invalid
+sequence fails instead of being reordered. A mount includes its fstab edit,
+mount-definition reload, active mount operation, and verification before later
+configs. Configs below a freshly created mount use its planned empty filesystem;
+preparation does not read the hidden mount-point directory. Activate an existing
+unmounted filesystem before preparing configs that need to observe its contents.
+
 This orders Richt's tasks without creating systemd unit
 dependencies or checking application readiness.
 
@@ -90,10 +99,21 @@ Removal still follows ascending service order across services. An assignment
 removed from inventory is no longer managed; it does not imply `absent`.
 Absent services do not open templates or secret sources.
 
-Richt removes explicitly declared files and requests package removal. The
+An absent config requests actual resource and data deletion, including adopted
+resources: templates and plain files are unlinked, directories are removed
+recursively with all children, LVs are removed, empty VGs and their managed PV
+metadata are removed, and arrays are stopped with member RAID metadata cleanup.
+Mount configs unmount their target and remove its fstab entry, preserving the
+backing resource unless its own config also requests deletion. Reverse config
+order naturally unmounts before LV, VG, and array deletion. Remaining LVs block
+VG deletion; busy or unrelated consumers block destructive operations. Directory
+deletion refuses active mount boundaries. Prepared identities protect unfinished
+deletions from removing a replacement resource. Review each operation's data-loss
+scope in the plan; this is deletion, without secure-erasure guarantees.
+
+Richt also requests package removal. The
 [RPM reference](binaries/rpm.md#removal) explains dependency removal and package
-config handling. Application data, state directories, unrelated files, and
-`.rpmsave` files are not purged.
+config handling. Data outside explicitly managed deletion scopes and `.rpmsave` files remain.
 
 ## Failure and continuation
 

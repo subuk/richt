@@ -154,6 +154,23 @@ func resolvePaths(s *inventory.Service, source string) error {
 		if c.Path != "" {
 			c.Path = path.Clean(c.Path)
 		}
+		if c.Array != "" {
+			c.Array = path.Clean(c.Array)
+		}
+		if c.Source != "" {
+			c.Source = path.Clean(c.Source)
+		}
+		if c.Target != "" {
+			c.Target = path.Clean(c.Target)
+		}
+		c.Members = append([]string(nil), c.Members...)
+		for i, p := range c.Members {
+			c.Members[i] = path.Clean(p)
+		}
+		c.Devices = append([]string(nil), c.Devices...)
+		for i, p := range c.Devices {
+			c.Devices[i] = path.Clean(p)
+		}
 		if c.Template.File != "" {
 			var err error
 			c.Template.File, err = localPath(source, c.Template.File)

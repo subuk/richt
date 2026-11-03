@@ -22,7 +22,10 @@ processes:
 ```
 
 Only linked components whose diff actually changes contribute a reaction,
-including config attribute changes. Unrelated changes do not trigger one.
+including attributes, plain-path creation, storage operations, and mount/fstab
+changes. Unmanaged plain-file contents and directory children do not cause a
+change. Each typed config is referenced through its optional `name`, independently
+of its backend resource identity. Unrelated changes do not trigger a reaction.
 A oneshot merges all its changed `run_on` inputs into one command task; no
 changed linked input means no command. See the [oneshot reference](processes/oneshot.md)
 for argv, absence, and continuation semantics.

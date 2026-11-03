@@ -23,7 +23,7 @@ configs:
 | Field | Required | Meaning and default |
 | --- | --- | --- |
 | `name` | no | Nonempty reference label, unique within the config list |
-| `type` | no | `template` (default); no other config backend is supported |
+| `type` | no | `template` (default); other types use their own [config fields](_index.md) |
 | `path` | yes | Absolute target file path, normalized during resolution |
 | `template` | yes | Exactly one of `file` or `inline`; an empty inline string is valid |
 | `owner` | no | Target user name; omission preserves existing ownership |
@@ -164,8 +164,8 @@ permissions and atomic persistence.
 
 An `absent` service removes declared configs without opening templates or secret
 sources. The inventory definition still requires valid template declarations.
-Only explicitly declared files are removed; application data and unrelated
-files remain. See [absent services](../lifecycle.md#absent-services).
+This template type removes only its declared file. A [directory config](paths.md)
+explicitly requests recursive data deletion when absent. See [absent services](../lifecycle.md#absent-services).
 
 Start with the [config-only quickstart](../../quickstart.md), the
 [file example](../../../examples/files/README.md), or the

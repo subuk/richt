@@ -97,6 +97,8 @@ module:
         - systemd-mask/inventory.yaml
         - systemd-mask/running.yaml
         - systemd-mask/verify.py
+        - typed-configs/README.md
+        - typed-configs/inventory.yaml
         - validated-ssh/README.md
         - validated-ssh/inventory.yaml
         - validated-ssh/templates/sshd_config.gotmpl

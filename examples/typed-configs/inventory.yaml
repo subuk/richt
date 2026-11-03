@@ -1,0 +1,22 @@
+tags:
+  demo:
+    services:
+      markers: {}
+services:
+  markers:
+    order: 10
+    configs:
+      - type: directory
+        path: /var/tmp/richt-typed-configs
+        mode: "0750"
+      - name: marker
+        type: file
+        path: /var/tmp/richt-typed-configs/marker
+        mode: "0640"
+      - path: /var/tmp/richt-typed-configs/settings.conf
+        template:
+          inline: "enabled = true\n"
+hosts:
+  - name: local
+    tags: [demo]
+    transport: {type: local}

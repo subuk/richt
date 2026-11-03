@@ -153,8 +153,9 @@ Important invariants across those contracts:
   packages use reverse binary-list order.
   Other services retain service-definition order; no special cross-service deletion
   graph. External units are still stopped/disabled. DNF may remove dependencies;
-  RPM handles package configs and possible `.rpmsave`. Richt does not purge
-  application data, state, unrelated files, or `.rpmsave`. Removing an assignment
+  RPM handles package configs and possible `.rpmsave`; package removal does not
+  purge unrelated application state. Explicit typed-directory and block-resource
+  absence deletes their contents and data as described below. Removing an assignment
   alone does not request deletion.
 
 ## Executable plans and progress
@@ -168,14 +169,15 @@ not required. A future transport without shell shows its actual API operations.
 Secrets must be hidden in every Richt-controlled display.
 
 Apply executes prepared inputs without rereading inventory/templates/secrets,
-rendering again, recalculating diff, or checking resources for drift. Rendered content and task composition remain fixed. Current system SSH
+rendering again, recalculating diff, or performing a general drift comparison. Prepared storage and mount identity,
+signature, consumer, and fstab preconditions are checked at execution. Rendered content and task composition remain fixed. Current system SSH
 configuration may change between preparation and apply, and named ownership is
 resolved again on the target. These are explicit exceptions to frozen inputs,
 not reasons to recalculate tasks. Other incompatible backend semantics fail. Process state reads for planned branches and
 result verification remain execution operations. Successful tasks are not
 rechecked during continuation.
 
-The current saved format is strict, indented JSON schema version `1.4`; only
+The current saved format is strict, indented JSON schema version `1.5`; only
 that version is accepted, with validation of operations and progress. Task IDs
 use original zero-based list positions and operations, never optional name
 labels, and remain stable within a saved plan rather than across inventory
@@ -277,6 +279,54 @@ diff may see an unchanged config and schedule nothing. There is no persistent
 trigger state, autosave, automatic retry, rollback, or exactly-once guarantee.
 The [oneshot reference](../../../../docs/services/processes/oneshot.md) and
 [sysctl example](../../../../examples/oneshot/README.md) own usage details.
+
+## Typed configurations
+
+KRG-96 extends flat ordered configs with `file`, `directory`, `mdadm`, `lvm-vg`,
+`lvm-lv`, and `mount`; omitted type remains `template`. A config is not necessarily
+a rendered file. The optional `name` only labels reactions. Resource fields are
+`array/level/metadata/members`, `vg/devices`, `vg/lv/size`, and
+`source/target/filesystem/options`. Strict per-type validation rejects unrelated
+fields; systemd-owned files remain restricted to template fields.
+
+Plain files preserve existing contents and create missing files empty.
+Directories preserve children while present and manage only their own explicit
+attributes. Defaults are 0644 for new files and 0755 for new directories;
+parents are created as necessary. Explicit absence removes files or recursively
+removes directory contents, without crossing active mount boundaries.
+
+Initial storage support is RAID1 with metadata 1.2, ordinary linear LVM, and
+XFS. Optional string `filesystem: xfs` on arrays/LVs requests safe creation or
+verification. Omission leaves filesystem state unmanaged. VGs initialize their
+backing PVs. Existing compatible resources are adopted; conflicting signatures,
+unsupported layout changes and substituted devices fail. No partitioning,
+resize, reshape, implicit reformatting, or secure erasure is provided.
+
+Preparation follows declared sequence and projects outputs of earlier configs,
+including devices not yet created and earlier explicit deletions. This is not a
+dependency scheduler. Inventory inspection stays structural. Apply executes
+fixed prepared operations and safety checks without reloading inventory or
+recomputing changes. Resource UUIDs and creation tags identify interrupted
+operations; successful tasks remain skipped. Local and SSH execution share the
+same resource commands and explicit noninteractive sudo boundary.
+
+Mount configs require both an active mount and an fstab entry. They persist
+filesystem UUIDs, preserve unrelated fstab contents, and compose frozen edits
+in list order. Mounts never format their source. Preparation must not inspect
+hidden mount-point contents as the intended filesystem; only a freshly created
+filesystem is known empty. Existing unmounted filesystems must be mounted before
+preparing their contents. Existing inactive storage must be activated before
+preparing managed filesystem state. Boot activation depends on Linux mdadm,
+LVM and systemd configuration; loop attachment for acceptance is test scaffolding.
+
+Absence stops application processes first, then traverses configs in reverse:
+unmount, LV removal, empty-only VG removal and explicit PV cleanup, then MD stop
+and member metadata removal. Remaining declared or undeclared LVs block VG
+removal. Busy resources and unrelated consumers fail rather than being forced.
+Removal includes data on adopted resources, and the plan displays its scope.
+Unfinished destructive operations verify identities to reject replacements.
+Service order remains ascending; removing an assignment alone removes nothing.
+The config references and executable-plan guide describe the supported checks.
 
 ## Secret-source execution
 

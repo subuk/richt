@@ -2,6 +2,7 @@ package inventoryyaml
 
 import (
 	"fmt"
+	"strings"
 
 	"go.yaml.in/yaml/v3"
 )
@@ -162,11 +163,11 @@ func serviceSchema(root *yaml.Node) error {
 					if field == "processes" {
 						switch key {
 						case "unit_file":
-							if err := configSchema(value); err != nil {
+							if err := ownedConfigSchema(value); err != nil {
 								return err
 							}
 						case "overrides":
-							if err := mappingFields(value, func(_ string, config *yaml.Node) error { return configSchema(config) }); err != nil {
+							if err := mappingFields(value, func(_ string, config *yaml.Node) error { return ownedConfigSchema(config) }); err != nil {
 								return err
 							}
 						}
@@ -236,14 +237,61 @@ func stringList(node *yaml.Node, context string) error {
 	return nil
 }
 
-// Omitted type selects the template backend. Explicit values must name it.
+// Config backends have disjoint fields, including explicitly empty values.
 func configSchema(node *yaml.Node) error {
+	fields := map[string]*yaml.Node{}
+	if err := mappingFields(node, func(key string, value *yaml.Node) error { fields[key] = value; return nil }); err != nil {
+		return err
+	}
+	typ := "template"
+	if n := fields["type"]; n != nil {
+		n = dereference(n)
+		if n.Kind != yaml.ScalarNode || n.Tag != "!!str" || n.Value == "" {
+			return fmt.Errorf("line %d: config type: expected a supported type", n.Line)
+		}
+		typ = n.Value
+	}
+	allowed := map[string]string{
+		"template":  "path owner group mode template sensitive selinux validate",
+		"file":      "path owner group mode",
+		"directory": "path owner group mode",
+		"mdadm":     "array level metadata members filesystem",
+		"lvm-vg":    "vg devices",
+		"lvm-lv":    "vg lv size filesystem",
+		"mount":     "source target filesystem options",
+	}
+	list, ok := allowed[typ]
+	if !ok {
+		return fmt.Errorf("config type: unsupported type %q", typ)
+	}
+	valid := map[string]bool{"name": true, "type": true}
+	for _, key := range strings.Fields(list) {
+		valid[key] = true
+	}
 	return mappingFields(node, func(key string, value *yaml.Node) error {
-		if key == "type" {
+		if !valid[key] {
+			return fmt.Errorf("line %d: field %s is not allowed: %s config cannot set %s", value.Line, key, typ, key)
+		}
+		switch key {
+		case "members", "devices", "options":
+			return stringList(value, "config "+key)
+		case "array", "level", "metadata", "vg", "lv", "size", "filesystem", "source", "target":
 			value = dereference(value)
-			if value.Kind != yaml.ScalarNode || value.Tag != "!!str" || value.Value != "template" {
-				return fmt.Errorf("line %d: config type: expected template when supplied", value.Line)
+			if value.Kind != yaml.ScalarNode || value.Tag != "!!str" {
+				return fmt.Errorf("line %d: config %s must be a string", value.Line, key)
 			}
+		}
+		return nil
+	})
+}
+
+func ownedConfigSchema(node *yaml.Node) error {
+	if err := configSchema(node); err != nil {
+		return err
+	}
+	return mappingFields(node, func(key string, value *yaml.Node) error {
+		if key == "type" && dereference(value).Value != "template" {
+			return fmt.Errorf("line %d: systemd-owned config type: expected template", value.Line)
 		}
 		return nil
 	})

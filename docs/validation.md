@@ -4,6 +4,67 @@ description: "Recorded Linux acceptance results, environment, commands, and limi
 weight: 120
 ---
 
+## Typed configs — 2026-11-03
+
+KRG-96 was exercised on three authorized AlmaLinux 10.2 x86_64 targets with
+SELinux Enforcing, systemd 257, LVM2 and XFS tools. The storage fixtures used
+two private 2 GiB sparse files and loop devices, never the host's real disks.
+The missing mdadm package was installed on the storage test targets.
+
+| Suite | Local Linux | SSH/sudo |
+| --- | ---: | ---: |
+| RAID1, VG, LV, XFS, two mounts, frozen plans and removal | 26 passed | 27 passed |
+| Plain files/directories, identity checks and bind-mount refusal | 13 passed | 13 passed |
+| Existing files/SELinux/progress/locking | 17 passed | — |
+| Existing systemd masks/lifecycle | 24 passed | — |
+| Secret-source regression | 4 groups passed | — |
+| Boot persistence, filesystem identity and data | — | Verified after VM recovery |
+
+The storage runs verified creation of downstream resources absent during diff,
+compatible adoption with an empty subsequent diff, unmanaged file contents,
+UUID fstab persistence and composition, preservation of comments, mount-only
+absence retaining source data, busy-mount failure, explicit continuation, and
+reverse destructive deletion including exact MD member metadata removal.
+The local harness reported a loop-detach command error after all product checks;
+postflight confirmed both loops had detached and removed its remaining backing
+files. The harness command was corrected. SSH cleanup completed without errors.
+
+Go tests additionally cover interruptions after storage side effects, raw and
+managed resource replacement, filesystem signature conflicts, empty-only VG
+deletion, aliases, invalid sequence, reactions, and hidden mount-point paths.
+`make check`, `make docs-check`, and race tests for `plan`, `engine`, `config`,
+`mount`, and `storage` passed. The source is `ab34a00e9f1f` plus the KRG-96 changes.
+
+Boot acceptance verified automatic MD assembly, LVM activation and the UUID
+fstab mount, the original filesystem UUID and marker contents, and an empty
+post-boot diff. The initial fixture exposed a loop-specific setup error: MD
+udev assembly ignores bare-device change events. Its required mount blocked
+boot until the operator added `nofail`. The corrected fixture reattaches its
+loops and emits scoped device-add events; its fstab entry uses `nofail` and a
+bounded device timeout. A subsequent controller run exceeded its SSH deadline
+because of an unrelated VM configuration problem reported and corrected by the
+operator. Verification resumed against the same persisted fixture after boot,
+without recreating storage or manually assembling or mounting it. This is a
+verified resumed acceptance result, not an uninterrupted harness run. Explicit
+absence then removed the LV, VG, MD and member signatures; cleanup detached the
+loops and removed their backing files and fixture service. The original fstab
+was restored byte-for-byte. SELinux remained Enforcing and no systemd units
+were failed. These results do not establish physical disk discovery behavior
+or support for other distributions.
+
+Reproduce storage checks only on an authorized disposable Linux target:
+
+```sh
+python3 tests/integration/typed_configs.py --binary ./bin/richt-linux-amd64 --work-root /var/tmp/richt-typed-results
+python3 tests/integration/typed_configs.py --binary ./bin/richt --host richt-test-b --work-root /tmp/richt-typed-ssh
+python3 tests/integration/typed_configs_boot.py --binary ./bin/richt --host richt-test-a --work-root /tmp/richt-typed-boot
+```
+
+The boot harness explicitly reboots its target and installs a temporary service
+for reattaching its loop backing files and emitting scoped device-add events.
+Its mount and data assertions remain
+mandatory even though the test fstab entry uses `nofail`.
+
 ## Change-triggered oneshots — 2026-11-03
 
 KRG-97 passed on three independent authorized AlmaLinux 10.2 x86_64 hosts
@@ -461,6 +522,27 @@ run. The custom RPM/systemd and full SSH fixture suites were not rerun; their
 inputs were updated and validated locally.
 
 ## File acceptance harness
+
+The separate [typed-path driver](../tests/integration/typed_paths.py) covers
+plain files and directories on an authorized disposable Linux target:
+
+```sh
+sudo python3 tests/integration/typed_paths.py --binary ./bin/richt-linux-amd64 \
+  --output /root/richt-typed-paths-local
+python3 tests/integration/typed_paths.py --binary ./bin/richt \
+  --ssh-host deploy@typed-path-test.example --output /tmp/richt-typed-paths-ssh
+```
+
+It creates unique target paths and one temporary bind mount, then cleans them
+in `finally`. Required target capabilities are root (or noninteractive sudo),
+Python 3 for the controller, GNU stat/coreutils, find, mountpoint, mount, and
+umount. Private output retains inventories, saved progress, command captures,
+and `acceptance.json`. Checks include no-effect inspection/diff, exact creation
+defaults under a restrictive controller umask, unmanaged content preservation,
+nonrecursive attributes, newly appeared files, replacement identity protection,
+named symlink removal, incompatible path types, reverse absent order, recursive
+data deletion, and refusal to cross an active same-device bind mount. It installs
+no packages and does not use fixed fixture services.
 
 Run local unit and CLI checks with `go test ./...`. On an authorized disposable
 Linux machine with SELinux Enforcing, run the file acceptance suite as root:
