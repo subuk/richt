@@ -6,12 +6,13 @@ weight: 110
 ---
 
 Richt currently implements local/SSH transport, explicit noninteractive sudo,
-strict local YAML inventory, RPM through DNF 4/YUM 4, systemd and oneshot
+strict local YAML inventory, RPM through DNF 4/YUM 4, checksum-pinned public
+HTTPS downloads and tar.gz archive trees, systemd and oneshot
 processes, templates, plain files/directories, RAID1, linear LVM, XFS and
 persistent mounts, and local YAML secret sources. See [installation](installation.md) and
 [validation](validation.md) for requirements and verified platforms. YUM 3,
-DNF 5, APT, non-systemd managers, URL inventory/templates, direct binary
-URL downloads, and external secret stores are unsupported.
+DNF 5, APT, non-systemd managers, URL inventory/templates, private authenticated
+artifact URLs, other archive formats, and external secret stores are unsupported.
 
 ## Executable plans are prepared inputs
 
@@ -33,6 +34,12 @@ These inputs retain defined execution-time dependencies:
   A pinned NEVRA fixes the explicit package request, not RPM checksums,
   scriptlets, every dependency, or repository trust configuration. RPM artifacts
   are not embedded in the plan.
+- Download/archive apply requires target Python 3.8+, verified TLS and bytes
+  matching the frozen SHA-256. Artifact destinations are exclusively managed;
+  pre-existing resources are not adopted. Replaced artifact roots, unknown
+  archive entries and changed entry types block update/deletion; tracked
+  same-type child changes remain repairable and removable. Linux atomic rename support is required. See
+  [downloads](services/binaries/download.md) and [archives](services/binaries/archive.md).
 - Systemd process tasks read current state to select a prepared branch and verify the
   result. Running means systemd active, not application readiness.
 - Oneshot executables and their dependencies must exist at apply time. Commands

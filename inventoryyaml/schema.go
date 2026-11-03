@@ -188,6 +188,60 @@ func serviceSchema(root *yaml.Node) error {
 				}); err != nil {
 					return err
 				}
+				if field == "binaries" {
+					if err := binarySchema(item); err != nil {
+						return err
+					}
+				}
+			}
+		}
+		return nil
+	})
+}
+
+// Binary backends have disjoint fields even when supplied values are empty or
+// null. Artifact inputs are typed explicitly rather than using YAML coercions.
+func binarySchema(node *yaml.Node) error {
+	fields := map[string]*yaml.Node{}
+	if err := mappingFields(node, func(key string, value *yaml.Node) error { fields[key] = value; return nil }); err != nil {
+		return err
+	}
+	typ := ""
+	if fields["type"] == nil {
+		// Preserve decoder diagnostics for malformed component mappings.
+		return nil
+	}
+	if n := fields["type"]; n != nil {
+		n = dereference(n)
+		if n.Kind != yaml.ScalarNode || n.Tag != "!!str" {
+			return fmt.Errorf("line %d: binary type must be a string", n.Line)
+		}
+		typ = n.Value
+	}
+	allowed := map[string]string{
+		"rpm":      "manager package version disable_excludes",
+		"download": "url sha256 path owner group mode timeout",
+		"archive":  "url sha256 path owner group timeout format strip_components",
+	}
+	list, ok := allowed[typ]
+	if !ok {
+		return fmt.Errorf("binary type: expected rpm, download or archive")
+	}
+	valid := map[string]bool{"name": true, "type": true}
+	for _, key := range strings.Fields(list) {
+		valid[key] = true
+	}
+	return mappingFields(node, func(key string, value *yaml.Node) error {
+		if !valid[key] {
+			return fmt.Errorf("line %d: field %s is not allowed: %s binary cannot set %s", value.Line, key, typ, key)
+		}
+		if key == "strip_components" {
+			return integer(value, "binary strip_components")
+		}
+		if typ != "rpm" && key != "name" && key != "type" {
+			value = dereference(value)
+			if value.Kind != yaml.ScalarNode || value.Tag != "!!str" || value.Value == "" {
+				return fmt.Errorf("line %d: binary %s must be a nonempty string when supplied", value.Line, key)
 			}
 		}
 		return nil

@@ -9,9 +9,12 @@ An optional `name` label allows [process reactions](../reactions.md) such as
 `binary.package` to reference an item. A binary-only service is valid; binaries
 do not require a config or process component.
 
-The current implementation is [RPM packages](rpm.md), selected with `type: rpm`
-and managed through DNF 4 or its YUM 4 compatibility command. Its reference owns
-package fields, exact versions, preparation, apply, and removal behavior.
+Choose [RPM packages](rpm.md) (`type: rpm`) for DNF 4/YUM 4 package requests,
+[downloaded files](download.md) (`type: download`) for a checksum-pinned HTTPS
+file, or [archive trees](archive.md) (`type: archive`, `format: tar.gz`) for an
+exclusively owned installation directory. Each reference defines preparation,
+apply, ownership, limits and removal. Download and archive requests fetch their
+frozen URL at apply; artifact bytes are not embedded in saved plans.
 
 Binaries run in declaration order before configs and processes in a present
 service, and in reverse declaration order after them during removal. See

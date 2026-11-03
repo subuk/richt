@@ -8,7 +8,10 @@ Richt uses the system OpenSSH `ssh` executable. Existing `ssh_config` aliases,
 identity files, SSH agent, proxy/jump settings, and known-hosts policy remain in
 effect. The controller needs OpenSSH in `PATH`; remote targets need the Linux
 utilities used by the selected resources (GNU coreutils/findutils, `getent`,
-and, when requested, DNF 4/YUM 4, systemd, or SELinux tools). No Richt daemon or
+and, when requested, DNF 4/YUM 4, systemd, or SELinux tools). Download/archive targets also need
+Python 3.8+ with its standard library, CA trust, HTTPS connectivity and Linux
+atomic rename support. Artifact fetching happens on the target at apply; its
+URL and SHA-256 are frozen while bytes are absent from JSON. No Richt daemon or
 installed Richt binary is needed on an SSH target. See [Inventory](inventory.md)
 for connection declarations, [Services](services/_index.md) for resources, and
 [saved plans and apply](files.md) for the execution workflow.

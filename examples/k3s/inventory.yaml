@@ -1,0 +1,22 @@
+# Binary-only Linux amd64 example; read README.md before applying.
+tags:
+  example:
+    services:
+      k3s-binary: {}
+services:
+  k3s-binary:
+    order: 10
+    binaries:
+      - name: executable
+        type: download
+        url: https://github.com/k3s-io/k3s/releases/download/v1.34.3%2Bk3s1/k3s
+        sha256: f95350e3997165974d1d1406f01aabaf869aed7ca790cc2d83a92a82f26a06c5
+        path: /usr/local/bin/k3s
+        owner: root
+        group: root
+        mode: "0755"
+        timeout: 5m
+hosts:
+  - name: example
+    tags: [example]
+    transport: {type: ssh, host: k3s-test, user: deploy, sudo: true}

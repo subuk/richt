@@ -93,6 +93,10 @@ module:
         - rpm-versions/README.md
         - rpm-versions/inventory.yaml
         - rpm-versions/verify.py
+        - k3s/README.md
+        - k3s/inventory.yaml
+        - node-exporter/README.md
+        - node-exporter/inventory.yaml
         - kubernetes/README.md
         - kubernetes/inventory.yaml
         - systemd-mask/README.md

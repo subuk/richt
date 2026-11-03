@@ -37,7 +37,7 @@ func TestRPMDisableExcludesSavedRoundTrip(t *testing.T) {
 				}
 				defer store.Close()
 				c := store.Plan.Hosts[0].Tasks[0].RPM
-				if c.DisableExcludes != value || c.State != state || store.Plan.Version != "1.5" {
+				if c.DisableExcludes != value || c.State != state || store.Plan.Version != plan.Version {
 					t.Fatalf("lost frozen input: %+v", c)
 				}
 			})

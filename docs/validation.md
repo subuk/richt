@@ -684,3 +684,81 @@ an SSH timeout still does not guarantee remote process termination. This driver
 is separate from the custom RPM fixture suites and does not require rpm-build
 or createrepo_c. Running it establishes only the reported target and selected
 checks; cross-compiling its binary alone does not establish runtime coverage.
+
+## Artifact regression harness
+
+The [artifact harness](../tests/integration/artifacts.py) exercises local Linux
+execution through the Richt CLI with a private HTTPS fixture. Run it only as
+root on an authorized disposable Linux host with Python 3.8+, OpenSSL, GNU
+coreutils, util-linux (including permission to create a temporary bind mount),
+and a Linux Richt binary:
+
+```sh
+python3 tests/integration/artifacts.py --binary ./bin/richt-linux-amd64 \
+  --work-root /var/tmp/richt-artifact-results
+```
+
+It allocates unique private destinations and a temporary HTTPS server. Its
+private test CA is trusted through `SSL_CERT_FILE` for its subprocesses; TLS
+verification remains enabled. It installs no package and changes no existing
+service. Plans, command captures, platform facts, binary SHA-256 and
+`acceptance.json` remain in a unique child of `--work-root`; managed targets
+are removed in cleanup. Without that option, controller evidence is removed.
+
+The harness covers prepared/frozen requests, checksum verification, partial
+HTTP responses, timeouts, TLS rejection, HTTPS redirect policy, no-op and
+tracked drift repair, attribute changes, byte-level upgrade/reversion, oneshot
+reactions, continuation, safe archive extraction, rejected traversal/symlink
+escapes/hardlinks/special entries/duplicates, exclusive ownership, unknown
+archive entries, and ordered resource removal. It does not establish application
+compatibility, readiness, distribution portability, disk-full behavior, or every
+possible power-loss boundary. The [node_exporter walkthrough](../examples/node-exporter/README.md)
+provides a published-artifact/systemd/SSH scenario separately from these controlled
+fixtures. The existence or syntax check of a harness is not evidence of a
+passed runtime acceptance run; dated results are recorded separately.
+
+The [published artifact SSH driver](../tests/integration/artifacts_ssh.py)
+exercises real GitHub releases through SSH and explicit noninteractive sudo:
+
+```sh
+python3 tests/integration/artifacts_ssh.py --binary ./bin/richt \
+  --host deploy@artifact-test.example --work-root /tmp/richt-artifact-ssh
+```
+
+The target needs Linux amd64, systemd, the artifact backend dependencies, HTTPS
+access to GitHub, and unused loopback ports 19183 and 19184. The driver checks
+unique fixture paths before creating them and removes its paths and units on
+exit. It retains private controller evidence. Add `--archive-only` to run only
+node_exporter. The full run also uses K3s **only as a kubectl proxy** against an
+unavailable API endpoint, with isolated data/config paths. It never creates a
+Kubernetes cluster and does not establish cluster upgrade/downgrade safety.
+
+### Recorded artifact acceptance — 2026-11-03
+
+The KRG-82/KRG-83 implementation was tested on AlmaLinux 10.2 x86_64 with
+Python 3.12.13, systemd 257, explicit root/sudo execution and SELinux Enforcing.
+Builds used base revision `d45425f136b3277d7384d86fd1076eb84b6f939c` plus the
+feature changes recorded with this report.
+
+| Suite | Result |
+| --- | --- |
+| Local artifact CLI/HTTPS harness | 43 checks passed, including real symlink and bind-mount ownership aliases with service filtering |
+| Target Python helper tests on Linux | 13 passed, including concurrent locking, transaction recovery and hostile archive metadata |
+| Published artifacts over SSH/sudo | 46 passed: node_exporter 1.10.1 → 1.10.2 → 1.10.1 and K3s 1.34.2+k3s1 → 1.34.3+k3s1 → 1.34.2+k3s1 proxy lifecycle |
+| Final archive SSH/sudo rerun after stronger ownership preflight | 23 passed, including metrics, exact restart counts, frozen inputs, unknown-file protection and removal |
+| Existing file/SELinux, secrets and systemd-mask regressions | 17 checks, 4 groups and 24 checks passed respectively |
+| Published RPM/oneshot regression (`oneshot.py --package tree`) | 33 passed, including RPM install/trigger/no-op/removal, mixed process ordering and continuation; no custom fixture RPMs used |
+| Repository verification | `make check` and `go test -race ./artifact ./engine ./plan ./transport ./inventory` passed |
+
+The final local Linux binary SHA-256 was
+`9fd12bc8934be33097882db1b7b93d73de2152237b20a621bef3dfe91443d53e`;
+the final SSH controller binary was
+`720e6a92664defe735171e9202485abed49263871787339387365770e6e44b9c`.
+The earlier full published-artifact run used controller SHA-256
+`a021c6d09f08037b73482a01414d3a881ae16f3a106a9d81f0a4e76f36b356bd`.
+Private reports retain commands, plans/progress, platform facts and binary
+identities. Fixture destinations, temporary bind mounts and owned service units
+were removed; pre-existing workloads remained active, with SELinux Enforcing
+and no failed units. These runs do not establish other distribution/architecture
+support, K3s cluster compatibility, disk-full recovery or exhaustive power-loss
+recovery.

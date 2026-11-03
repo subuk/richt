@@ -167,8 +167,8 @@ or YUM4 without editing repository policy. It disables both exclusion and
 inclusion filters in that scope. Omission preserves backend defaults; changing
 only the override never changes installed-package matching or triggers a
 reinstall/reaction. Prepared plans display and freeze the value. This additive
-optional input retains saved format 1.5; readers predating the field reject it
-as unknown when supplied.
+optional input was introduced in saved format 1.5 and remains supported in 1.6;
+readers predating the field reject it as unknown when supplied.
 
 Preparation and diff do not change managed resources. A plan fixes host targets,
 task order, operations, ready file contents/patches and attributes, explicit
@@ -187,8 +187,10 @@ not reasons to recalculate tasks. Other incompatible backend semantics fail. Pro
 result verification remain execution operations. Successful tasks are not
 rechecked during continuation.
 
-The current saved format is strict, indented JSON schema version `1.5`; only
-that version is accepted, with validation of operations and progress. Task IDs
+The current saved format is strict, indented JSON schema version `1.6`.
+Version `1.5` remains accepted for its original operations, and continuation
+preserves that version and its progress. Download/archive operations require
+`1.6`; older readers reject the new version. Task IDs
 use original zero-based list positions and operations, never optional name
 labels, and remain stable within a saved plan rather than across inventory
 reordering. Its task shapes, atomic writes, same-plan locking, and restrictive
@@ -436,10 +438,56 @@ verified scenarios from illustrations, and validate walkthroughs on a clean
 disposable environment without hidden steps. Do not defer implementation testing
 to documentation work.
 
+## Downloaded binary artifacts
+
+KRG-82 and KRG-83 add `download` files and `archive` trees to ordered binaries.
+Both require a public HTTPS URL, SHA-256 and absolute destination. Inventory
+inspection stays structural; diff observes actual target bytes and attributes
+without fetching artifacts. Apply downloads on the target using the frozen
+request, checks the checksum, and publishes verified staging contents atomically.
+Artifact bytes are not embedded in JSON. This is an explicit execution-time
+dependency. Same-checksum mirror changes alone do not change installed state.
+
+The target requires Linux, Python 3.8+ in isolated mode, and filesystem support
+for `renameat2` no-replace/exchange. The helper is a bounded command, not an
+installed agent. System TLS trust/proxy settings apply; no authentication or
+verification bypass options exist. Source URLs reject credentials, queries and
+fragments; HTTPS redirects may carry temporary signed queries that are never
+persisted or displayed. Bounds cover redirects, time, downloaded/decompressed
+bytes, entries, paths and tar metadata. The component references own exact limits.
+
+`download` owns one regular file, default mode 0755. `archive` owns its entire
+directory, supports only `tar.gz` and optional `strip_components`, installs
+directories as 0755 and files as 0644/0755 according to executable bits. Safe
+relative symlinks are allowed; hardlinks, sparse files and special entries are
+rejected. Archive ownership IDs and extended attributes are not trusted.
+Owner/group names or IDs are explicit; omission uses the execution identity.
+
+Neither type adopts an existing unowned destination. A protected sibling
+metadata directory holds a stable resource lock, current manifest and temporary
+publication journal. Root identity/generation preconditions prevent replacement
+of another installation. Same-type tracked child edits are managed drift;
+unknown entries or changed types block archive replacement/removal. Metadata
+paths and archive subtrees are exclusive across binaries, configs and units.
+Target alias checks enforce this before observation; artifacts inside an
+unmounted declared filesystem require a separate mount apply first.
+
+Whole-resource publication and its journal permit manual continuation after
+interruption, including completion of old-content cleanup after publication.
+They do not add global rollback, automatic retries or run history. Successful
+tasks remain skipped. The archive tree must not contain application state or
+independently managed configs. Absent follows normal process/config/binary
+ordering and retains the stable metadata lock. Actual artifact changes feed
+the existing restart/reload/oneshot reactions; only RPM changes imply package
+unit discovery or package-triggered daemon reload.
+
+See [downloaded binaries](../../../../docs/services/binaries/download.md) and
+[archive binaries](../../../../docs/services/binaries/archive.md).
+
 ## Later scope
 
-NetBox inventory/plugin/rendering, URL inventory and template sources, direct
-URL binary downloads/integrity/unpacking, other package managers, additional persistent
+NetBox inventory/plugin/rendering, URL inventory and template sources,
+authenticated artifact sources and other archive formats, other package managers, additional persistent
 process managers, external secret stores, multi-file configuration validation
 transactions, agents, and fleet rollout orchestration are later work. Preserve useful domain boundaries
 without building empty layers or advertising unsupported implementations.

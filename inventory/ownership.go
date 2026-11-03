@@ -9,6 +9,14 @@ import (
 func (in *Inventory) validateOwnership(host string, assignments []Assignment) error {
 	type owner struct{ service, component string }
 	owners := map[string]owner{}
+	// Artifact trees and metadata are exclusively owned. Other paths are
+	// recorded to check containment, including same-service nested resources.
+	type pathOwner struct {
+		path, service, component          string
+		tree, artifact, directory, absent bool
+	}
+	paths := []pathOwner{}
+	unitPaths := []pathOwner{}
 	fstabEntries := false
 	fstabFile := false
 	type removal struct{ path, service string }
@@ -24,6 +32,7 @@ func (in *Inventory) validateOwnership(host string, assignments []Assignment) er
 	}
 	claimFile := func(c Config, service, component string) error {
 		p := path.Clean(c.Path)
+		paths = append(paths, pathOwner{path: p, service: service, component: component, directory: c.Type == "directory"})
 		if err := claim("file "+p, service, component); err != nil {
 			return err
 		}
@@ -37,6 +46,16 @@ func (in *Inventory) validateOwnership(host string, assignments []Assignment) er
 		processUnits := map[string]string{}
 		for i, b := range s.Binaries {
 			name := componentLabel(b.Name, i)
+			if b.Type == "download" || b.Type == "archive" {
+				component := "binary." + name
+				if err := claimFile(Config{Path: b.Path}, a.Name, component); err != nil {
+					return err
+				}
+				paths[len(paths)-1].artifact = true
+				paths[len(paths)-1].tree = b.Type == "archive"
+				paths = append(paths, pathOwner{path: ArtifactMetadataPath(b.Path), service: a.Name, component: component + ".metadata", tree: true, artifact: true})
+				continue
+			}
 			// DNF and YUM both own packages in the RPM database.
 			if err := claim("package rpm:"+b.Package, a.Name, "binary."+name); err != nil {
 				return err
@@ -49,6 +68,7 @@ func (in *Inventory) validateOwnership(host string, assignments []Assignment) er
 			case "mdadm":
 				resource = "block device " + path.Clean(c.Array)
 				for _, device := range c.Members {
+					paths = append(paths, pathOwner{path: path.Clean(device), service: a.Name, component: component + ".members"})
 					if err := claim("device consumer "+path.Clean(device), a.Name, component); err != nil {
 						return err
 					}
@@ -56,6 +76,7 @@ func (in *Inventory) validateOwnership(host string, assignments []Assignment) er
 			case "lvm-vg":
 				resource = "volume group " + c.VG
 				for _, device := range c.Devices {
+					paths = append(paths, pathOwner{path: path.Clean(device), service: a.Name, component: component + ".devices"})
 					if err := claim("device consumer "+path.Clean(device), a.Name, component); err != nil {
 						return err
 					}
@@ -64,6 +85,9 @@ func (in *Inventory) validateOwnership(host string, assignments []Assignment) er
 				resource = "block device /dev/" + c.VG + "/" + c.LV
 			case "mount":
 				resource = "mount " + path.Clean(c.Target)
+				paths = append(paths, pathOwner{path: path.Clean(c.Source), service: a.Name, component: component + ".source"})
+				paths = append(paths, pathOwner{path: path.Clean(c.Target), service: a.Name, component: component, directory: true})
+				paths = append(paths, pathOwner{path: "/etc/fstab", service: a.Name, component: component + ".fstab"})
 				fstabEntries = true
 				if err := claim("file "+path.Clean(c.Target), a.Name, component); err != nil {
 					return err
@@ -78,8 +102,10 @@ func (in *Inventory) validateOwnership(host string, assignments []Assignment) er
 			}
 			if c.Type == "directory" && a.State == "absent" {
 				removals = append(removals, removal{path.Clean(c.Path), a.Name})
+				paths[len(paths)-1].absent = true
 			}
 			if strings.HasPrefix(resource, "block device ") {
+				paths = append(paths, pathOwner{path: strings.TrimPrefix(resource, "block device "), service: a.Name, component: component})
 				if err := claim("file "+strings.TrimPrefix(resource, "block device "), a.Name, component); err != nil {
 					return err
 				}
@@ -97,6 +123,10 @@ func (in *Inventory) validateOwnership(host string, assignments []Assignment) er
 			}
 			name := componentLabel(p.Name, i)
 			component := "process." + name
+			for _, prefix := range []string{"/etc/systemd/system/", "/usr/lib/systemd/system/", "/lib/systemd/system/", "/run/systemd/system/"} {
+				unitPaths = append(unitPaths, pathOwner{path: prefix + p.Unit, service: a.Name, component: component})
+				unitPaths = append(unitPaths, pathOwner{path: prefix + p.Unit + ".d", service: a.Name, component: component, tree: true})
+			}
 			if previous, ok := processUnits[p.Unit]; ok {
 				return fmt.Errorf("host %q: systemd unit %s is managed by both %s/process.%s and %s/%s", host, p.Unit, a.Name, previous, a.Name, component)
 			}
@@ -112,6 +142,26 @@ func (in *Inventory) validateOwnership(host string, assignments []Assignment) er
 			for _, key := range sortedKeys(p.Overrides) {
 				if err := claimFile(p.Overrides[key], a.Name, component+".overrides."+key); err != nil {
 					return err
+				}
+			}
+		}
+	}
+	conflict := func(a, b pathOwner) error {
+		return fmt.Errorf("host %q: artifact resource scope conflicts between %s/%s (%s) and %s/%s (%s)", host, a.service, a.component, a.path, b.service, b.component, b.path)
+	}
+	for i, a := range paths {
+		for _, b := range paths[i+1:] {
+			if !a.artifact && !b.artifact {
+				continue
+			}
+			if a.path == b.path || strings.HasPrefix(b.path, a.path+"/") && (a.tree || !a.directory || a.absent) || strings.HasPrefix(a.path, b.path+"/") && (b.tree || !b.directory || b.absent) {
+				return conflict(a, b)
+			}
+		}
+		if a.artifact {
+			for _, b := range unitPaths {
+				if b.path == a.path || strings.HasPrefix(b.path, a.path+"/") || b.tree && strings.HasPrefix(a.path, b.path+"/") {
+					return conflict(a, b)
 				}
 			}
 		}

@@ -126,6 +126,8 @@ capabilities are checked during preparation or execution.
 
 [Services](services/_index.md) owns component behavior and the present/absent
 lifecycle. See [RPM binaries](services/binaries/rpm.md) for package requests,
+[downloads](services/binaries/download.md) and [archives](services/binaries/archive.md)
+for checksum-pinned HTTPS artifacts,
 [typed configs](services/configs/_index.md) for paths, storage, mounts, and
 [file templates](services/configs/files.md) for attributes, sensitivity,
 SELinux, and optional `validate: {args: [...], timeout: 5s}`, and [systemd processes](services/processes/systemd.md) for units,
@@ -134,7 +136,8 @@ drop-ins, enablement, optional `masked: true|false`, and timeouts.
 nonempty `run_on` references, and an optional timeout. Validator
 executables are not opened or run by inventory inspection; short and exact RPM
 version syntax and optional `disable_excludes` scope are checked without
-contacting hosts or repositories. [Reactions](services/reactions.md) defines
+contacting hosts or repositories. Artifact URLs, checksums and per-type fields
+are structurally checked without contacting download servers. [Reactions](services/reactions.md) defines
 `restart_on`, `reload_on`, and `run_on` references and their validation.
 [Lifecycle and ordering](services/lifecycle.md) defines forward declaration
 order for present services and reverse traversal of each collection for absence.
@@ -167,6 +170,13 @@ Managed unit files and drop-ins also claim their unit, including ordinary
 configs under standard systemd system directories. Exact duplicate file/package
 components within one service and two processes managing the same unit are
 also rejected. A process may own its unit file and multiple drop-ins.
+
+Download binaries claim their normalized file path. Archive binaries own their
+whole normalized destination tree, excluding any other declared path at or
+below it, including another archive. Artifact sibling metadata paths are reserved
+and cannot overlap managed paths. These rules apply across present and absent
+assignments before service filtering. Existing artifact destinations are never
+adopted; target observation checks protected ownership evidence.
 
 Typed configs also claim their normalized target paths, arrays, VG/LV identities,
 and mount targets. Device consumer declarations cannot share a member or PV

@@ -11,11 +11,11 @@ import (
 	"github.com/subuk/richt/plan"
 )
 
-func TestOnlyCurrentPlanVersionIsAccepted(t *testing.T) {
-	for _, version := range []string{"", "1.0", "1.1", "1.2", "1.3", "999", plan.Version} {
+func TestSupportedPlanVersionsAreAccepted(t *testing.T) {
+	for _, version := range []string{"", "1.0", "1.1", "1.2", "1.3", "999", plan.LegacyVersion, plan.Version} {
 		p := &plan.Plan{Version: version, Hosts: []plan.Host{}}
 		err := p.Validate()
-		if (err != nil) != (version != plan.Version) {
+		if (err != nil) != (version != plan.Version && version != plan.LegacyVersion) {
 			t.Fatalf("version %q: %v", version, err)
 		}
 		path := filepath.Join(t.TempDir(), "plan.json")
@@ -23,7 +23,7 @@ func TestOnlyCurrentPlanVersionIsAccepted(t *testing.T) {
 			t.Fatal(err)
 		}
 		store, err := plan.Open(path)
-		if (err != nil) != (version != plan.Version) {
+		if (err != nil) != (version != plan.Version && version != plan.LegacyVersion) {
 			t.Fatalf("open version %q: %v", version, err)
 		}
 		if store != nil {

@@ -130,8 +130,17 @@ func validateService(s Service) error {
 			return err
 		}
 		name := componentLabel(b.Name, i)
+		if b.Type == "download" || b.Type == "archive" {
+			if err := ValidateArtifactBinary(b); err != nil {
+				return fmt.Errorf("binary.%s: %w", name, err)
+			}
+			continue
+		}
 		if b.Type != "rpm" {
-			return fmt.Errorf("binary.%s type: expected rpm", name)
+			return fmt.Errorf("binary.%s type: expected rpm, download or archive", name)
+		}
+		if hasArtifactFields(b) {
+			return fmt.Errorf("binary.%s: rpm binary cannot set artifact fields", name)
 		}
 		if b.Manager != "" && b.Manager != "dnf" && b.Manager != "yum" {
 			return fmt.Errorf("binary.%s manager: expected dnf or yum", name)

@@ -7,7 +7,7 @@ ordered lists of binaries, configs, and processes in any nonempty combination.
 Tags assign service target states to hosts; service definitions set execution order.
 
 Inspect the inventory, prepare changes with `diff`, review the executable plan,
-and explicitly `apply` it. Current backends provide RPM packages, templated
+and explicitly `apply` it. Current backends provide RPM packages, checksum-pinned HTTPS downloads and archive trees, templated
 files, and systemd or change-triggered oneshot processes over local or SSH
 transport, with explicit noninteractive sudo, bounded host concurrency, and local YAML secret sources.
 

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"unicode"
 
 	"github.com/subuk/richt/inventory"
 	"go.yaml.in/yaml/v3"
@@ -150,6 +151,18 @@ func localPath(source, value string) (string, error) {
 }
 
 func resolvePaths(s *inventory.Service, source string) error {
+	for i := range s.Binaries {
+		b := &s.Binaries[i]
+		if b.Type == "download" || b.Type == "archive" {
+			if strings.IndexFunc(b.Path, unicode.IsControl) >= 0 {
+				return fmt.Errorf("binary.%d path: control characters are not allowed", i+1)
+			}
+			if b.Path != "" {
+				b.Path = path.Clean(b.Path)
+			}
+			b.SHA256 = strings.ToLower(b.SHA256)
+		}
+	}
 	resolve := func(c inventory.Config) (inventory.Config, error) {
 		if c.Path != "" {
 			c.Path = path.Clean(c.Path)

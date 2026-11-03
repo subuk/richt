@@ -67,7 +67,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	var exitCode int
 	parser, err := kong.New(&flags,
 		kong.Name("richt"),
-		kong.Description("Manage host configuration with an explicit plan."),
+		kong.Description("Manage host configuration with an explicit plan: RPM packages, downloaded files, tar.gz archives, configs, and processes."),
 		kong.Vars{"version": "richt " + Version},
 		kong.Writers(stdout, stderr),
 		kong.Exit(func(code int) { exited, exitCode = true, code }),

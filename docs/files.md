@@ -32,7 +32,8 @@ explicit removal without rendering templates or reading secret sources.
 A saved plan fixes selected hosts, explicit connection inputs, task order,
 operations, rendered file contents and patches, requested attributes and
 owner/group names, file validators and their timeouts, package requests (including
-their `disable_excludes` override), masking targets, allowed systemd process
+their `disable_excludes` override), artifact URLs/checksums/paths and extraction
+settings, artifact attributes/timeouts and ownership identities, masking targets, allowed systemd process
 branches, and oneshot argv, timeouts, and
 changed trigger references. Typed configs also fix path attributes, storage
 identities and deletion scope, filesystem creation requests, and mount/fstab
@@ -55,6 +56,10 @@ Some operations deliberately use execution-time information:
 - DNF resolves repository metadata, dependencies, and the transaction when the
   prepared package request runs. An exact version fixes that request, not the
   complete transaction or RPM checksums; RPM artifacts are not embedded.
+- Downloads and archives fetch the frozen public HTTPS URL on the target and
+  require its frozen SHA-256 before atomic publication. Artifact bytes are not
+  embedded in JSON. Protected manifests and transaction records guard ownership,
+  foreign entries and interrupted publication; these checks do not rebuild the plan.
 - File validators run against the prepared candidate during apply, after earlier
   package tasks and before writing the destination. They use the target's current
   executable and supporting files; those dependencies are not embedded in JSON.
@@ -131,9 +136,10 @@ partial-failure example.
 
 ## Plan format and security
 
-Saved plans use strict, indented JSON schema version `1.5`; only that version
-is accepted. Unknown fields, incompatible versions, invalid operations, and
-malformed progress are rejected.
+New saved plans use strict, indented JSON schema version `1.6`. The reader also
+accepts `1.5` plans containing the earlier operations; artifact operations require
+`1.6`. Continuing an existing `1.5` plan preserves its version. Unknown fields,
+incompatible versions, invalid operations, and malformed progress are rejected.
 
 Component task identifiers use the service, component kind (`binary`, `config`,
 or `process`), original zero-based list position, and operation. For example, `app/process/0/enabled` identifies
@@ -145,6 +151,9 @@ Unnamed components display their one-based list position, such as `[1]`.
 A oneshot task uses operation `oneshot`; its `oneshot` payload holds `command`,
 `timeout`, and `triggers` containing the actual changed references. Services
 can also include orchestration tasks such as daemon reload.
+Operation `artifact` carries the pinned download/archive request, provenance
+token, observed identity and safe publication preconditions. It is supported
+only in version `1.6`. Artifact bytes and extracted trees are absent from JSON.
 Operations `path`, `storage`, and `mount` carry their corresponding typed
 payloads. Preparation can account for a device or empty filesystem produced by
 an earlier config without probing a resource that does not exist yet. Applying

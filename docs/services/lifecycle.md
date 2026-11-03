@@ -19,7 +19,7 @@ Selecting a service does not select its prerequisites.
 
 A `present` assignment prepares changes in these phases:
 
-1. **Binaries:** apply changed package requests in list declaration order.
+1. **Binaries:** apply changed package or artifact requests in list declaration order.
 2. **Unmask, when requested:** remove persistent and runtime masks before
    writing an owned full unit or operating on the process.
 3. **Configs:** apply changed typed configs in list declaration order, then owned
@@ -86,7 +86,7 @@ Within that service, Richt traverses the process list in reverse declaration
 order, stopping and verifying each systemd process before disabling it.
 Oneshot processes schedule no command during absence. These process
 tasks precede removal of owned units/drop-ins and configs. Configs are removed
-in reverse config-list order, then packages in reverse binary-list order,
+in reverse config-list order, then binaries in reverse binary-list order,
 followed by any required daemon reload. Thus absence reverses each collection separately and visits processes,
 configs, then binaries. An already missing unit is accepted; an external
 unit that remains installed is still stopped and disabled.
@@ -110,6 +110,16 @@ VG deletion; busy or unrelated consumers block destructive operations. Directory
 deletion refuses active mount boundaries. Prepared identities protect unfinished
 deletions from removing a replacement resource. Review each operation's data-loss
 scope in the plan; this is deletion, without secure-erasure guarantees.
+
+Downloaded files and archive trees are removed only with their protected
+ownership evidence. Unknown archive entries, changed entry types and replaced
+artifact roots block removal. Changes to tracked same-type archive children
+remain within the owned deletion scope. Mutable application state belongs outside an archive tree. See
+[artifact ownership](binaries/archive.md#owned-trees-drift-and-deletion).
+
+Artifacts under a new or currently unmounted filesystem require a separate
+mount apply before artifact preparation. Binaries precede configs within a
+service, and preparation must observe the actual artifact filesystem.
 
 Richt also requests package removal. The
 [RPM reference](binaries/rpm.md#removal) explains dependency removal and package

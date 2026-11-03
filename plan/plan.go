@@ -17,7 +17,10 @@ import (
 	"github.com/subuk/richt/inventory"
 )
 
-const Version = "1.5"
+const Version = "1.6"
+
+// LegacyVersion remains executable with its original resource shapes and progress.
+const LegacyVersion = "1.5"
 
 type Plan struct {
 	Version string `json:"version"`
@@ -39,18 +42,19 @@ type Connection struct {
 	Sudo bool   `json:"sudo,omitempty"`
 }
 type Task struct {
-	ID        string         `json:"id"`
-	Service   string         `json:"service"`
-	Component string         `json:"component"`
-	Operation string         `json:"operation"`
-	File      *FileChange    `json:"file,omitempty"`
-	RPM       *RPMChange     `json:"rpm,omitempty"`
-	Process   *ProcessChange `json:"process,omitempty"`
-	Oneshot   *OneshotChange `json:"oneshot,omitempty"`
-	Path      *PathChange    `json:"path,omitempty"`
-	Storage   *StorageChange `json:"storage,omitempty"`
-	Mount     *MountChange   `json:"mount,omitempty"`
-	Progress  Progress       `json:"progress"`
+	ID        string          `json:"id"`
+	Service   string          `json:"service"`
+	Component string          `json:"component"`
+	Operation string          `json:"operation"`
+	File      *FileChange     `json:"file,omitempty"`
+	RPM       *RPMChange      `json:"rpm,omitempty"`
+	Artifact  *ArtifactChange `json:"artifact,omitempty"`
+	Process   *ProcessChange  `json:"process,omitempty"`
+	Oneshot   *OneshotChange  `json:"oneshot,omitempty"`
+	Path      *PathChange     `json:"path,omitempty"`
+	Storage   *StorageChange  `json:"storage,omitempty"`
+	Mount     *MountChange    `json:"mount,omitempty"`
+	Progress  Progress        `json:"progress"`
 }
 type FileChange struct {
 	Path      string         `json:"path"`
@@ -188,6 +192,7 @@ type Action struct {
 	Kind        string
 	File        *FileChange
 	RPM         *RPMChange
+	Artifact    *ArtifactChange
 	Process     *ProcessChange
 	Oneshot     *OneshotChange
 	Path        *PathChange
@@ -219,8 +224,8 @@ func Bind(h Host, e Executor) (Executor, error) {
 }
 
 func (p *Plan) Validate() error {
-	if p.Version != Version {
-		return fmt.Errorf("incompatible plan version %q (supported %s)", p.Version, Version)
+	if p.Version != Version && p.Version != LegacyVersion {
+		return fmt.Errorf("incompatible plan version %q (supported %s and %s)", p.Version, LegacyVersion, Version)
 	}
 	seenHosts := map[string]bool{}
 	for _, h := range p.Hosts {
@@ -253,7 +258,16 @@ func (p *Plan) Validate() error {
 				return fmt.Errorf("host %s: empty or duplicate task ID", h.Name)
 			}
 			ids[t.ID] = true
+			if p.Version == LegacyVersion && (t.Artifact != nil || t.Operation == "artifact") {
+				return fmt.Errorf("task %s: artifact operations require plan version %s", t.ID, Version)
+			}
 			payloads := 0
+			if t.Artifact != nil {
+				payloads++
+				if err := t.Artifact.Validate(); err != nil {
+					return fmt.Errorf("task %s: %w", t.ID, err)
+				}
+			}
 			if t.File != nil {
 				payloads++
 			}
@@ -281,7 +295,8 @@ func (p *Plan) Validate() error {
 			if payloads > 1 {
 				return fmt.Errorf("task %s: mixed operation payloads", t.ID)
 			}
-			if (t.Path != nil) != (t.Operation == "path") ||
+			if (t.Artifact != nil) != (t.Operation == "artifact") ||
+				(t.Path != nil) != (t.Operation == "path") ||
 				(t.Storage != nil) != (t.Operation == "storage") ||
 				(t.Mount != nil) != (t.Operation == "mount") {
 				return fmt.Errorf("task %s: resource payload does not match operation", t.ID)

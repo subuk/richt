@@ -57,10 +57,12 @@ func (in *Inventory) Resolve(s Selectors) (*Resolved, error) {
 		rh := ResolvedHost{Name: h.Name, Tags: append([]string{}, h.Tags...), Transport: h.Transport, Vars: vars, Services: []ResolvedService{}}
 		sort.Strings(rh.Tags)
 		for _, a := range assignments {
+			service := ResolvedService{Assignment: a, Definition: normalizedService(in.Services[a.Name].Service)}
+			rh.OwnershipServices = append(rh.OwnershipServices, service)
 			if len(serviceSet) > 0 && !serviceSet[a.Name] {
 				continue
 			}
-			rh.Services = append(rh.Services, ResolvedService{Assignment: a, Definition: normalizedService(in.Services[a.Name].Service)})
+			rh.Services = append(rh.Services, service)
 		}
 		out.Hosts = append(out.Hosts, rh)
 	}
@@ -114,7 +116,7 @@ func normalizedService(s Service) Service {
 	// Copy slices before applying defaults so repeated resolutions are independent.
 	binaries := make([]Binary, len(s.Binaries))
 	for k, b := range s.Binaries {
-		if b.Manager == "" {
+		if b.Type == "rpm" && b.Manager == "" {
 			b.Manager = "dnf"
 		}
 		binaries[k] = b

@@ -28,7 +28,8 @@ The focused guides are:
   and [change reactions](services/reactions.md).
 - [Binaries](services/binaries/_index.md), [configs](services/configs/_index.md),
   and [processes](services/processes/_index.md): component concepts and the
-  current [RPM](services/binaries/rpm.md), [file](services/configs/files.md),
+  current [RPM](services/binaries/rpm.md), [download](services/binaries/download.md),
+  [archive](services/binaries/archive.md), [file](services/configs/files.md),
   [systemd](services/processes/systemd.md), and [oneshot](services/processes/oneshot.md) backends.
 - [Saved plans and apply](files.md): frozen executable inputs, review,
   confirmation, protected JSON, and locking.

@@ -89,6 +89,15 @@ An unversioned package is installed only if absent; an exact request can upgrade
 or downgrade. Plans retain the request while the target resolves the transaction
 at apply.
 
+## Downloaded artifacts
+
+[Downloads](binaries/download.md) install a SHA-256-pinned public HTTPS file;
+[archives](binaries/archive.md) safely extract a `tar.gz` into an exclusively
+owned tree. They use the same ordered binary phase and process reactions as
+packages. Target-side Python 3 and Linux atomic publication are required;
+pre-existing files/trees are not adopted. See the [K3s](../../examples/k3s/README.md)
+and [node_exporter](../../examples/node-exporter/README.md) examples.
+
 ## Process lifecycle
 
 [Processes](processes/_index.md) manage systemd runtime state and independent

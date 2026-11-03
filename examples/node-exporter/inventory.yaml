@@ -1,0 +1,47 @@
+# Linux amd64 archive + systemd; create the dedicated account first (README.md).
+tags:
+  example:
+    services:
+      node-exporter: {}
+services:
+  node-exporter:
+    order: 10
+    binaries:
+      - name: distribution
+        type: archive
+        url: https://github.com/prometheus/node_exporter/releases/download/v1.10.2/node_exporter-1.10.2.linux-amd64.tar.gz
+        sha256: c46e5b6f53948477ff3a19d97c58307394a29fe64a01905646f026ddc32cb65b
+        path: /opt/node_exporter
+        format: tar.gz
+        strip_components: 1
+        owner: root
+        group: root
+        timeout: 5m
+    processes:
+      - name: daemon
+        type: systemd
+        unit: richt-node-exporter.service
+        enabled: true
+        restart_on: [binary.distribution]
+        unit_file:
+          owner: root
+          group: root
+          mode: "0644"
+          template:
+            inline: |
+              [Unit]
+              Description=Richt example node exporter
+              After=network.target
+
+              [Service]
+              User=node_exporter
+              Group=node_exporter
+              ExecStart=/opt/node_exporter/node_exporter --web.listen-address=127.0.0.1:19100
+              NoNewPrivileges=true
+
+              [Install]
+              WantedBy=multi-user.target
+hosts:
+  - name: example
+    tags: [example]
+    transport: {type: ssh, host: exporter-test, user: deploy, sudo: true}

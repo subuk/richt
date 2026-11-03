@@ -17,6 +17,8 @@ execution. Recorded results and their limits live in [validation](validation.md)
 | Plain files and directories | [Typed config paths](../examples/typed-configs/README.md) | Local existence and attribute management, preserved unmanaged contents, and explicit recursive removal. No block devices. |
 | Weighted variables and selection | [Two-host inventory](../examples/inventory/richt.yaml) | Safe to inspect with `inventory validate/show`; one local and one illustrative SSH host. Execution changes host configuration. |
 | Full package/config/process lifecycle | [Ready vmango package](../examples/vmango/README.md) | Disposable DNF 4/systemd Linux target, ready repository RPMs, required privileges. No custom RPM build. |
+| Pinned single executable | [K3s download](../examples/k3s/README.md) | Disposable Linux amd64/SSH target, Python 3.8+, HTTPS and sudo; binary only, no cluster setup or teardown. |
+| Pinned archive and process | [node_exporter archive](../examples/node-exporter/README.md) | Disposable Linux amd64/systemd/SSH target, Python 3.8+, existing dedicated account, protected destination and unused loopback port. |
 | Repository exclusion override | [Kubernetes packages](../examples/kubernetes/README.md) | DNF 4 target with root privileges; repository setup followed by pinned kubelet/kubeadm requests. Package setup only. |
 | Failure and manual continuation | [Continuation example](../examples/continuation/README.md) | Config-only deliberate partial failure, repair, and saved-plan resume. |
 | Two independent secret sources | [Secrets example](../examples/secrets/README.md) | Python 3 verifier and local Richt; dummy values, private temporary targets, frozen saved bytes, and automatic cleanup. |

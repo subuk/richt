@@ -87,7 +87,7 @@ func ObservePath(p *plan.PathChange) (bool, error) {
 }
 
 func (Local) ResolvePath(t plan.Task) ([]plan.Action, error) {
-	if t.Operation != "path" || t.Path == nil || t.File != nil || t.RPM != nil || t.Process != nil || t.Oneshot != nil || t.Storage != nil || t.Mount != nil {
+	if t.Operation != "path" || t.Artifact != nil || t.Path == nil || t.File != nil || t.RPM != nil || t.Process != nil || t.Oneshot != nil || t.Storage != nil || t.Mount != nil {
 		return nil, errors.New("invalid path task")
 	}
 	if err := t.Path.Validate(); err != nil {

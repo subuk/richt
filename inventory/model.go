@@ -57,9 +57,18 @@ type Binary struct {
 	Name            string `json:"name,omitempty" yaml:"name"`
 	Type            string `json:"type" yaml:"type"`
 	Manager         string `json:"manager,omitempty" yaml:"manager"`
-	Package         string `json:"package" yaml:"package"`
+	Package         string `json:"package,omitempty" yaml:"package"`
 	Version         string `json:"version,omitempty" yaml:"version"`
 	DisableExcludes string `json:"disable_excludes,omitempty" yaml:"disable_excludes"`
+	URL             string `json:"url,omitempty" yaml:"url"`
+	SHA256          string `json:"sha256,omitempty" yaml:"sha256"`
+	Path            string `json:"path,omitempty" yaml:"path"`
+	Owner           string `json:"owner,omitempty" yaml:"owner"`
+	Group           string `json:"group,omitempty" yaml:"group"`
+	Mode            string `json:"mode,omitempty" yaml:"mode"`
+	Timeout         string `json:"timeout,omitempty" yaml:"timeout"`
+	Format          string `json:"format,omitempty" yaml:"format"`
+	StripComponents int    `json:"strip_components,omitempty" yaml:"strip_components"`
 }
 
 type Template struct {
@@ -133,6 +142,9 @@ type ResolvedHost struct {
 	Transport Transport         `json:"transport"`
 	Vars      map[string]any    `json:"vars"`
 	Services  []ResolvedService `json:"services"`
+	// OwnershipServices retains all assignments for target-side ownership checks.
+	// Excluded services remain outside preparation, execution and inspection output.
+	OwnershipServices []ResolvedService `json:"-" yaml:"-"`
 }
 
 type ResolvedService struct {

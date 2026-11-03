@@ -114,6 +114,7 @@ agent, central server, NetBox, or Argo CD.
 | SSH controller | Richt and system OpenSSH `ssh` in `PATH`; local template and secret files for preparation. macOS has been used as a controller. |
 | SSH target | Linux shell and standard GNU coreutils/findutils, `getent`, plus the utilities needed by selected resources. No Go toolchain or Richt binary is needed there. |
 | RPM resources | DNF 4, or YUM 4 backed by DNF 4, and an RPM database. Repository/network access is needed when DNF executes the transaction. |
+| Download/archive binaries | Linux, Python 3.8+ standard library, GNU `readlink`, util-linux `findmnt`, target HTTPS connectivity and trusted CA certificates; filesystem support for atomic `renameat2` publication. No daemon or installed Richt binary on SSH targets. |
 | Systemd processes | systemd with `systemctl`; declared units or packages that supply them. |
 | Oneshot processes | The declared executable and its dependencies on the target; no systemd requirement. |
 | SELinux attributes | An SELinux-enabled Linux target whose kernel accepts the requested full label. Requests fail explicitly on other systems. |
@@ -128,8 +129,9 @@ Linux host acceptance. See [CI and releases](ci.md) for build coverage and
 [validation](validation.md) for the exact acceptance scenarios and evidence.
 
 Only selected resources need their backend capabilities. File-only use does
-not require DNF or systemd. Python 3 is used by repository example verifiers and
-acceptance harnesses; it is not required by the Richt CLI.
+not require DNF or systemd. Python 3.8+ is a target runtime requirement for
+download/archive binaries. Other resources do not acquire that requirement;
+Python 3 is also used by repository verifiers and acceptance harnesses.
 
 ## Privileges
 

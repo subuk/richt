@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/subuk/richt/artifact"
 	"github.com/subuk/richt/config"
 	"github.com/subuk/richt/inventory"
 	"github.com/subuk/richt/mount"
@@ -22,12 +23,13 @@ import (
 )
 
 type Local struct {
-	RPM     rpm.Backend
-	Systemd systemd.Backend
-	Oneshot oneshot.Backend
-	Files   *config.Target
-	Storage storage.Backend
-	Mount   mount.Backend
+	RPM       rpm.Backend
+	Artifacts artifact.Backend
+	Systemd   systemd.Backend
+	Oneshot   oneshot.Backend
+	Files     *config.Target
+	Storage   storage.Backend
+	Mount     mount.Backend
 	// Connect optionally supplies a target command boundary for SSH and sudo.
 	Connect func(inventory.Transport) (config.Target, error)
 }
@@ -68,6 +70,7 @@ func (e Local) ForHost(h plan.Host) (plan.Executor, error) {
 			return err
 		}}
 	}
+	e.Artifacts = artifact.Backend{RunInput: target.RunInput}
 	e.Files = &target
 	e.Storage = storage.Backend{Run: target.Run}
 	e.Mount = mount.Backend{Run: target.Run, RunInput: target.RunInput}
@@ -87,7 +90,7 @@ func host(h inventory.ResolvedHost) plan.Host {
 
 func (e Local) Resolve(t plan.Task) ([]plan.Action, error) {
 	resources := 0
-	for _, present := range []bool{t.File != nil, t.Path != nil, t.Storage != nil, t.Mount != nil, t.RPM != nil, t.Process != nil, t.Oneshot != nil} {
+	for _, present := range []bool{t.Artifact != nil, t.File != nil, t.Path != nil, t.Storage != nil, t.Mount != nil, t.RPM != nil, t.Process != nil, t.Oneshot != nil} {
 		if present {
 			resources++
 		}
@@ -95,16 +98,18 @@ func (e Local) Resolve(t plan.Task) ([]plan.Action, error) {
 	if resources > 1 {
 		return nil, errors.New("task contains mixed resource payloads")
 	}
-	if t.Path != nil && t.Operation != "path" || t.Storage != nil && t.Operation != "storage" || t.Mount != nil && t.Operation != "mount" {
+	if t.Artifact != nil && t.Operation != "artifact" || t.Path != nil && t.Operation != "path" || t.Storage != nil && t.Operation != "storage" || t.Mount != nil && t.Operation != "mount" {
 		return nil, errors.New("resource payload does not match operation")
 	}
-	if t.Operation == "daemon-reload" && (t.File != nil || t.RPM != nil || t.Process != nil || t.Oneshot != nil || t.Path != nil || t.Storage != nil || t.Mount != nil) {
+	if t.Operation == "daemon-reload" && (t.Artifact != nil || t.File != nil || t.RPM != nil || t.Process != nil || t.Oneshot != nil || t.Path != nil || t.Storage != nil || t.Mount != nil) {
 		return nil, errors.New("daemon-reload task must not contain a resource payload")
 	}
 	if t.Oneshot != nil && t.Operation != "oneshot" {
 		return nil, errors.New("unexpected oneshot payload")
 	}
 	switch t.Operation {
+	case "artifact":
+		return e.Artifacts.Resolve(t)
 	case "path":
 		return (config.Local{}).ResolvePath(t)
 	case "storage":
@@ -125,6 +130,8 @@ func (e Local) Resolve(t plan.Task) ([]plan.Action, error) {
 }
 func (e Local) Execute(ctx context.Context, a plan.Action) error {
 	switch a.Kind {
+	case "ensure-artifact", "remove-artifact":
+		return e.Artifacts.Execute(ctx, a)
 	case "ensure-path", "remove-path":
 		if e.Files != nil {
 			return e.Files.ExecutePath(ctx, a)
@@ -162,9 +169,10 @@ type preparedService struct {
 }
 
 type preparedBinary struct {
-	index  int
-	name   string
-	change *plan.RPMChange
+	index    int
+	name     string
+	change   *plan.RPMChange
+	artifact *plan.ArtifactChange
 }
 
 func label(name string, index int) string {
@@ -239,11 +247,18 @@ func (e Local) Diff(ctx context.Context, r *inventory.Resolved) (*plan.Plan, err
 				return nil
 			}
 			for index, binary := range s.Definition.Binaries {
-				c, err := rpm.Prepare(binary, s.State)
+				b := preparedBinary{index: index, name: binary.Name}
+				var err error
+				switch binary.Type {
+				case "download", "archive":
+					b.artifact, err = artifact.Prepare(binary, s.State)
+				default:
+					b.change, err = rpm.Prepare(binary, s.State)
+				}
 				if err != nil {
 					return nil, fmt.Errorf("service %s binary %s: %w", s.Name, label(binary.Name, index), err)
 				}
-				ps.binaries = append(ps.binaries, preparedBinary{index: index, name: binary.Name, change: c})
+				ps.binaries = append(ps.binaries, b)
 			}
 			for _, index := range positions(len(s.Definition.Configs), s.State == "absent") {
 				c := s.Definition.Configs[index]
@@ -285,8 +300,18 @@ func (e Local) Diff(ctx context.Context, r *inventory.Resolved) (*plan.Plan, err
 		}
 		bound[hi] = executor.(Local)
 		checkedManagers := map[string]bool{}
+		checkedArtifacts := false
 		for _, service := range prepared[hi] {
 			for _, prepared := range service.binaries {
+				if prepared.artifact != nil {
+					if !checkedArtifacts {
+						if err := bound[hi].Artifacts.Check(ctx); err != nil {
+							return nil, fmt.Errorf("host %s: %w", h.Name, err)
+						}
+						checkedArtifacts = true
+					}
+					continue
+				}
 				binary := prepared.change
 				if !checkedManagers[binary.Manager] {
 					if err := bound[hi].RPM.CheckManager(ctx, binary.Manager); err != nil {
@@ -300,6 +325,13 @@ func (e Local) Diff(ctx context.Context, r *inventory.Resolved) (*plan.Plan, err
 	for hi, h := range r.Hosts {
 		ph := host(h)
 		sequence := newConfigSequence()
+		ownership := prepared[hi]
+		if len(h.OwnershipServices) > 0 {
+			ownership = ownershipPaths(h.OwnershipServices)
+		}
+		if err := bound[hi].checkArtifactPaths(ctx, ownership); err != nil {
+			return nil, fmt.Errorf("host %s: %w", h.Name, err)
+		}
 		if err := bound[hi].checkConfigPaths(ctx, prepared[hi]); err != nil {
 			return nil, fmt.Errorf("host %s: %w", h.Name, err)
 		}
@@ -321,10 +353,18 @@ func (e Local) observe(ctx context.Context, ps preparedService, sequence *config
 	unitChanged := map[string]bool{}
 	daemonReload := false
 	var binaries, files, processes, unmasks []plan.Task
+	packageChanged := false
 	for _, position := range positions(len(ps.binaries), absent) {
 		binary := ps.binaries[position]
-		c := binary.change
-		yes, err := e.RPM.Observe(ctx, c)
+		var yes bool
+		var err error
+		op := "rpm"
+		if binary.artifact != nil {
+			op = "artifact"
+			yes, err = e.Artifacts.Observe(ctx, binary.artifact)
+		} else {
+			yes, err = e.RPM.Observe(ctx, binary.change)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -332,8 +372,9 @@ func (e Local) observe(ctx context.Context, ps preparedService, sequence *config
 			if binary.name != "" {
 				changed["binary."+binary.name] = true
 			}
-			t := task(s.Name, "binary/"+strconv.Itoa(binary.index), "binary/"+label(binary.name, binary.index), "rpm")
-			t.RPM = c
+			t := task(s.Name, "binary/"+strconv.Itoa(binary.index), "binary/"+label(binary.name, binary.index), op)
+			t.RPM, t.Artifact = binary.change, binary.artifact
+			packageChanged = packageChanged || binary.change != nil
 			binaries = append(binaries, t)
 		}
 	}
@@ -504,7 +545,7 @@ func (e Local) observe(ctx context.Context, ps preparedService, sequence *config
 				return nil, fmt.Errorf("process %s: reload is unsupported or cannot be verified before installation; provide a unit_file or override with ExecReload", processLabels[name])
 			}
 		}
-		if !absent && status.Load == "not-found" && !hasFullUnit && len(binaries) == 0 && !(c.Masked != nil && (*c.Masked || c.State == "stopped")) {
+		if !absent && status.Load == "not-found" && !hasFullUnit && !packageChanged && !(c.Masked != nil && (*c.Masked || c.State == "stopped")) {
 			return nil, fmt.Errorf("process %s: unit %s does not exist and no package installation supplies it", processLabels[name], v.Unit)
 		}
 		var maskTask *plan.Task
@@ -522,9 +563,9 @@ func (e Local) observe(ctx context.Context, ps preparedService, sequence *config
 		}
 		c.Masked = nil
 		var enableTask *plan.Task
-		if c.Enabled != nil && (unmaskRequested || (status.Load != "not-found" && systemd.Enabled(status) != *c.Enabled) || (!absent && status.Load == "not-found" && (*c.Enabled || hasFullUnit || len(binaries) > 0))) {
+		if c.Enabled != nil && (unmaskRequested || (status.Load != "not-found" && systemd.Enabled(status) != *c.Enabled) || (!absent && status.Load == "not-found" && (*c.Enabled || hasFullUnit || packageChanged))) {
 			ec := *c
-			if unmaskRequested && !*c.Enabled && !hasFullUnit && len(binaries) == 0 {
+			if unmaskRequested && !*c.Enabled && !hasFullUnit && !packageChanged {
 				ec.MissingOK = true
 			}
 			t := task(s.Name, "process/"+name+"/enabled", "process/"+label(v.Name, index)+"/enabled", "systemd-enable")
@@ -559,7 +600,7 @@ func (e Local) observe(ctx context.Context, ps preparedService, sequence *config
 		out = append(out, unmasks...)
 		out = append(out, files...)
 	}
-	if daemonReload || len(unitChanged) > 0 || (len(binaries) > 0 && hasSystemd) {
+	if daemonReload || len(unitChanged) > 0 || (packageChanged && hasSystemd) {
 		out = append(out, task(s.Name, "systemd/daemon-reload", "systemd/daemon-reload", "daemon-reload"))
 	}
 	if !absent {

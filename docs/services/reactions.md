@@ -22,7 +22,8 @@ processes:
 ```
 
 Only linked components whose diff actually changes contribute a reaction,
-including attributes, plain-path creation, storage operations, and mount/fstab
+including downloaded-file or archive changes and tracked drift repairs,
+attributes, plain-path creation, storage operations, and mount/fstab
 changes. Unmanaged plain-file contents and directory children do not cause a
 change. Each typed config is referenced through its optional `name`, independently
 of its backend resource identity. Unrelated changes do not trigger a reaction.
