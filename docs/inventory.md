@@ -143,6 +143,13 @@ are structurally checked without contacting download servers. [Reactions](servic
 order for present services and reverse traversal of each collection for absence.
 Components have no dependency graph.
 
+[Local user and group configs](services/configs/accounts.md) accept `type: user`
+with required `user` and primary `group`, or `type: group` with required `group`.
+Optional `uid`/`gid`, `system`, home/shell/comment and exact supplementary
+membership have strict per-type fields. Omitted memberships preserve existing
+state; `supplementary_groups: []` explicitly clears local memberships. Inventory
+inspection checks structure only and never resolves target accounts.
+
 ## Variable merging
 
 Tags are processed by ascending `order`, which defaults to zero when omitted.
@@ -187,6 +194,14 @@ Target-side preparation also checks aliases that resolve to the same resource.
 Inventory inspection performs only structural checks and never probes devices.
 An absent directory cannot contain a declared path owned by another assigned
 service; service filtering does not waive that deletion-scope conflict.
+
+User and group configs claim their respective account names and explicit
+numeric UID/GID values. Duplicate claims are rejected across all assignments
+on each selected host before service filtering, including absent assignments.
+User and group namespaces remain independent; a user's primary `group` is a
+reference rather than a group ownership claim.
+Account management conflicts with whole-file ownership of `/etc/passwd`,
+`/etc/shadow`, `/etc/group`, or `/etc/gshadow` on the same selected host.
 
 
 For a reproducible file conflict, change the repository config target to

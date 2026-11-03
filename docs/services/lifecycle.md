@@ -49,6 +49,14 @@ configs. Configs below a freshly created mount use its planned empty filesystem;
 preparation does not read the hidden mount-point directory. Activate an existing
 unmounted filesystem before preparing configs that need to observe its contents.
 
+Local accounts use this same sequence: declare groups before users, then files
+and directories owned by them. Preparation projects preceding account configs
+for later ordinary-file ownership references. Binaries still precede configs:
+use an earlier account service if a package needs the account before
+installation. Download/archive ownership observation needs existing accounts;
+apply account creation separately before preparing those artifacts. Selecting
+a later service does not include its account prerequisites.
+
 This orders Richt's tasks without creating systemd unit
 dependencies or checking application readiness.
 
@@ -110,6 +118,12 @@ VG deletion; busy or unrelated consumers block destructive operations. Directory
 deletion refuses active mount boundaries. Prepared identities protect unfinished
 deletions from removing a replacement resource. Review each operation's data-loss
 scope in the plan; this is deletion, without secure-erasure guarantees.
+
+Local user and group configs also remove in reverse config order. User removal
+does not purge a home directory or implicitly remove a same-name group. Group
+removal must be explicitly declared and fails while any user still uses it as
+a primary group. Files owned by removed numeric identities remain unchanged.
+See [local accounts](configs/accounts.md) for membership and removal boundaries.
 
 Downloaded files and archive trees are removed only with their protected
 ownership evidence. Unknown archive entries, changed entry types and replaced

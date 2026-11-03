@@ -129,8 +129,9 @@ Apply uses the prepared contents and attributes without reopening templates,
 reading secrets, or comparing current bytes with the old diff. It creates
 necessary parent directories. Existing unspecified ownership and permissions
 are preserved; new files default to mode 0644 and the execution user's normal
-ownership. Explicit owner/group names must already exist on the target. They
-are resolved during observation and again at apply, so numeric IDs may change
+ownership. Explicit owner/group names must exist on the target or be created
+by preceding [local account configs](accounts.md). They are resolved during
+observation and again at apply, so numeric IDs may change
 between preparation and execution.
 
 Ordinary file access follows target and parent symlinks. Removal unlinks the

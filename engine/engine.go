@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/subuk/richt/accounts"
 	"github.com/subuk/richt/artifact"
 	"github.com/subuk/richt/config"
 	"github.com/subuk/richt/inventory"
@@ -23,6 +24,7 @@ import (
 )
 
 type Local struct {
+	Accounts  accounts.Backend
 	RPM       rpm.Backend
 	Artifacts artifact.Backend
 	Systemd   systemd.Backend
@@ -73,6 +75,7 @@ func (e Local) ForHost(h plan.Host) (plan.Executor, error) {
 	e.Artifacts = artifact.Backend{RunInput: target.RunInput}
 	e.Files = &target
 	e.Storage = storage.Backend{Run: target.Run}
+	e.Accounts = accounts.Backend{Runner: target.Run}
 	e.Mount = mount.Backend{Run: target.Run, RunInput: target.RunInput}
 	e.RPM = rpm.Backend{Run: target.Run}
 	e.Systemd = systemd.Backend{Run: target.Run, ReadFile: target.ReadFile, Glob: target.Glob}
@@ -90,7 +93,7 @@ func host(h inventory.ResolvedHost) plan.Host {
 
 func (e Local) Resolve(t plan.Task) ([]plan.Action, error) {
 	resources := 0
-	for _, present := range []bool{t.Artifact != nil, t.File != nil, t.Path != nil, t.Storage != nil, t.Mount != nil, t.RPM != nil, t.Process != nil, t.Oneshot != nil} {
+	for _, present := range []bool{t.Account != nil, t.Artifact != nil, t.File != nil, t.Path != nil, t.Storage != nil, t.Mount != nil, t.RPM != nil, t.Process != nil, t.Oneshot != nil} {
 		if present {
 			resources++
 		}
@@ -98,16 +101,18 @@ func (e Local) Resolve(t plan.Task) ([]plan.Action, error) {
 	if resources > 1 {
 		return nil, errors.New("task contains mixed resource payloads")
 	}
-	if t.Artifact != nil && t.Operation != "artifact" || t.Path != nil && t.Operation != "path" || t.Storage != nil && t.Operation != "storage" || t.Mount != nil && t.Operation != "mount" {
+	if t.Account != nil && t.Operation != "account" || t.Artifact != nil && t.Operation != "artifact" || t.Path != nil && t.Operation != "path" || t.Storage != nil && t.Operation != "storage" || t.Mount != nil && t.Operation != "mount" {
 		return nil, errors.New("resource payload does not match operation")
 	}
-	if t.Operation == "daemon-reload" && (t.Artifact != nil || t.File != nil || t.RPM != nil || t.Process != nil || t.Oneshot != nil || t.Path != nil || t.Storage != nil || t.Mount != nil) {
+	if t.Operation == "daemon-reload" && (t.Account != nil || t.Artifact != nil || t.File != nil || t.RPM != nil || t.Process != nil || t.Oneshot != nil || t.Path != nil || t.Storage != nil || t.Mount != nil) {
 		return nil, errors.New("daemon-reload task must not contain a resource payload")
 	}
 	if t.Oneshot != nil && t.Operation != "oneshot" {
 		return nil, errors.New("unexpected oneshot payload")
 	}
 	switch t.Operation {
+	case "account":
+		return e.Accounts.Resolve(t)
 	case "artifact":
 		return e.Artifacts.Resolve(t)
 	case "path":
@@ -130,6 +135,8 @@ func (e Local) Resolve(t plan.Task) ([]plan.Action, error) {
 }
 func (e Local) Execute(ctx context.Context, a plan.Action) error {
 	switch a.Kind {
+	case "account":
+		return e.Accounts.Execute(ctx, a)
 	case "ensure-artifact", "remove-artifact":
 		return e.Artifacts.Execute(ctx, a)
 	case "ensure-path", "remove-path":
@@ -287,6 +294,22 @@ func (e Local) Diff(ctx context.Context, r *inventory.Resolved) (*plan.Plan, err
 					}
 				}
 			}
+			if s.State == "absent" {
+				// Owned process definitions are written after configs when present;
+				// remove them before reversing the config list and its accounts.
+				ordered := make([]preparedFile, 0, len(ps.files))
+				for _, f := range ps.files {
+					if strings.HasPrefix(f.id, "process/") {
+						ordered = append(ordered, f)
+					}
+				}
+				for _, f := range ps.files {
+					if !strings.HasPrefix(f.id, "process/") {
+						ordered = append(ordered, f)
+					}
+				}
+				ps.files = ordered
+			}
 			prepared[hi] = append(prepared[hi], ps)
 		}
 	}
@@ -301,7 +324,16 @@ func (e Local) Diff(ctx context.Context, r *inventory.Resolved) (*plan.Plan, err
 		bound[hi] = executor.(Local)
 		checkedManagers := map[string]bool{}
 		checkedArtifacts := false
+		checkedAccounts := false
 		for _, service := range prepared[hi] {
+			for _, f := range service.files {
+				if c := f.definition; c != nil && (c.Type == "user" || c.Type == "group") && !checkedAccounts {
+					if err := bound[hi].Accounts.Check(ctx); err != nil {
+						return nil, fmt.Errorf("host %s: %w", h.Name, err)
+					}
+					checkedAccounts = true
+				}
+			}
 			for _, prepared := range service.binaries {
 				if prepared.artifact != nil {
 					if !checkedArtifacts {
@@ -330,6 +362,9 @@ func (e Local) Diff(ctx context.Context, r *inventory.Resolved) (*plan.Plan, err
 			ownership = ownershipPaths(h.OwnershipServices)
 		}
 		if err := bound[hi].checkArtifactPaths(ctx, ownership); err != nil {
+			return nil, fmt.Errorf("host %s: %w", h.Name, err)
+		}
+		if err := checkAccountOrder(prepared[hi]); err != nil {
 			return nil, fmt.Errorf("host %s: %w", h.Name, err)
 		}
 		if err := bound[hi].checkConfigPaths(ctx, prepared[hi]); err != nil {
@@ -435,6 +470,13 @@ func (e Local) observe(ctx context.Context, ps preparedService, sequence *config
 			}
 			continue
 		}
+		ownership, err := sequence.ownership(f.file.Owner, f.file.Group, f.file.State)
+		if err != nil {
+			if f.file.Sensitive {
+				err = errors.New("sensitive file observation failed")
+			}
+			return nil, fmt.Errorf("%s: %w", f.component, err)
+		}
 		hidden, err := e.hiddenConfigPath(ctx, sequence, f.file.Path, f.file.State)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", f.component, err)
@@ -453,13 +495,13 @@ func (e Local) observe(ctx context.Context, ps preparedService, sequence *config
 		}
 		var yes bool
 		if (unmaskFullUnit || hidden) && e.Files != nil {
-			yes, err = e.Files.ObserveMissing(ctx, f.file)
+			yes, err = e.Files.ObserveMissing(ctx, f.file, ownership)
 		} else if unmaskFullUnit || hidden {
-			yes, err = config.ObserveMissing(f.file)
+			yes, err = config.ObserveMissing(f.file, ownership)
 		} else if e.Files != nil {
-			yes, err = e.Files.Observe(ctx, f.file)
+			yes, err = e.Files.Observe(ctx, f.file, ownership)
 		} else {
-			yes, err = config.Observe(f.file)
+			yes, err = config.Observe(f.file, ownership)
 		}
 		if err != nil {
 			if f.file.Sensitive {

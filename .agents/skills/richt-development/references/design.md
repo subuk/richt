@@ -158,6 +158,33 @@ Important invariants across those contracts:
   absence deletes their contents and data as described below. Removing an assignment
   alone does not request deletion.
 
+## Local user and group configs
+
+The accepted account extension adds ordered `user` and `group` configs, using
+local GNU getent observations and shadow-utils commands through local/SSH
+transports. See [local accounts](../../../../docs/services/configs/accounts.md)
+for fields, defaults, membership, capability checks and removal semantics.
+Names and explicit numeric IDs have one owner per selected host, checked before
+service filtering. Whole-file ownership of account databases conflicts with
+account configs. UID/GID migration and renaming remain unsupported.
+
+Preceding groups and users are projected during preparation so ordinary file,
+directory, template and owned systemd-file configs can use accounts created by
+the same plan. Config order remains explicit. Owned process definitions are
+removed before reversed configs, allowing their owners to be removed afterwards.
+User removal preserves home data and same-name groups through a private mount
+namespace with a private login.defs policy; host policy is unchanged. This
+requires the documented namespace capability. Changing a user's primary group
+retains shadow-utils' documented home-file group ownership side effect.
+
+The account operation is an additive version 1.6 payload. It fixes creation,
+update or deletion inputs, existing numeric identities and group dependencies.
+Execution checks those preconditions and verifies results; an unfinished task
+may accept its already matching result. Automatic IDs are allocated at apply,
+so creation retries cannot distinguish an independently created account with
+exactly the same requested attributes. Passwords, external directory services,
+SSH keys, account expiry and login policy remain outside this extension.
+
 ## Executable plans and progress
 
 RPM requests optionally retain `disable_excludes`, a single DNF repository ID

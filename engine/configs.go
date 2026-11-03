@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/subuk/richt/accounts"
 	"github.com/subuk/richt/config"
 	"github.com/subuk/richt/inventory"
 	"github.com/subuk/richt/plan"
@@ -15,8 +16,9 @@ import (
 // configSequence contains only the declared effects preceding the current
 // config on this host. It does not select prerequisites or reorder components.
 type configSequence struct {
-	storage storage.Preparation
-	mounts  []*plan.MountChange
+	accounts accounts.Preparation
+	storage  storage.Preparation
+	mounts   []*plan.MountChange
 }
 
 func newConfigSequence() *configSequence {
@@ -154,7 +156,16 @@ func (e Local) observeTyped(ctx context.Context, service inventory.ResolvedServi
 	c := *f.definition
 	t := task(service.Name, f.id, f.component, "")
 	switch c.Type {
+	case "user", "group":
+		t.Operation = "account"
+		change, changed, err := e.Accounts.Prepare(ctx, c, service.State, &sequence.accounts)
+		t.Account = change
+		return t, changed, err
 	case "file", "directory":
+		ownership, err := sequence.ownership(c.Owner, c.Group, service.State)
+		if err != nil {
+			return t, false, err
+		}
 		t.Operation = "path"
 		p, err := config.PreparePath(c, service.State)
 		if err != nil {
@@ -168,15 +179,15 @@ func (e Local) observeTyped(ctx context.Context, service inventory.ResolvedServi
 		var changed bool
 		if e.Files != nil {
 			if hidden {
-				changed, err = e.Files.ObservePathMissing(ctx, p)
+				changed, err = e.Files.ObservePathMissing(ctx, p, ownership)
 			} else {
-				changed, err = e.Files.ObservePath(ctx, p)
+				changed, err = e.Files.ObservePath(ctx, p, ownership)
 			}
 		} else {
 			if hidden {
-				changed, err = (config.Local{}).ObservePathMissing(ctx, p)
+				changed, err = (config.Local{}).ObservePathMissing(ctx, p, ownership)
 			} else {
-				changed, err = (config.Local{}).ObservePath(ctx, p)
+				changed, err = (config.Local{}).ObservePath(ctx, p, ownership)
 			}
 		}
 		return t, changed, err

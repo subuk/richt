@@ -15,6 +15,7 @@ execution. Recorded results and their limits live in [validation](validation.md)
 | First local file | [Quickstart](quickstart.md) | A fresh temporary directory; no root, RPM, or systemd. Create/update/no changes/explicit removal. |
 | Split inventory and service files | [File inventory](../examples/files/inventory.yaml) and [service](../examples/files/service.yaml) | Local `/var/tmp/richt-example/greeting.conf`; template path relative to the service file. |
 | Plain files and directories | [Typed config paths](../examples/typed-configs/README.md) | Local existence and attribute management, preserved unmanaged contents, and explicit recursive removal. No block devices. |
+| Local accounts and owned paths | [Users and groups](../examples/accounts/README.md) | Disposable Linux host with shadow utilities and GNU/glibc `getent`; root and mount namespace privilege for removal. Groups precede users and owned files. |
 | Weighted variables and selection | [Two-host inventory](../examples/inventory/richt.yaml) | Safe to inspect with `inventory validate/show`; one local and one illustrative SSH host. Execution changes host configuration. |
 | Full package/config/process lifecycle | [Ready vmango package](../examples/vmango/README.md) | Disposable DNF 4/systemd Linux target, ready repository RPMs, required privileges. No custom RPM build. |
 | Pinned single executable | [K3s download](../examples/k3s/README.md) | Disposable Linux amd64/SSH target, Python 3.8+, HTTPS and sudo; binary only, no cluster setup or teardown. |

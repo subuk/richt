@@ -77,28 +77,36 @@ type Template struct {
 }
 
 type Config struct {
-	Name       string     `json:"name,omitempty" yaml:"name"`
-	Type       string     `json:"type,omitempty" yaml:"type"`
-	Path       string     `json:"path" yaml:"path"`
-	Owner      string     `json:"owner,omitempty" yaml:"owner"`
-	Group      string     `json:"group,omitempty" yaml:"group"`
-	Mode       string     `json:"mode,omitempty" yaml:"mode"`
-	Template   Template   `json:"template" yaml:"template"`
-	Sensitive  bool       `json:"sensitive,omitempty" yaml:"sensitive"`
-	SELinux    string     `json:"selinux,omitempty" yaml:"selinux"`
-	Validate   *Validator `json:"validate,omitempty" yaml:"validate"`
-	Array      string     `json:"array,omitempty" yaml:"array"`
-	Level      string     `json:"level,omitempty" yaml:"level"`
-	Metadata   string     `json:"metadata,omitempty" yaml:"metadata"`
-	Members    []string   `json:"members,omitempty" yaml:"members"`
-	VG         string     `json:"vg,omitempty" yaml:"vg"`
-	Devices    []string   `json:"devices,omitempty" yaml:"devices"`
-	LV         string     `json:"lv,omitempty" yaml:"lv"`
-	Size       string     `json:"size,omitempty" yaml:"size"`
-	Filesystem string     `json:"filesystem,omitempty" yaml:"filesystem"`
-	Source     string     `json:"source,omitempty" yaml:"source"`
-	Target     string     `json:"target,omitempty" yaml:"target"`
-	Options    []string   `json:"options,omitempty" yaml:"options"`
+	Name                string     `json:"name,omitempty" yaml:"name"`
+	Type                string     `json:"type,omitempty" yaml:"type"`
+	Path                string     `json:"path" yaml:"path"`
+	Owner               string     `json:"owner,omitempty" yaml:"owner"`
+	Group               string     `json:"group,omitempty" yaml:"group"`
+	Mode                string     `json:"mode,omitempty" yaml:"mode"`
+	Template            Template   `json:"template" yaml:"template"`
+	Sensitive           bool       `json:"sensitive,omitempty" yaml:"sensitive"`
+	SELinux             string     `json:"selinux,omitempty" yaml:"selinux"`
+	Validate            *Validator `json:"validate,omitempty" yaml:"validate"`
+	Array               string     `json:"array,omitempty" yaml:"array"`
+	Level               string     `json:"level,omitempty" yaml:"level"`
+	Metadata            string     `json:"metadata,omitempty" yaml:"metadata"`
+	Members             []string   `json:"members,omitempty" yaml:"members"`
+	VG                  string     `json:"vg,omitempty" yaml:"vg"`
+	Devices             []string   `json:"devices,omitempty" yaml:"devices"`
+	LV                  string     `json:"lv,omitempty" yaml:"lv"`
+	Size                string     `json:"size,omitempty" yaml:"size"`
+	Filesystem          string     `json:"filesystem,omitempty" yaml:"filesystem"`
+	Source              string     `json:"source,omitempty" yaml:"source"`
+	Target              string     `json:"target,omitempty" yaml:"target"`
+	Options             []string   `json:"options,omitempty" yaml:"options"`
+	User                string     `json:"user,omitempty" yaml:"user"`
+	UID                 *uint32    `json:"uid,omitempty" yaml:"uid"`
+	GID                 *uint32    `json:"gid,omitempty" yaml:"gid"`
+	System              *bool      `json:"system,omitempty" yaml:"system"`
+	Home                string     `json:"home,omitempty" yaml:"home"`
+	Shell               string     `json:"shell,omitempty" yaml:"shell"`
+	Comment             *string    `json:"comment,omitempty" yaml:"comment"`
+	SupplementaryGroups *[]string  `json:"supplementary_groups,omitempty" yaml:"supplementary_groups"`
 }
 
 // Validator checks a prepared candidate on the target before its content is written.

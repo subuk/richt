@@ -4,6 +4,52 @@ description: "Recorded Linux acceptance results, environment, commands, and limi
 weight: 120
 ---
 
+## Local accounts — 2026-11-03
+
+User/group configs were exercised on an authorized AlmaLinux 10.2 x86_64 host
+with shadow-utils 4.15.0, glibc 2.39, util-linux 2.40.2, systemd 257 and SELinux
+Enforcing. Source was `7362897979337341f0017f4d0e1954c9c66e3b16` plus the
+account changes recorded with this report. The final local Linux binary SHA-256
+was `7976720ae84579dac6a08d9204b63047e69936f5df6cb4e0cffb65fa3045b5eb`;
+the SSH controller binary was
+`3cc82f040230dd5c7e7643960f0ac178a506f0701918d33bac2a3e368baa80b2`.
+The final local rerun includes the additional absent-account consumer preflight;
+SSH command execution is unchanged by that guard.
+
+| Suite | Result |
+| --- | --- |
+| Local account CLI harness | 21 checks passed |
+| Account CLI over SSH and explicit sudo | 21 checks passed |
+| Existing file/SELinux/progress/secret regression | 17 checks passed |
+| Existing oneshot and systemd process regression | 28 checks passed; no package transaction requested |
+| Existing file validators | 18 checks passed, including real sshd configuration validation |
+| Repository verification | `make check`, `make docs-check`, and relevant race tests passed |
+
+The account runs covered side-effect-free inspection and preparation, group/user
+ordering, planned file owners, saved apply without inventory, empty subsequent
+diffs, automatic and explicit IDs, exact and omitted supplementary memberships,
+config reactions, interrupted create/update/delete continuation, changed-UID
+refusal and recovery, reverse removal, and preservation of home data, same-name
+groups and the host login.defs checksum. Go tests cover external NSS conflicts,
+protected/duplicate IDs, malformed saved operations, absent-account consumers,
+and account ownership conflicts before service filtering.
+
+The first local run exposed an unsupported `useradd --key CREATE_MAIL_SPOOL=no`
+override in shadow-utils 4.15.0. The override was removed; mailbox creation now
+follows target defaults. Its fixtures were cleaned before the passing rerun.
+No host login policy was changed. Private plans, command logs and reports were
+retained; temporary users, groups, files and service units were removed.
+These checks do not establish LDAP/SSSD mutation support, other distributions,
+or exhaustive interruption recovery. User deletion requires the documented
+private mount namespace capability.
+
+Reproduce only on an authorized disposable Linux target:
+
+```sh
+python3 tests/integration/accounts.py --binary ./bin/richt-linux-amd64 --output /var/tmp/richt-accounts-local
+python3 tests/integration/accounts.py --binary ./bin/richt --ssh-host deploy@account-test.example --output /tmp/richt-accounts-ssh
+```
+
 ## Typed configs — 2026-11-03
 
 KRG-96 was exercised on three authorized AlmaLinux 10.2 x86_64 targets with

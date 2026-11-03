@@ -319,6 +319,8 @@ func configSchema(node *yaml.Node) error {
 		"lvm-vg":    "vg devices",
 		"lvm-lv":    "vg lv size filesystem",
 		"mount":     "source target filesystem options",
+		"user":      "user uid group system home shell comment supplementary_groups",
+		"group":     "group gid system",
 	}
 	list, ok := allowed[typ]
 	if !ok {
@@ -331,6 +333,28 @@ func configSchema(node *yaml.Node) error {
 	return mappingFields(node, func(key string, value *yaml.Node) error {
 		if !valid[key] {
 			return fmt.Errorf("line %d: field %s is not allowed: %s config cannot set %s", value.Line, key, typ, key)
+		}
+		if typ == "user" || typ == "group" {
+			value = dereference(value)
+			switch key {
+			case "uid", "gid":
+				return integer(value, "config "+key)
+			case "system":
+				if value.Kind != yaml.ScalarNode || value.Tag != "!!bool" {
+					return fmt.Errorf("line %d: config system must be a boolean", value.Line)
+				}
+			case "supplementary_groups":
+				return stringList(value, "config supplementary_groups")
+			case "comment":
+				if value.Kind != yaml.ScalarNode || value.Tag != "!!str" {
+					return fmt.Errorf("line %d: config comment must be a string", value.Line)
+				}
+			default:
+				if value.Kind != yaml.ScalarNode || value.Tag != "!!str" || value.Value == "" {
+					return fmt.Errorf("line %d: config %s must be a nonempty string", value.Line, key)
+				}
+			}
+			return nil
 		}
 		switch key {
 		case "members", "devices", "options":

@@ -292,9 +292,15 @@ func validateConfig(c Config) error {
 		typ = "template"
 	}
 	switch typ {
-	case "template", "file", "directory", "mdadm", "lvm-vg", "lvm-lv", "mount":
+	case "template", "file", "directory", "mdadm", "lvm-vg", "lvm-lv", "mount", "user", "group":
 	default:
-		return fmt.Errorf("type: expected template, file, directory, mdadm, lvm-vg, lvm-lv or mount")
+		return fmt.Errorf("type: expected template, file, directory, mdadm, lvm-vg, lvm-lv, mount, user or group")
+	}
+	if typ == "user" || typ == "group" {
+		return ValidateAccountConfig(c)
+	}
+	if hasAccountFields(c) {
+		return fmt.Errorf("%s config cannot set account fields", typ)
 	}
 
 	common := c.Path != "" || c.Owner != "" || c.Group != "" || c.Mode != "" || c.Template.File != "" || c.Template.Inline != nil || c.Sensitive || c.SELinux != "" || c.Validate != nil

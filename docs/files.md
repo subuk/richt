@@ -40,6 +40,10 @@ identities and deletion scope, filesystem creation requests, and mount/fstab
 operations. It contains progress for each task. Review its displayed actions, parameters, targets,
 checks, and branches, and trust its source before applying it.
 
+Local account operations also freeze the user/group name, explicit IDs and
+attributes, membership intent, observed identity, and allowed before/after
+states. Omitted optional fields remain unmanaged for existing accounts.
+
 ## Frozen inputs and execution boundaries
 
 Apply uses those prepared inputs even after the inventory, templates, or secret
@@ -78,6 +82,11 @@ Some operations deliberately use execution-time information:
   Their frozen fstab edits compose in declared config order, accepting only the
   expected before/after contents. Unexpected fstab edits fail instead of being
   overwritten. These preconditions do not recompute the diff.
+- Local account operations verify local identity and NSS conflicts before
+  mutation, then verify the requested result. Unfinished operations can recognize
+  their prepared result after interruption. ID allocation when omitted still
+  occurs on the target. Shadow utilities and local account databases remain
+  execution-time dependencies; these checks do not rebuild the plan.
 
 See [file configs](services/configs/files.md), [RPM binaries](services/binaries/rpm.md),
 [process lifecycle](services/lifecycle.md), and [SSH](ssh.md) for these boundaries.
@@ -158,6 +167,11 @@ Operations `path`, `storage`, and `mount` carry their corresponding typed
 payloads. Preparation can account for a device or empty filesystem produced by
 an earlier config without probing a resource that does not exist yet. Applying
 that plan still follows its original list order and verifies the saved inputs.
+
+Operation `account` carries local user/group requests, observed identity and
+before/after preconditions. It requires version `1.6`; this additive operation
+does not introduce a new schema version. Older readers reject the unknown
+operation. New readers reject account operations placed in a legacy `1.5` plan.
 
 Saved JSON contains real rendered text and patches, including old and new
 secret bytes. Sensitive display does not remove them from executable inputs.

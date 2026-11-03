@@ -19,6 +19,7 @@ func (in *Inventory) validateOwnership(host string, assignments []Assignment) er
 	unitPaths := []pathOwner{}
 	fstabEntries := false
 	fstabFile := false
+	accounts := false
 	type removal struct{ path, service string }
 	removals := []removal{}
 	claim := func(resource, service, component string) error {
@@ -65,6 +66,22 @@ func (in *Inventory) validateOwnership(host string, assignments []Assignment) er
 			component := "config." + componentLabel(c.Name, i)
 			resource := ""
 			switch c.Type {
+			case "user":
+				accounts = true
+				resource = "user " + c.User
+				if c.UID != nil {
+					if err := claim(fmt.Sprintf("user ID %d", *c.UID), a.Name, component); err != nil {
+						return err
+					}
+				}
+			case "group":
+				accounts = true
+				resource = "group " + c.Group
+				if c.GID != nil {
+					if err := claim(fmt.Sprintf("group ID %d", *c.GID), a.Name, component); err != nil {
+						return err
+					}
+				}
 			case "mdadm":
 				resource = "block device " + path.Clean(c.Array)
 				for _, device := range c.Members {
@@ -176,6 +193,13 @@ func (in *Inventory) validateOwnership(host string, assignments []Assignment) er
 	}
 	if fstabEntries && fstabFile {
 		return fmt.Errorf("host %q: /etc/fstab whole-file ownership conflicts with mount entry management", host)
+	}
+	if accounts {
+		for _, database := range []string{"/etc/passwd", "/etc/shadow", "/etc/group", "/etc/gshadow"} {
+			if owner, ok := owners["file "+database]; ok {
+				return fmt.Errorf("host %q: %s whole-file ownership by %s/%s conflicts with local account management", host, database, owner.service, owner.component)
+			}
+		}
 	}
 	return nil
 }

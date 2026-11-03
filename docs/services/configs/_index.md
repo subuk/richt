@@ -14,6 +14,8 @@ repository before a later service installs its package.
 | `template` (default) | [Rendered files](files.md), validators, attributes, SELinux, and sensitivity |
 | `file` | [Regular-file existence](paths.md) and optional attributes, preserving existing contents |
 | `directory` | [Directory existence](paths.md) and its own optional attributes |
+| `group` | [Local group](accounts.md) existence and optional numeric identity |
+| `user` | [Local user](accounts.md), primary group, attributes, and exact supplementary memberships |
 | `mdadm` | [RAID1 array](storage.md) with explicit members and optional XFS |
 | `lvm-vg` | [Volume group](storage.md) and backing physical volumes |
 | `lvm-lv` | [Linear logical volume](storage.md) with explicit size and optional XFS |
@@ -21,7 +23,7 @@ repository before a later service installs its package.
 
 Each type accepts only its own fields. Omitting `type` selects `template` and
 requires a template source. A component `name` is a reaction label; `path`,
-`array`, `vg`, `lv`, and `target` identify the managed resource independently.
+`array`, `vg`, `lv`, `target`, `user`, and `group` identify the managed resource independently.
 [Systemd-owned units and drop-ins](../processes/systemd.md#owned-units-and-drop-ins)
 accept only template fields.
 

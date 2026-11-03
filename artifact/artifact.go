@@ -117,7 +117,7 @@ func (b Backend) Observe(ctx context.Context, p *plan.ArtifactChange) (bool, err
 }
 
 func (Backend) Resolve(t plan.Task) ([]plan.Action, error) {
-	if t.Operation != "artifact" || t.Artifact == nil || t.File != nil || t.RPM != nil || t.Path != nil || t.Storage != nil || t.Mount != nil || t.Process != nil || t.Oneshot != nil {
+	if t.Operation != "artifact" || t.Artifact == nil || t.Account != nil || t.File != nil || t.RPM != nil || t.Path != nil || t.Storage != nil || t.Mount != nil || t.Process != nil || t.Oneshot != nil {
 		return nil, errors.New("invalid artifact task")
 	}
 	p := t.Artifact

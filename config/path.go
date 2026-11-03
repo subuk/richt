@@ -30,11 +30,11 @@ func PreparePath(c inventory.Config, state string) (*plan.PathChange, error) {
 	return p, p.Validate()
 }
 
-func (Local) ObservePath(ctx context.Context, p *plan.PathChange) (bool, error) {
+func (Local) ObservePath(ctx context.Context, p *plan.PathChange, anticipated ...Ownership) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
-	return ObservePath(p)
+	return ObservePath(p, anticipated...)
 }
 
 func pathStat(path string, follow bool) (*unix.Stat_t, error) {
@@ -61,13 +61,18 @@ func pathOwnership(p *plan.PathChange) (int, int, error) {
 	return ownership(&plan.FileChange{Owner: p.Owner, Group: p.Group})
 }
 
-func ObservePath(p *plan.PathChange) (bool, error) {
+func ObservePath(p *plan.PathChange, anticipated ...Ownership) (bool, error) {
 	if err := p.Validate(); err != nil {
 		return false, err
 	}
-	uid, gid, err := pathOwnership(p)
-	if err != nil {
-		return false, err
+	projection := projectedOwnership(anticipated)
+	uid, gid := -1, -1
+	if p.State != "absent" {
+		var err error
+		uid, gid, err = projection.local(&plan.FileChange{Owner: p.Owner, Group: p.Group})
+		if err != nil {
+			return false, err
+		}
 	}
 	st, err := pathStat(p.Path, p.State == "present")
 	if os.IsNotExist(err) {
@@ -83,11 +88,11 @@ func ObservePath(p *plan.PathChange) (bool, error) {
 	if p.State == "absent" {
 		return true, nil
 	}
-	return p.Mode != nil && uint32(st.Mode)&07777 != *p.Mode || uid != -1 && int(st.Uid) != uid || gid != -1 && int(st.Gid) != gid, nil
+	return projection.pending() || p.Mode != nil && uint32(st.Mode)&07777 != *p.Mode || uid != -1 && int(st.Uid) != uid || gid != -1 && int(st.Gid) != gid, nil
 }
 
 func (Local) ResolvePath(t plan.Task) ([]plan.Action, error) {
-	if t.Operation != "path" || t.Artifact != nil || t.Path == nil || t.File != nil || t.RPM != nil || t.Process != nil || t.Oneshot != nil || t.Storage != nil || t.Mount != nil {
+	if t.Operation != "path" || t.Account != nil || t.Artifact != nil || t.Path == nil || t.File != nil || t.RPM != nil || t.Process != nil || t.Oneshot != nil || t.Storage != nil || t.Mount != nil {
 		return nil, errors.New("invalid path task")
 	}
 	if err := t.Path.Validate(); err != nil {

@@ -54,6 +54,7 @@ type Task struct {
 	Path      *PathChange     `json:"path,omitempty"`
 	Storage   *StorageChange  `json:"storage,omitempty"`
 	Mount     *MountChange    `json:"mount,omitempty"`
+	Account   *AccountChange  `json:"account,omitempty"`
 	Progress  Progress        `json:"progress"`
 }
 type FileChange struct {
@@ -198,6 +199,7 @@ type Action struct {
 	Path        *PathChange
 	Storage     *StorageChange
 	Mount       *MountChange
+	Account     *AccountChange
 	Description []string
 }
 type Executor interface {
@@ -253,6 +255,7 @@ func (p *Plan) Validate() error {
 			return fmt.Errorf("host %s: SSH connection requires host", h.Name)
 		}
 		ids := map[string]bool{}
+		automaticGroups := map[string]bool{}
 		for _, t := range h.Tasks {
 			if t.ID == "" || ids[t.ID] {
 				return fmt.Errorf("host %s: empty or duplicate task ID", h.Name)
@@ -261,7 +264,24 @@ func (p *Plan) Validate() error {
 			if p.Version == LegacyVersion && (t.Artifact != nil || t.Operation == "artifact") {
 				return fmt.Errorf("task %s: artifact operations require plan version %s", t.ID, Version)
 			}
+			if p.Version == LegacyVersion && (t.Account != nil || t.Operation == "account") {
+				return fmt.Errorf("task %s: account operations require plan version %s", t.ID, Version)
+			}
 			payloads := 0
+			if t.Account != nil {
+				payloads++
+				if err := t.Account.Validate(); err != nil {
+					return fmt.Errorf("task %s: %w", t.ID, err)
+				}
+				for _, group := range t.Account.Groups {
+					if group.GID == nil && !automaticGroups[group.Name] {
+						return fmt.Errorf("task %s: group %s requires a preceding automatic group creation", t.ID, group.Name)
+					}
+				}
+				if t.Account.Kind == "group" {
+					automaticGroups[t.Account.Name] = t.Account.Operation == "create" && t.Account.GID == nil
+				}
+			}
 			if t.Artifact != nil {
 				payloads++
 				if err := t.Artifact.Validate(); err != nil {
@@ -295,7 +315,8 @@ func (p *Plan) Validate() error {
 			if payloads > 1 {
 				return fmt.Errorf("task %s: mixed operation payloads", t.ID)
 			}
-			if (t.Artifact != nil) != (t.Operation == "artifact") ||
+			if (t.Account != nil) != (t.Operation == "account") ||
+				(t.Artifact != nil) != (t.Operation == "artifact") ||
 				(t.Path != nil) != (t.Operation == "path") ||
 				(t.Storage != nil) != (t.Operation == "storage") ||
 				(t.Mount != nil) != (t.Operation == "mount") {

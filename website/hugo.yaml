@@ -76,6 +76,8 @@ module:
     - source: ../examples
       target: static/examples
       files:
+        - accounts/README.md
+        - accounts/inventory.yaml
         - continuation/inventory.yaml
         - continuation/README.md
         - files/inventory.yaml

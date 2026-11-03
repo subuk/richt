@@ -170,13 +170,13 @@ func TestPreparationErrorsBeforeChanges(t *testing.T) {
 		}
 	}
 	for _, field := range []string{"owner", "group"} {
-		c := inventory.Config{Path: path}
+		c := inventory.Config{Path: path, Template: inventory.Template{Inline: ptr("value")}}
 		if field == "owner" {
 			c.Owner = "richt-user-does-not-exist"
 		} else {
 			c.Group = "richt-group-does-not-exist"
 		}
-		f, err := config.Prepare(c, "absent", nil)
+		f, err := config.Prepare(c, "present", nil)
 		if err != nil {
 			t.Fatal(err)
 		}

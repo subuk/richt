@@ -1,0 +1,41 @@
+tags:
+  example:
+    services:
+      accounts: {}
+services:
+  accounts:
+    order: 10
+    configs:
+      - name: primary
+        type: group
+        group: richt-example
+        system: true
+      - name: extra
+        type: group
+        group: richt-example-extra
+        system: true
+      - name: account
+        type: user
+        user: richt-example
+        group: richt-example
+        system: true
+        home: /nonexistent
+        shell: /usr/sbin/nologin
+        comment: "Richt account example"
+        supplementary_groups: [richt-example-extra]
+      - name: data
+        type: directory
+        path: /var/tmp/richt-account-example
+        owner: richt-example
+        group: richt-example
+        mode: "0750"
+      - name: marker
+        type: file
+        path: /var/tmp/richt-account-example/marker
+        owner: richt-example
+        group: richt-example
+        mode: "0640"
+hosts:
+  - name: example
+    tags: [example]
+    transport: {type: local}

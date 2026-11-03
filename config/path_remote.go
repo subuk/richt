@@ -10,7 +10,7 @@ import (
 	"github.com/subuk/richt/plan"
 )
 
-func pathArgs(p *plan.PathChange) []string {
+func pathArgs(p *plan.PathChange, anticipated ...Ownership) []string {
 	mode := ""
 	if p.Mode != nil {
 		mode = strconv.FormatUint(uint64(*p.Mode), 8)
@@ -20,10 +20,14 @@ func pathArgs(p *plan.PathChange) []string {
 		device = strconv.FormatUint(p.Identity.Device, 10)
 		inode = strconv.FormatUint(p.Identity.Inode, 10)
 	}
-	return []string{p.Path, p.Owner, p.Group, "", p.State, p.Type, mode, device, inode}
+	owner, group := projectedOwnership(anticipated).observedNames(p.Owner, p.Group)
+	if p.State == "absent" {
+		owner, group = "", ""
+	}
+	return []string{p.Path, owner, group, "", p.State, p.Type, mode, device, inode}
 }
 
-func (t Target) ObservePath(ctx context.Context, p *plan.PathChange) (bool, error) {
+func (t Target) ObservePath(ctx context.Context, p *plan.PathChange, anticipated ...Ownership) (bool, error) {
 	if err := p.Validate(); err != nil {
 		return false, err
 	}
@@ -48,7 +52,7 @@ else
 %g' -- "$path"
 fi
 printf '%s\n%s\n' "$uid" "$gid"
-`, pathArgs(p)...)
+`, pathArgs(p, anticipated...)...)
 	if err != nil {
 		return false, err
 	}
@@ -74,25 +78,27 @@ printf '%s\n%s\n' "$uid" "$gid"
 	if p.State == "absent" {
 		return true, nil
 	}
-	return p.Mode != nil && uint64(*p.Mode) != numbers[2] || fields[6] != "-" && fields[6] != fields[4] || fields[7] != "-" && fields[7] != fields[5], nil
+	projection := projectedOwnership(anticipated)
+	owner, group := projection.remote(fields[6], fields[7])
+	return projection.pending() || p.Mode != nil && uint64(*p.Mode) != numbers[2] || owner != "-" && owner != fields[4] || group != "-" && group != fields[5], nil
 }
 
 func (Target) ResolvePath(task plan.Task) ([]plan.Action, error) { return (Local{}).ResolvePath(task) }
 
-func (t Target) ObservePathMissing(ctx context.Context, p *plan.PathChange) (bool, error) {
+func (t Target) ObservePathMissing(ctx context.Context, p *plan.PathChange, anticipated ...Ownership) (bool, error) {
 	if err := p.Validate(); err != nil {
 		return false, err
 	}
 	if p.State != "present" {
 		return false, errors.New("missing path observation requires present state")
 	}
-	if _, err := t.run(ctx, "set -eu\n"+targetAccounts, pathArgs(p)...); err != nil {
+	if _, err := t.run(ctx, "set -eu\n"+targetAccounts, pathArgs(p, anticipated...)...); err != nil {
 		return false, err
 	}
 	p.Identity = nil
 	return true, nil
 }
-func (Local) ObservePathMissing(ctx context.Context, p *plan.PathChange) (bool, error) {
+func (Local) ObservePathMissing(ctx context.Context, p *plan.PathChange, anticipated ...Ownership) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
@@ -102,7 +108,7 @@ func (Local) ObservePathMissing(ctx context.Context, p *plan.PathChange) (bool, 
 	if p.State != "present" {
 		return false, errors.New("missing path observation requires present state")
 	}
-	if _, _, err := pathOwnership(p); err != nil {
+	if _, _, err := projectedOwnership(anticipated).local(&plan.FileChange{Owner: p.Owner, Group: p.Group}); err != nil {
 		return false, err
 	}
 	p.Identity = nil

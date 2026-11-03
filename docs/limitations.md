@@ -8,7 +8,7 @@ weight: 110
 Richt currently implements local/SSH transport, explicit noninteractive sudo,
 strict local YAML inventory, RPM through DNF 4/YUM 4, checksum-pinned public
 HTTPS downloads and tar.gz archive trees, systemd and oneshot
-processes, templates, plain files/directories, RAID1, linear LVM, XFS and
+processes, templates, plain files/directories, local users/groups, RAID1, linear LVM, XFS and
 persistent mounts, and local YAML secret sources. See [installation](installation.md) and
 [validation](validation.md) for requirements and verified platforms. YUM 3,
 DNF 5, APT, non-systemd managers, URL inventory/templates, private authenticated
@@ -53,8 +53,17 @@ Template operations follow target and parent symlinks; removal unlinks the
 named entry. Templates have no special inode identity contract. Plain file and
 directory operations freeze the identity of an existing target and reject its
 replacement. Recursive directory removal refuses active mount boundaries.
-Named users/groups must exist. File parents are created as needed, but their
+Named users/groups must exist or be created by preceding account configs.
+File parents are created as needed, but their
 permissions are not independently declared resources.
+
+Account configs manage only local passwd/group identities; directory-backed NSS
+accounts are conflict checks rather than editable resources. Renaming, existing
+UID/GID changes, password/expiry management, and home-directory creation or
+purging are unsupported. Supplementary groups are exact only when explicitly
+listed; omission preserves them. User deletion preserves same-name groups using
+a private mount namespace and requires that target capability. See
+[local accounts](services/configs/accounts.md).
 
 ## Failure and removal
 

@@ -190,15 +190,19 @@ func Prepare(c inventory.Config, state string, vars map[string]any, lookups ...S
 }
 
 // Observe computes the final patch; apply never invokes it.
-func Observe(f *plan.FileChange) (changed bool, err error) {
+func Observe(f *plan.FileChange, anticipated ...Ownership) (changed bool, err error) {
 	defer func() {
 		if err != nil && f != nil && f.Sensitive {
 			err = errors.New("sensitive file observation failed")
 		}
 	}()
-	uid, gid, err := ownership(f)
-	if err != nil {
-		return false, err
+	projection := projectedOwnership(anticipated)
+	uid, gid := -1, -1
+	if f.State != "absent" {
+		uid, gid, err = projection.local(f)
+		if err != nil {
+			return false, err
+		}
 	}
 	if f.SELinux != "" {
 		if err := validateLabel(f.SELinux); err != nil {
@@ -256,7 +260,7 @@ func Observe(f *plan.FileChange) (changed bool, err error) {
 	if err = unix.Fstat(int(file.Fd()), &st); err != nil {
 		return false, err
 	}
-	changed = f.Write || f.Mode != nil && uint32(st.Mode)&07777 != *f.Mode || uid != -1 && int(st.Uid) != uid || gid != -1 && int(st.Gid) != gid
+	changed = projection.pending() || f.Write || f.Mode != nil && uint32(st.Mode)&07777 != *f.Mode || uid != -1 && int(st.Uid) != uid || gid != -1 && int(st.Gid) != gid
 	if f.SELinux != "" {
 		label, err := readLabel(file)
 		if err != nil {
@@ -269,7 +273,7 @@ func Observe(f *plan.FileChange) (changed bool, err error) {
 
 // ObserveMissing prepares a file known to become absent before its file task,
 // such as an owned unit after its explicitly requested unmask operation.
-func ObserveMissing(f *plan.FileChange) (changed bool, err error) {
+func ObserveMissing(f *plan.FileChange, anticipated ...Ownership) (changed bool, err error) {
 	defer func() {
 		if err != nil && f != nil && f.Sensitive {
 			err = errors.New("sensitive file observation failed")
@@ -281,7 +285,7 @@ func ObserveMissing(f *plan.FileChange) (changed bool, err error) {
 	if f.State != "present" {
 		return false, errors.New("missing file observation requires present state")
 	}
-	if _, _, err := ownership(f); err != nil {
+	if _, _, err := projectedOwnership(anticipated).local(f); err != nil {
 		return false, err
 	}
 	if f.SELinux != "" {
@@ -336,7 +340,7 @@ func ownership(f *plan.FileChange) (int, int, error) {
 type Local struct{}
 
 func (Local) Resolve(t plan.Task) ([]plan.Action, error) {
-	if t.Operation != "file" || t.Artifact != nil || t.File == nil || t.RPM != nil || t.Process != nil || t.Oneshot != nil {
+	if t.Operation != "file" || t.Account != nil || t.Artifact != nil || t.File == nil || t.RPM != nil || t.Process != nil || t.Oneshot != nil {
 		return nil, fmt.Errorf("unsupported operation %q", t.Operation)
 	}
 	f := t.File

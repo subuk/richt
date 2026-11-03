@@ -255,7 +255,7 @@ func (b Backend) Prepare(ctx context.Context, config inventory.Config, state str
 }
 
 func (Backend) Resolve(t plan.Task) ([]plan.Action, error) {
-	if t.Operation != "mount" || t.Artifact != nil || t.File != nil || t.RPM != nil || t.Process != nil || t.Oneshot != nil || t.Path != nil || t.Storage != nil {
+	if t.Operation != "mount" || t.Account != nil || t.Artifact != nil || t.File != nil || t.RPM != nil || t.Process != nil || t.Oneshot != nil || t.Path != nil || t.Storage != nil {
 		return nil, errors.New("invalid mount operation or mixed payload")
 	}
 	c := t.Mount

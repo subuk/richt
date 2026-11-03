@@ -22,7 +22,7 @@ type Backend struct {
 }
 
 func (Backend) Resolve(t plan.Task) ([]plan.Action, error) {
-	if t.Operation != "oneshot" || t.Artifact != nil || t.File != nil || t.RPM != nil || t.Process != nil {
+	if t.Operation != "oneshot" || t.Account != nil || t.Artifact != nil || t.File != nil || t.RPM != nil || t.Process != nil {
 		return nil, errors.New("invalid oneshot operation or mixed payload")
 	}
 	if err := t.Oneshot.Validate(); err != nil {

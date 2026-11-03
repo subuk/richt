@@ -13,7 +13,7 @@ import (
 func Validate(c *plan.StorageChange) error { return c.Validate() }
 
 func (b Backend) Resolve(t plan.Task) ([]plan.Action, error) {
-	if t.Operation != "storage" || t.Artifact != nil || t.File != nil || t.Path != nil || t.Mount != nil || t.RPM != nil || t.Process != nil || t.Oneshot != nil {
+	if t.Operation != "storage" || t.Account != nil || t.Artifact != nil || t.File != nil || t.Path != nil || t.Mount != nil || t.RPM != nil || t.Process != nil || t.Oneshot != nil {
 		return nil, errors.New("invalid storage task")
 	}
 	c := t.Storage

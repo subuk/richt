@@ -67,13 +67,17 @@ if [ -n "$4" ]; then
 fi
 `
 
-func targetFileArguments(f *plan.FileChange) []string {
-	return []string{f.Path, f.Owner, f.Group, f.SELinux, f.State}
+func targetFileArguments(f *plan.FileChange, anticipated ...Ownership) []string {
+	owner, group := projectedOwnership(anticipated).observedNames(f.Owner, f.Group)
+	if f.State == "absent" {
+		owner, group = "", ""
+	}
+	return []string{f.Path, owner, group, f.SELinux, f.State}
 }
 
 // Observe computes the patch and attribute changes on the target. Owner/group
 // names remain in the plan; their numeric identities are not frozen locally.
-func (t Target) Observe(ctx context.Context, f *plan.FileChange) (changed bool, err error) {
+func (t Target) Observe(ctx context.Context, f *plan.FileChange, anticipated ...Ownership) (changed bool, err error) {
 	defer func() {
 		if err != nil && f != nil && f.Sensitive {
 			err = errors.New("sensitive file observation failed")
@@ -99,7 +103,7 @@ else
   if [ -n "$4" ]; then stat -Lc '%C' -- "$path"; else printf '\n'; fi
   cat -- "$path"
 fi
-`, targetFileArguments(f)...)
+`, targetFileArguments(f, anticipated...)...)
 	if err != nil {
 		return false, err
 	}
@@ -137,8 +141,10 @@ fi
 	if f.Write {
 		f.Patch = udiff.Unified(f.Path, f.Path, string(old), f.Content)
 	}
-	changed = f.Write || (f.Mode != nil && *f.Mode != uint32(mode))
-	changed = changed || (string(fields[4]) != "-" && !bytes.Equal(fields[2], fields[4])) || (string(fields[5]) != "-" && !bytes.Equal(fields[3], fields[5]))
+	projection := projectedOwnership(anticipated)
+	owner, group := projection.remote(string(fields[4]), string(fields[5]))
+	changed = projection.pending() || f.Write || (f.Mode != nil && *f.Mode != uint32(mode))
+	changed = changed || (owner != "-" && string(fields[2]) != owner) || (group != "-" && string(fields[3]) != group)
 	changed = changed || (f.SELinux != "" && string(fields[6]) != f.SELinux)
 	return changed, nil
 }
@@ -147,7 +153,7 @@ func (Target) Resolve(task plan.Task) ([]plan.Action, error) { return (Local{}).
 
 // ObserveMissing checks target capabilities and accounts without opening a file
 // whose prepared predecessor task will remove it, for example a systemd mask.
-func (t Target) ObserveMissing(ctx context.Context, f *plan.FileChange) (changed bool, err error) {
+func (t Target) ObserveMissing(ctx context.Context, f *plan.FileChange, anticipated ...Ownership) (changed bool, err error) {
 	defer func() {
 		if err != nil && f != nil && f.Sensitive {
 			err = errors.New("sensitive file observation failed")
@@ -159,7 +165,7 @@ func (t Target) ObserveMissing(ctx context.Context, f *plan.FileChange) (changed
 	if f.State != "present" {
 		return false, errors.New("missing file observation requires present state")
 	}
-	if _, err := t.run(ctx, "set -eu\n"+targetAccounts, targetFileArguments(f)...); err != nil {
+	if _, err := t.run(ctx, "set -eu\n"+targetAccounts, targetFileArguments(f, anticipated...)...); err != nil {
 		return false, err
 	}
 	f.Write = true
