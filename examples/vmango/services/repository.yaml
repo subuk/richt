@@ -1,3 +1,4 @@
+order: 10
 configs:
   - name: repository
     path: /etc/yum.repos.d/richt-vmango.repo

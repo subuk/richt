@@ -7,7 +7,6 @@ tags:
       greeting: Hello from Richt
 services:
   greeting:
-    order: 10
     file: service.yaml
 hosts:
   - name: localhost

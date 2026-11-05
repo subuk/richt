@@ -15,14 +15,14 @@ func loadServiceFixture(t *testing.T, service string, external bool) (*inventory
 	file := filepath.Join(dir, "inventory.yaml")
 	definition := "    file: service.yaml\n"
 	if external {
-		write(t, filepath.Join(dir, "service.yaml"), service)
+		write(t, filepath.Join(dir, "service.yaml"), "order: 10\n"+service)
 	} else {
-		definition = ""
+		definition = "    order: 10\n"
 		for _, line := range strings.Split(strings.TrimSuffix(service, "\n"), "\n") {
 			definition += "    " + line + "\n"
 		}
 	}
-	write(t, file, "services:\n  app:\n    order: 10\n"+definition+"hosts:\n  - name: untouched\n    transport: {type: ssh, host: unreachable.invalid}\n")
+	write(t, file, "services:\n  app:\n"+definition+"hosts:\n  - name: untouched\n    transport: {type: ssh, host: unreachable.invalid}\n")
 	return Load(file)
 }
 

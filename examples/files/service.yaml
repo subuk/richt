@@ -1,3 +1,4 @@
+order: 10
 configs:
   - name: greeting
     path: /var/tmp/richt-example/greeting.conf

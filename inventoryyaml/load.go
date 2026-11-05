@@ -43,25 +43,23 @@ func Load(filename string) (*inventory.Inventory, error) {
 	in := &inventory.Inventory{Tags: doc.Tags, Hosts: doc.Hosts, SecretSources: doc.SecretSources, Services: map[string]inventory.ServiceDefinition{}}
 	for _, name := range keys(doc.Services) {
 		raw := doc.Services[name]
-		s := raw.Service
+		definition := raw.ServiceDefinition
 		source := filename
 		if raw.File != "" {
-			if len(s.Binaries)+len(s.Configs)+len(s.Processes) > 0 {
-				return nil, fmt.Errorf("%s: service %q: file cannot be combined with inline components", filename, name)
-			}
 			source, err = localPath(filename, raw.File)
 			if err != nil {
 				return nil, fmt.Errorf("service %q file: %w", name, err)
 			}
-			if err := read(source, &s); err != nil {
+			if err := read(source, &definition); err != nil {
 				return nil, fmt.Errorf("service %q: %w", name, err)
 			}
 		}
+		s := &definition.Service
 		s.SourceFile = source
-		if err := resolvePaths(&s, source); err != nil {
+		if err := resolvePaths(s, source); err != nil {
 			return nil, fmt.Errorf("service %q: %w", name, err)
 		}
-		in.Services[name] = inventory.ServiceDefinition{Order: raw.Order, Service: s}
+		in.Services[name] = definition
 	}
 	for _, name := range keys(in.SecretSources) {
 		s := in.SecretSources[name]
@@ -95,8 +93,8 @@ func read(filename string, value any) error {
 	switch value.(type) {
 	case *document:
 		schemaErr = inventorySchema(&root)
-	case *inventory.Service:
-		schemaErr = serviceSchema(&root)
+	case *inventory.ServiceDefinition:
+		schemaErr = serviceDefinitionSchema(&root, false)
 	}
 	if schemaErr != nil {
 		return fmt.Errorf("%s: %w", filename, schemaErr)

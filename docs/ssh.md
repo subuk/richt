@@ -22,7 +22,7 @@ tags:
     services:
       application: {}
 services:
-  application: {order: 10, file: services/application.yaml}
+  application: {file: services/application.yaml}
 hosts:
   - name: application-a
     tags: [application]
@@ -33,6 +33,9 @@ hosts:
       port: 2222             # optional; otherwise use SSH configuration
       sudo: true             # explicit; never enabled implicitly
 ```
+
+The referenced `services/application.yaml` contains the service's required
+`order` and components; see [service file references](inventory.md#schema-and-file-references).
 
 `host` accepts a hostname, address, or SSH alias; use the separate `user` field
 instead of `user@host` or an SSH URI. Explicit `host`, `user`, and `port` select

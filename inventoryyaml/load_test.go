@@ -55,14 +55,14 @@ tags:
     services: {app: {}}
 services:
   app:
-    order: 10
     file: services/app.yaml
 hosts:
   - name: local
     tags: [common]
     transport: {type: local}
 `)
-	write(t, filepath.Join(dir, "services/app.yaml"), `configs:
+	write(t, filepath.Join(dir, "services/app.yaml"), `order: 10
+configs:
   - name: main
     path: /etc/app/../app.conf
     owner: root
@@ -130,8 +130,8 @@ func TestStrictYAML(t *testing.T) {
 		{"duplicate-variable", strings.Replace(baseYAML, "    services:\n", "    vars:\n      app:\n        port: 8080\n        port: 9090\n    services:\n", 1), "already defined"},
 		{"multiple-documents", baseYAML + "---\n{}\n", "exactly one"},
 		{"non-string-variable-key", strings.Replace(baseYAML, "    services:\n", "    vars:\n      nested:\n        123: value\n    services:\n", 1), "unsupported"},
-		{"file-inline", strings.Replace(baseYAML, "  app:\n", "  app:\n    file: app.yaml\n", 1), "cannot be combined"},
-		{"remote-service", strings.Replace(baseYAML, "    configs:\n      - name: main\n        path: /etc/app.conf\n        template:\n          file: templates/not-read.gotmpl", "    file: https://example.com/service.yaml", 1), "local file"},
+		{"file-inline", strings.Replace(baseYAML, "    order: 10\n", "    file: app.yaml\n", 1), "cannot be combined"},
+		{"remote-service", strings.Replace(strings.Replace(baseYAML, "    order: 10\n", "", 1), "    configs:\n      - name: main\n        path: /etc/app.conf\n        template:\n          file: templates/not-read.gotmpl", "    file: https://example.com/service.yaml", 1), "local file"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			filename := filepath.Join(t.TempDir(), "richt.yaml")
@@ -145,11 +145,19 @@ func TestStrictYAML(t *testing.T) {
 }
 
 func TestReferencedServiceIsStrictAndLocal(t *testing.T) {
-	for _, tc := range []struct{ name, service, want string }{{"unknown", "configs: []\ntyop: true\n", "field tyop"}, {"nested-reference", "file: another.yaml\n", "field file"}, {"order", "order: 0\nconfigs: []\n", "field order"}, {"empty", "{}\n", "at least one"}, {"bad-unit-file", "processes:\n  - name: web\n    type: systemd\n    unit: app.service\n    unit_file:\n      path: /tmp/not-a-unit\n      template: {inline: hi}\n", "unit_file path"}} {
+	for _, tc := range []struct{ name, service, want string }{
+		{"unknown", "configs: []\ntyop: true\n", "field tyop"},
+		{"nested-reference", "file: another.yaml\n", "field file"},
+		{"merged-reference", "<<: {file: another.yaml}\n", "field file"},
+		{"wrapper", "services: {app: {order: 1, configs: []}}\n", "field services"},
+		{"nested-definition", "service: {configs: []}\n", "field service"},
+		{"empty", "", "at least one"},
+		{"bad-unit-file", "processes:\n  - name: web\n    type: systemd\n    unit: app.service\n    unit_file:\n      path: /tmp/not-a-unit\n      template: {inline: hi}\n", "unit_file path"},
+	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
-			write(t, filepath.Join(dir, "richt.yaml"), "services:\n  app: {order: 1, file: services/app.yaml}\nhosts:\n  - name: local\n    transport: {type: local}\n")
-			write(t, filepath.Join(dir, "services/app.yaml"), tc.service)
+			write(t, filepath.Join(dir, "richt.yaml"), "services:\n  app: {file: services/app.yaml}\nhosts:\n  - name: local\n    transport: {type: local}\n")
+			write(t, filepath.Join(dir, "services/app.yaml"), "order: 1\n"+tc.service)
 			_, err := Load(filepath.Join(dir, "richt.yaml"))
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("want %q, got %v", tc.want, err)
@@ -183,8 +191,8 @@ func TestServiceOrderPresenceAndTypes(t *testing.T) {
 			filename := filepath.Join(dir, "richt.yaml")
 			input := strings.Replace(baseYAML, "    order: 10", "    order: 0", 1)
 			if file {
-				input = strings.Replace(input, "    configs:\n      - name: main\n        path: /etc/app.conf\n        template:\n          file: templates/not-read.gotmpl", "    file: services/app.yaml", 1)
-				write(t, filepath.Join(dir, "services/app.yaml"), "configs:\n  - name: main\n    path: /etc/app.conf\n    template: {inline: content}\n")
+				input = strings.Replace(strings.Replace(input, "    order: 0\n", "", 1), "    configs:\n      - name: main\n        path: /etc/app.conf\n        template:\n          file: templates/not-read.gotmpl", "    file: services/app.yaml", 1)
+				write(t, filepath.Join(dir, "services/app.yaml"), "order: 0\nconfigs:\n  - name: main\n    path: /etc/app.conf\n    template: {inline: content}\n")
 			}
 			write(t, filename, input)
 			in, err := Load(filename)

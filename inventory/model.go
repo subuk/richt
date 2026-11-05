@@ -26,7 +26,7 @@ type ServiceAssignment struct {
 	State string `json:"state" yaml:"state"`
 }
 
-// ServiceDefinition keeps required inventory ordering outside bare components.
+// ServiceDefinition combines required execution ordering and service components.
 type ServiceDefinition struct {
 	Order   *int `json:"order" yaml:"order"`
 	Service `yaml:",inline"`

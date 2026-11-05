@@ -18,15 +18,10 @@ func inventorySchema(root *yaml.Node) error {
 		switch key {
 		case "services":
 			return mappingFields(value, func(name string, definition *yaml.Node) error {
-				if err := serviceSchema(definition); err != nil {
+				if err := serviceDefinitionSchema(definition, true); err != nil {
 					return fmt.Errorf("service %q: %w", name, err)
 				}
-				return mappingFields(definition, func(field string, value *yaml.Node) error {
-					if field == "order" {
-						return integer(value, fmt.Sprintf("service %q order", name))
-					}
-					return nil
-				})
+				return nil
 			})
 		case "tags":
 			return mappingFields(value, func(name string, tag *yaml.Node) error {
@@ -44,6 +39,49 @@ func inventorySchema(root *yaml.Node) error {
 		}
 		return nil
 	})
+}
+
+// A definition contains its order and components, or refers to a file containing
+// that complete definition. Field presence matters even for zero or null values.
+func serviceDefinitionSchema(root *yaml.Node, allowFile bool) error {
+	if root.Kind == yaml.DocumentNode && len(root.Content) != 0 {
+		root = root.Content[0]
+	}
+	fields := map[string]*yaml.Node{}
+	if err := mappingFields(root, func(key string, value *yaml.Node) error {
+		fields[key] = value
+		return nil
+	}); err != nil {
+		return err
+	}
+	if file := fields["file"]; allowFile && file != nil {
+		if order := fields["order"]; order != nil {
+			return fmt.Errorf("line %d: file cannot be combined with order; set order in the referenced service file", order.Line)
+		}
+		for _, key := range []string{"binaries", "configs", "processes"} {
+			if value := fields[key]; value != nil {
+				return fmt.Errorf("line %d: file cannot be combined with inline components", value.Line)
+			}
+		}
+		file = dereference(file)
+		if file.Kind != yaml.ScalarNode || file.Tag != "!!str" || strings.TrimSpace(file.Value) == "" {
+			return fmt.Errorf("line %d: service file must be a nonempty string", file.Line)
+		}
+		return nil
+	}
+	if !allowFile {
+		if file := fields["file"]; file != nil {
+			return fmt.Errorf("line %d: field file is not allowed in a referenced service definition", file.Line)
+		}
+	}
+	if order := fields["order"]; order != nil {
+		if err := integer(order, "order"); err != nil {
+			return err
+		}
+	} else {
+		return fmt.Errorf("order: required integer")
+	}
+	return serviceSchema(root)
 }
 
 func tagAssignments(node *yaml.Node, context string) error {

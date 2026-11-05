@@ -9,7 +9,6 @@ tags:
         target: rhel-10
 services:
   vmango-repository:
-    order: 10
     file: ../vmango/services/repository.yaml
   vmango-package:
     order: 20

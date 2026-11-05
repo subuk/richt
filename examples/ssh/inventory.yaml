@@ -14,10 +14,8 @@ tags:
         target: rhel-10
 services:
   vmango-repository:
-    order: 10
     file: ../vmango/services/repository.yaml
   vmango:
-    order: 20
     file: ../vmango/services/vmango.yaml
 hosts:
   - name: first

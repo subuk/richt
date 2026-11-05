@@ -1,3 +1,4 @@
+order: 20
 binaries:
   - name: package
     type: rpm

@@ -66,7 +66,7 @@ func (in *Inventory) Validate() error {
 			return err
 		}
 		if in.Services[name].Order == nil {
-			return fmt.Errorf("service %q order: required integer; set order on the top-level service definition", name)
+			return fmt.Errorf("service %q order: required integer", name)
 		}
 		if err := validateService(in.Services[name].Service); err != nil {
 			return fmt.Errorf("service %q: %w", name, err)

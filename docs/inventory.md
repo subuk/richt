@@ -51,7 +51,6 @@ tags:
         listen: "127.0.0.1:8080"
 services:
   app:
-    order: 10
     file: services/app.yaml
 hosts:
   - name: example
@@ -64,11 +63,17 @@ secret_sources:
 
 A service requires an integer `order`, including when it is not assigned to any
 host. Explicit zero is valid; omission is an error. Components can be defined
-inline or by `file`, exclusively, with `order` beside either form. Referenced files
-contain one bare service definition (`binaries`, `configs`, `processes`), without
-another `services` wrapper or recursive file references. Service file paths are
-relative to the inventory file. Template paths are relative to the service file
-declaring them; inline services use the inventory file as their base. Absolute
+inline or by `file`, exclusively. Inline definitions put `order` beside their
+components. A `file` reference reads the complete definition, including `order`,
+from that file; `order` beside `file` is an error, even if the values match.
+Referenced files contain one service definition (`order`, `binaries`, `configs`,
+`processes`), without another `services` wrapper or recursive file references.
+For inventories using the earlier reference syntax, move `order` from beside
+`file` into the referenced service file.
+
+Service file paths are relative to the inventory file. Template paths are
+relative to the service file declaring them; inline services use the inventory
+file as their base. Absolute
 local file paths are also accepted. URL sources are unsupported. Resolved JSON
 includes absolute source/template paths and normalized absolute target paths.
 
@@ -98,9 +103,10 @@ same name may appear in different collections. Only explicitly named binaries
 and configs can be referenced by `restart_on`, `reload_on`, or `run_on`; unnamed items
 still execute normally.
 
-This bare definition can be stored in the `services/app.yaml` referenced above:
+This complete definition can be stored in the `services/app.yaml` referenced above:
 
 ```yaml
+order: 10
 binaries:
   - name: package
     type: rpm

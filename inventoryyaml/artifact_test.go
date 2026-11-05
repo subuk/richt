@@ -25,8 +25,8 @@ func TestArtifactYAMLInlineAndServiceFiles(t *testing.T) {
 				component := "binaries: [{" + fields + "}]\n"
 				input := "services:\n  app:\n    order: 1\n    " + component
 				if external {
-					input = "services:\n  app: {order: 1, file: app.yaml}\n"
-					write(t, filepath.Join(dir, "app.yaml"), component)
+					input = "services:\n  app: {file: app.yaml}\n"
+					write(t, filepath.Join(dir, "app.yaml"), "order: 1\n"+component)
 				}
 				// The source does not exist. Inspection validates syntax only.
 				input += "hosts: [{name: local, transport: {type: local}}]\n"
@@ -118,8 +118,8 @@ func TestArtifactStrictYAMLSchema(t *testing.T) {
 				component := "binaries: [{" + fields + "}]\n"
 				input := "services:\n  app:\n    order: 1\n    " + component
 				if external {
-					input = "services:\n  app: {order: 1, file: app.yaml}\n"
-					write(t, filepath.Join(dir, "app.yaml"), component)
+					input = "services:\n  app: {file: app.yaml}\n"
+					write(t, filepath.Join(dir, "app.yaml"), "order: 1\n"+component)
 				}
 				// Invalid unused definitions are still errors.
 				input += "hosts: [{name: local, transport: {type: local}}]\n"

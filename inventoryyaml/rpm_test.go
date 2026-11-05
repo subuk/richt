@@ -46,8 +46,8 @@ func TestRPMDisableExcludesYAML(t *testing.T) {
 				component += "}]\n"
 				input := "services:\n  app:\n    order: 1\n    " + component
 				if external {
-					input = "services:\n  app: {order: 1, file: app.yaml}\n"
-					write(t, filepath.Join(dir, "app.yaml"), component)
+					input = "services:\n  app: {file: app.yaml}\n"
+					write(t, filepath.Join(dir, "app.yaml"), "order: 1\n"+component)
 				}
 				// Unassigned definitions must receive the same validation.
 				input += "hosts: [{name: local, transport: {type: local}}]\n"

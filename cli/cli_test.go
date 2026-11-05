@@ -76,7 +76,7 @@ func TestCLIInventoryAndSavedApply(t *testing.T) {
 	}
 }
 
-func TestCLITagSelectorsAndFrozenOrderedContinuation(t *testing.T) {
+func TestCLITagSelectorsAndFrozenServiceFileOrderedContinuation(t *testing.T) {
 	dir := t.TempDir()
 	first, blocked, last := filepath.Join(dir, "first"), filepath.Join(dir, "blocked"), filepath.Join(dir, "last")
 	filename, saved := filepath.Join(dir, "inventory.yaml"), filepath.Join(dir, "plan.json")
@@ -87,21 +87,29 @@ func TestCLITagSelectorsAndFrozenOrderedContinuation(t *testing.T) {
     services: {second: {}}
 services:
   last:
-    order: 30
-    configs:
-      - {name: main, path: %q, template: {inline: last}}
+    file: last.yaml
   second:
     order: 20
     configs:
       - {name: main, path: %q, template: {inline: second}}
   first:
-    order: 10
-    configs:
-      - {name: main, path: %q, template: {inline: first}}
+    file: first.yaml
 hosts:
   - {name: a, tags: [worker, shared], transport: {type: local}}
   - {name: b, tags: [shared], transport: {type: local}}
-`, last, filepath.Join(blocked, "second"), first)
+`, filepath.Join(blocked, "second"))
+	for _, service := range []struct {
+		name, target string
+		order        int
+	}{
+		{"last", last, 30},
+		{"first", first, 10},
+	} {
+		definition := fmt.Sprintf("order: %d\nconfigs:\n  - {name: main, path: %q, template: {inline: %s}}\n", service.order, service.target, service.name)
+		if err := os.WriteFile(filepath.Join(dir, service.name+".yaml"), []byte(definition), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if err := os.WriteFile(filename, []byte(source), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -147,6 +155,11 @@ hosts:
 	}
 	if err := os.Remove(filename); err != nil {
 		t.Fatal(err)
+	}
+	for _, name := range []string{"first.yaml", "last.yaml"} {
+		if err := os.Remove(filepath.Join(dir, name)); err != nil {
+			t.Fatal(err)
+		}
 	}
 	code, _, _ = run(t, "apply", "-y", saved)
 	tasks = readPlan().Hosts[0].Tasks

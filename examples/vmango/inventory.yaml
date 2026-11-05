@@ -13,10 +13,8 @@ tags:
         target: rhel-10
 services:
   vmango-repository:
-    order: 10
     file: services/repository.yaml
   vmango:
-    order: 20
     file: services/vmango.yaml
 hosts:
   - name: localhost

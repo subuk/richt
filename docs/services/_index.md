@@ -15,7 +15,9 @@ it is not the service definition itself.
 The assignment requests `present` by default, or explicit `absent`. Component
 settings belong to the reusable definition. Templates receive the host's merged
 variables. Each service definition requires an integer `order`; effective
-services on one host must have different orders.
+services on one host must have different orders. For a service loaded through
+`file`, `order` belongs in the referenced file beside its components. The
+inventory entry contains only the file reference.
 
 ## A complete inventory
 

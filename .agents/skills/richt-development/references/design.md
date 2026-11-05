@@ -34,15 +34,18 @@ individual managed process are different concepts.
 Tags assign services through mappings keyed by service name. Assignment values
 specify only target state (`present` by default, or explicit `absent`). Hosts
 receive all their tags' assignments; duplicate assignments are errors even with
-identical settings. Each top-level service definition requires an integer
-`order`, alongside inline components or a file reference. Explicit zero is valid.
+identical settings. Each service definition requires an integer `order`
+alongside its components. Inline definitions declare it in inventory; a `file`
+reference loads it from the referenced service file and forbids `order` beside
+`file`. Explicit zero is valid.
 Effective services execute in ascending order, with per-host order uniqueness;
 unassigned or separately assigned services may share an order. Component parameters, units,
 overrides, and timeouts belong to service definitions, with no per-assignment
 overrides. Content parameterization happens in templates using the host's full
 merged variables. Tags also supply variables, processed in ascending tag `order`
 (default zero). Tag order and service execution order are independent. This is
-the accepted KRG-91 contract from 2026-11-02.
+the accepted KRG-91 contract from 2026-11-02, with service-file ordering amended
+on 2026-11-05.
 
 Keep domain rules independent of YAML, CLI/TTY, filesystem, RPM, systemd, and
 transport implementations. Use meaningful domain or technology names rather

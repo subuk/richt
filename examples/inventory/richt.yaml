@@ -34,10 +34,8 @@ secret_sources:
 
 services:
   vmango-repository:
-    order: 10
     file: services/vmango-repository.yaml
   vmango:
-    order: 20
     file: services/vmango.yaml
 
 hosts:
