@@ -110,9 +110,9 @@ agent, central server, NetBox, or Argo CD.
 | Role | Requirements and verified scope |
 | --- | --- |
 | Inventory inspection | The Richt binary and local inventory/service YAML. It does not contact hosts or open templates or secret sources. |
-| Local file execution | Filesystem access to the declared targets; named owners/groups must exist or be created by preceding account configs. Linux acceptance covers ownership, permissions, symlinks, and SELinux. |
+| Local file execution | Python 3 standard library and Unix filesystem support for template observation/writes/backups; Linux for SELinux metadata. Filesystem access to the declared targets; named owners/groups must exist or be created by preceding account configs. Linux acceptance covers ownership, permissions, symlinks, and SELinux. |
 | SSH controller | Richt and system OpenSSH `ssh` in `PATH`; local template and secret files for preparation. macOS has been used as a controller. |
-| SSH target | Linux shell and standard GNU coreutils/findutils, `getent`, plus the utilities needed by selected resources. No Go toolchain or Richt binary is needed there. |
+| SSH target | Linux shell and standard GNU coreutils/findutils, `getent`, Python 3 standard library for template files, plus the utilities needed by selected resources. No Go toolchain or Richt binary is needed there. |
 | RPM resources | DNF 4, or YUM 4 backed by DNF 4, and an RPM database. Repository/network access is needed when DNF executes the transaction. |
 | Download/archive binaries | Linux, Python 3.8+ standard library, GNU `readlink`, util-linux `findmnt`, target HTTPS connectivity and trusted CA certificates; filesystem support for atomic `renameat2` publication. No daemon or installed Richt binary on SSH targets. |
 | Systemd processes | systemd with `systemctl`; declared units or packages that supply them. |

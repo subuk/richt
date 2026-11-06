@@ -311,7 +311,9 @@ func TestSecretSnapshotSharedByConfigsUnitsDropInsAndHosts(t *testing.T) {
 	h.Name = "second"
 	r.Hosts = append(r.Hosts, h)
 	e := Local{Files: &config.Target{Run: func(context.Context, string, ...string) ([]byte, error) {
-		return []byte("missing\n0\n0\n0\n-\n-\n\n"), nil
+		return []byte("-\n-\n"), nil
+	}, RunInput: func(context.Context, []byte, string, ...string) ([]byte, error) {
+		return fileObservation("absent", ""), nil
 	}}, Systemd: fakeSystemd("active", true)}
 	e.Systemd.Glob = func(context.Context, string) ([]string, error) { return nil, nil }
 	p, err := e.Diff(context.Background(), r)

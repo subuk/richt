@@ -1,6 +1,7 @@
 package plan
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -56,7 +57,19 @@ func Open(path string) (*Store, error) {
 		s.Close()
 		return nil, errors.New("plan must be a regular file without hardlink aliases")
 	}
-	d := json.NewDecoder(f)
+	data, err := io.ReadAll(f)
+	if err != nil {
+		s.Close()
+		return nil, fmt.Errorf("read plan: %w", err)
+	}
+	var header struct {
+		Version string `json:"version"`
+	}
+	if json.Unmarshal(data, &header) == nil && header.Version != Version {
+		s.Close()
+		return nil, fmt.Errorf("read plan: incompatible plan version %q (required %s); prepare a new plan", header.Version, Version)
+	}
+	d := json.NewDecoder(bytes.NewReader(data))
 	d.DisallowUnknownFields()
 	var p Plan
 	if err = d.Decode(&p); err == nil {

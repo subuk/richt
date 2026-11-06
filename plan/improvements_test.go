@@ -12,10 +12,10 @@ import (
 )
 
 func TestSupportedPlanVersionsAreAccepted(t *testing.T) {
-	for _, version := range []string{"", "1.0", "1.1", "1.2", "1.3", "999", plan.LegacyVersion, plan.Version} {
+	for _, version := range []string{"", "1.0", "1.1", "1.2", "1.3", "999", "1.4", "1.5", "1.6", plan.Version} {
 		p := &plan.Plan{Version: version, Hosts: []plan.Host{}}
 		err := p.Validate()
-		if (err != nil) != (version != plan.Version && version != plan.LegacyVersion) {
+		if (err != nil) != (version != plan.Version) {
 			t.Fatalf("version %q: %v", version, err)
 		}
 		path := filepath.Join(t.TempDir(), "plan.json")
@@ -23,7 +23,7 @@ func TestSupportedPlanVersionsAreAccepted(t *testing.T) {
 			t.Fatal(err)
 		}
 		store, err := plan.Open(path)
-		if (err != nil) != (version != plan.Version && version != plan.LegacyVersion) {
+		if (err != nil) != (version != plan.Version) {
 			t.Fatalf("open version %q: %v", version, err)
 		}
 		if store != nil {
@@ -35,6 +35,7 @@ func TestSupportedPlanVersionsAreAccepted(t *testing.T) {
 func TestValidatorPlanDisplay(t *testing.T) {
 	for _, sensitive := range []bool{false, true} {
 		f := &plan.FileChange{Path: "/etc/test.conf", State: "present", Write: true, Sensitive: sensitive, Content: "PRIVATE_CONTENT", Validate: &plan.FileValidator{Args: []string{"/bin/validator", "ARGUMENT_MARKER", "{candidate}"}, Timeout: "3s"}}
+		prepareFileFixture(f)
 		p := &plan.Plan{Version: plan.Version, Hosts: []plan.Host{{Name: "host", Transport: "local", Tasks: []plan.Task{{ID: "file", Operation: "file", File: f, Progress: plan.Progress{Status: "pending"}}}}}}
 		var out bytes.Buffer
 		if err := plan.Display(&out, p, config.Local{}); err != nil {

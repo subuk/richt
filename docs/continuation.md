@@ -43,7 +43,10 @@ files behind and may prevent the final report.
 
 Continuation uses the original prepared inputs. It does not reread inventory,
 templates, or secret sources, rerender files, recalculate differences, or check
-for intervening resource drift. Successful tasks are not rechecked. Editing the
+for general intervening resource drift. Template operations still verify frozen
+prior contents/presence/type or recognize their own unfinished desired result,
+and verify required old-state backups and receipts. Successful tasks are not
+rechecked. Editing the
 inventory after a failure does not change a saved task. Fix an external
 prerequisite and continue, or deliberately prepare a new plan when the desired
 inputs have changed; review that new plan separately.

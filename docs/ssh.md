@@ -8,7 +8,10 @@ Richt uses the system OpenSSH `ssh` executable. Existing `ssh_config` aliases,
 identity files, SSH agent, proxy/jump settings, and known-hosts policy remain in
 effect. The controller needs OpenSSH in `PATH`; remote targets need the Linux
 utilities used by the selected resources (GNU coreutils/findutils, `getent`,
-and, when requested, DNF 4/YUM 4, systemd, or SELinux tools). Download/archive targets also need
+and, when requested, DNF 4/YUM 4, systemd, or SELinux tools). Template files use
+the same target-side Python 3 standard-library helper for observation, atomic
+writes, conflict checks, metadata and backups as local execution, including
+with explicit noninteractive sudo. Download/archive targets also need
 Python 3.8+ with its standard library, CA trust, HTTPS connectivity and Linux
 atomic rename support. Artifact fetching happens on the target at apply; its
 URL and SHA-256 are frozen while bytes are absent from JSON. No Richt daemon or
@@ -63,8 +66,10 @@ not enable interactive authentication or change privileges.
 
 Files are read on the target during diff. Prepared content is sent through SSH
 stdin during apply, including for privileged writes; file content is never put
-into command arguments. Writes follow ordinary target and parent symlinks, and
-removal unlinks the named file or symlink. Owner/group names are resolved on the
+into command arguments. Template writes replace the final entry with a regular
+file without following a final symlink; parent symlinks remain followed. Removal
+unlinks only the declared entry. Atomic publication, prepared-content conflict
+checks and opt-in backups have the same local and SSH/sudo contract. Owner/group names are resolved on the
 target at observation and again when attributes are applied. Changed numeric
 IDs are allowed. These rules also apply to local files. The saved file bytes,
 resource requests, task order, and process branches remain fixed; apply does

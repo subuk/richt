@@ -22,7 +22,7 @@ func ValidateAccountConfig(c Config) error {
 	if c.Type != "user" && c.Type != "group" {
 		return fmt.Errorf("type: expected user or group")
 	}
-	if c.Path != "" || c.Owner != "" || c.Mode != "" || c.Template.File != "" || c.Template.Inline != nil || c.Sensitive || c.SELinux != "" || c.Validate != nil || c.Array != "" || c.Level != "" || c.Metadata != "" || c.Members != nil || c.VG != "" || c.Devices != nil || c.LV != "" || c.Size != "" || c.Filesystem != "" || c.Source != "" || c.Target != "" || c.Options != nil {
+	if c.Path != "" || c.Owner != "" || c.Mode != "" || c.Template.File != "" || c.Template.Inline != nil || c.Sensitive || c.AtomicWrites != nil || c.Backup || c.SELinux != "" || c.Validate != nil || c.Array != "" || c.Level != "" || c.Metadata != "" || c.Members != nil || c.VG != "" || c.Devices != nil || c.LV != "" || c.Size != "" || c.Filesystem != "" || c.Source != "" || c.Target != "" || c.Options != nil {
 		return fmt.Errorf("%s config cannot set file, storage or mount fields", c.Type)
 	}
 	validName := func(field, value string) error {

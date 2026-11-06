@@ -31,7 +31,9 @@ explicit removal without rendering templates or reading secret sources.
 
 A saved plan fixes selected hosts, explicit connection inputs, task order,
 operations, rendered file contents and patches, requested attributes and
-owner/group names, file validators and their timeouts, package requests (including
+owner/group names, file validators and their timeouts, atomic-write and backup
+selections, operation IDs, explicit prior/desired file states, frozen backup
+paths and prior metadata, package requests (including
 their `disable_excludes` override), artifact URLs/checksums/paths and extraction
 settings, artifact attributes/timeouts and ownership identities, masking targets, allowed systemd process
 branches, and oneshot argv, timeouts, and
@@ -48,8 +50,10 @@ states. Omitted optional fields remain unmanaged for existing accounts.
 
 Apply uses those prepared inputs even after the inventory, templates, or secret
 sources change or disappear. It does not reread them, render again, recalculate
-changes, or perform a general drift comparison. A prepared template write can
-overwrite edits made since diff. Reprepare and review a new plan when you need
+changes, or perform a general drift comparison. Template writes and removals
+verify frozen prior contents/presence/type or recognize their own unfinished
+desired result, and require any prepared backup. Intervening content edits fail
+with a conflict. Reprepare and review a new plan when you need
 current observations or changed desired inputs.
 
 Some operations deliberately use execution-time information:
@@ -64,6 +68,11 @@ Some operations deliberately use execution-time information:
   require its frozen SHA-256 before atomic publication. Artifact bytes are not
   embedded in JSON. Protected manifests and transaction records guard ownership,
   foreign entries and interrupted publication; these checks do not rebuild the plan.
+- Template file operations verify the frozen prior contents, presence, type or
+  symlink text before mutation. Attribute-only edits or identical bytes in a
+  replacement inode are accepted. Atomic writes are the default; an explicit
+  non-atomic selection is fixed in the plan. These checks are not compare-and-swap
+  and do not prevent a separate writer racing after the check.
 - File validators run against the prepared candidate during apply, after earlier
   package tasks and before writing the destination. They use the target's current
   executable and supporting files; those dependencies are not embedded in JSON.
@@ -145,10 +154,21 @@ partial-failure example.
 
 ## Plan format and security
 
-New saved plans use strict, indented JSON schema version `1.6`. The reader also
-accepts `1.5` plans containing the earlier operations; artifact operations require
-`1.6`. Continuing an existing `1.5` plan preserves its version. Unknown fields,
-incompatible versions, invalid operations, and malformed progress are rejected.
+Saved plans use strict, indented JSON schema version `1.7`. This is a breaking
+format change: all older versions, including `1.5` and `1.6`, are rejected before
+execution with an instruction to prepare a new plan. There is no migration or
+legacy execution path. Unknown fields, incompatible versions, invalid
+operations, missing required file inputs, and malformed progress are rejected.
+
+A file payload requires explicit `atomic_writes` and `backup` booleans, a stable
+32-character lowercase hexadecimal `operation_id`, and `expected` and `desired`
+states. Expected regular files retain a SHA-256 and metadata; expected symlinks
+retain link text and metadata; absence uses `kind: absent`. Metadata contains
+numeric UID/GID, mode and a map of base64 extended-attribute values. Desired
+states contain the regular-file digest or explicit absence. `backup_path` is
+required exactly when backup is selected for replacement/removal of an existing
+object. [File configs](services/configs/files.md) explains target backups,
+private adjacent receipts, continuation, link handling and durability errors.
 
 Component task identifiers use the service, component kind (`binary`, `config`,
 or `process`), original zero-based list position, and operation. For example, `app/process/0/enabled` identifies
@@ -162,16 +182,14 @@ A oneshot task uses operation `oneshot`; its `oneshot` payload holds `command`,
 can also include orchestration tasks such as daemon reload.
 Operation `artifact` carries the pinned download/archive request, provenance
 token, observed identity and safe publication preconditions. It is supported
-only in version `1.6`. Artifact bytes and extracted trees are absent from JSON.
+in version `1.7`. Artifact bytes and extracted trees are absent from JSON.
 Operations `path`, `storage`, and `mount` carry their corresponding typed
 payloads. Preparation can account for a device or empty filesystem produced by
 an earlier config without probing a resource that does not exist yet. Applying
 that plan still follows its original list order and verifies the saved inputs.
 
 Operation `account` carries local user/group requests, observed identity and
-before/after preconditions. It requires version `1.6`; this additive operation
-does not introduce a new schema version. Older readers reject the unknown
-operation. New readers reject account operations placed in a legacy `1.5` plan.
+before/after preconditions, within the current version `1.7` schema.
 
 Saved JSON contains real rendered text and patches, including old and new
 secret bytes. Sensitive display does not remove them from executable inputs.

@@ -41,6 +41,11 @@ func TestTypedConfigStrictFieldPresenceAndSubset(t *testing.T) {
 	for _, config := range []string{
 		`{type: file, path: /tmp/file, template: null}`,
 		`{type: directory, path: /tmp/dir, sensitive: false}`,
+		`{type: file, path: /tmp/file, atomic_writes: false}`,
+		`{type: directory, path: /tmp/dir, backup: false}`,
+		`{path: /tmp/file, template: {inline: text}, atomic_writes: null}`,
+		`{path: /tmp/file, template: {inline: text}, atomic_writes: "false"}`,
+		`{path: /tmp/file, template: {inline: text}, backup: 1}`,
 		`{type: file, path: /tmp/file, members: []}`,
 		`{type: mdadm, array: /dev/md/a, level: raid1, metadata: "1.2", members: [/dev/a, /dev/b], owner: ""}`,
 		`{type: lvm-vg, vg: data, devices: [/dev/a], filesystem: ""}`,

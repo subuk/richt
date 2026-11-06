@@ -1,7 +1,6 @@
 package config
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -11,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/aymanbagabas/go-udiff"
 	"github.com/subuk/richt/plan"
 )
 
@@ -86,67 +84,15 @@ func (t Target) Observe(ctx context.Context, f *plan.FileChange, anticipated ...
 	if _, err := (Local{}).Resolve(plan.Task{Operation: "file", File: f}); err != nil {
 		return false, err
 	}
-	out, err := t.run(ctx, `set -eu
-`+targetAccounts+`
-path=$1
-if [ "$5" = absent ] && [ -L "$path" ]; then
-  printf 'present\n0\n0\n0\n%s\n%s\n\n' "$uid" "$gid"
-elif [ ! -e "$path" ]; then
-  printf 'missing\n0\n0\n0\n%s\n%s\n\n' "$uid" "$gid"
-else
-  [ -f "$path" ] || exit 71
-  printf 'present\n'
-  stat -Lc '%a
-%u
-%g' -- "$path"
-  printf '%s\n%s\n' "$uid" "$gid"
-  if [ -n "$4" ]; then stat -Lc '%C' -- "$path"; else printf '\n'; fi
-  cat -- "$path"
-fi
-`, targetFileArguments(f, anticipated...)...)
+	uid, gid, err := t.targetOwnership(ctx, f, anticipated...)
 	if err != nil {
 		return false, err
 	}
-	fields := bytes.SplitN(out, []byte{'\n'}, 8)
-	if len(fields) != 8 {
-		return false, errors.New("target returned incomplete file metadata")
-	}
-	if string(fields[0]) == "missing" {
-		if f.State == "absent" {
-			return false, nil
-		}
-		f.Write = true
-		f.Patch = udiff.Unified("/dev/null", f.Path, "", f.Content)
-		return true, nil
-	}
-	if string(fields[0]) != "present" {
-		return false, errors.New("target returned invalid file metadata")
-	}
-	old := fields[7]
-	if f.State == "absent" {
-		f.Patch = udiff.Unified(f.Path, "/dev/null", string(old), "")
-		return true, nil
-	}
-	mode, err := strconv.ParseUint(string(fields[1]), 8, 12)
+	state, old, err := observeEntry(ctx, t.RunInput, f)
 	if err != nil {
-		return false, errors.New("target returned invalid file permissions")
+		return false, err
 	}
-	for _, i := range []int{2, 3} {
-		if _, err := strconv.ParseUint(string(fields[i]), 10, 32); err != nil {
-			return false, errors.New("target returned invalid file ownership")
-		}
-	}
-	f.Write = !bytes.Equal(old, []byte(f.Content))
-	f.Patch = ""
-	if f.Write {
-		f.Patch = udiff.Unified(f.Path, f.Path, string(old), f.Content)
-	}
-	projection := projectedOwnership(anticipated)
-	owner, group := projection.remote(string(fields[4]), string(fields[5]))
-	changed = projection.pending() || f.Write || (f.Mode != nil && *f.Mode != uint32(mode))
-	changed = changed || (owner != "-" && string(fields[2]) != owner) || (group != "-" && string(fields[3]) != group)
-	changed = changed || (f.SELinux != "" && string(fields[6]) != f.SELinux)
-	return changed, nil
+	return entryChanged(f, state, old, uid, gid, projectedOwnership(anticipated).pending())
 }
 
 func (Target) Resolve(task plan.Task) ([]plan.Action, error) { return (Local{}).Resolve(task) }
@@ -169,8 +115,7 @@ func (t Target) ObserveMissing(ctx context.Context, f *plan.FileChange, anticipa
 		return false, err
 	}
 	f.Write = true
-	f.Patch = udiff.Unified("/dev/null", f.Path, "", f.Content)
-	return true, nil
+	return true, freezeFile(f, &plan.FileState{Kind: "absent"}, nil)
 }
 
 func (t Target) Execute(ctx context.Context, a plan.Action) (err error) {
@@ -186,70 +131,52 @@ func (t Target) Execute(ctx context.Context, a plan.Action) (err error) {
 		return err
 	}
 	f := a.File
-	switch a.Kind {
-	case "create-parent-directories":
+	if err := f.ValidatePrepared(); err != nil {
+		return err
+	}
+	if a.Kind == "create-parent-directories" {
 		_, err := t.run(ctx, `set -eu
-path=$1
-mkdir -p -- "${path%/*}/"
+mkdir -p -- "${1%/*}/"
 `, f.Path)
 		return err
-	case "remove-file":
-		_, err := t.run(ctx, `set -eu
-path=$1
-if [ -L "$path" ]; then rm -f -- "$path";
-elif [ -e "$path" ]; then [ -f "$path" ] || exit 71; rm -f -- "$path"; fi
-`, f.Path)
-		return err
-	case "overwrite-file":
-		if t.RunInput == nil {
-			return errors.New("missing target input runner")
-		}
-		if f.Write && f.Validate != nil {
-			if err := t.validateCandidate(ctx, f); err != nil {
-				return err
-			}
-		}
-		privateWrite := ""
-		if f.Sensitive && f.Mode != nil {
-			privateWrite = "private"
-		}
-		_, err := t.RunInput(ctx, []byte(f.Content), "sh", "-c", `set -eu
-path=$1
-if [ -e "$path" ]; then [ -f "$path" ] || exit 71; fi
-if [ "$2" = private ]; then
-  umask 077
-  : >> "$path"
-  chmod -- 0600 "$path"
-else
-  umask 022
-fi
-cat > "$path"
-sync -f -- "$path"
-`, "richt-file", f.Path, privateWrite)
-		return targetFileError(err)
-	case "set-file-attributes":
-		mode := ""
-		if f.Mode != nil {
-			mode = strconv.FormatUint(uint64(*f.Mode), 8)
-		}
-		_, err := t.run(ctx, `set -eu
-`+targetAccounts+`
-path=$1
-[ -f "$path" ] || exit 71
-if [ "$uid" != - ] || [ "$gid" != - ]; then
-  if [ "$uid" = - ]; then ownership=:+$gid
-  elif [ "$gid" = - ]; then ownership=+$uid
-  else ownership=+$uid:+$gid; fi
-  chown -- "$ownership" "$path"
-fi
-[ -z "$6" ] || chmod -- "$6" "$path"
-[ -z "$4" ] || chcon -- "$4" "$path"
-sync -f -- "$path"
-`, append(targetFileArguments(f), mode)...)
-		return err
-	default:
+	}
+	if a.Kind != "overwrite-file" && a.Kind != "set-file-attributes" && a.Kind != "remove-file" {
 		return fmt.Errorf("unsupported target file action %q", a.Kind)
 	}
+	if a.Kind == "overwrite-file" && f.Write && f.Validate != nil {
+		if err := t.validateCandidate(ctx, f); err != nil {
+			return err
+		}
+	}
+	uid, gid, err := t.targetOwnership(ctx, f)
+	if err != nil {
+		return err
+	}
+	_, err = fileCommand(ctx, t.RunInput, fileRequest{Action: a.Kind, File: f, Resume: a.Resume, UID: uid, GID: gid})
+	return err
+}
+
+func (t Target) targetOwnership(ctx context.Context, f *plan.FileChange, anticipated ...Ownership) (int, int, error) {
+	out, err := t.run(ctx, "set -eu\n"+targetAccounts+`printf '%s\n%s\n' "$uid" "$gid"
+`, targetFileArguments(f, anticipated...)...)
+	if err != nil {
+		return 0, 0, err
+	}
+	fields := strings.Fields(string(out))
+	if len(fields) != 2 {
+		return 0, 0, errors.New("target returned invalid file ownership")
+	}
+	owner, group := projectedOwnership(anticipated).remote(fields[0], fields[1])
+	ids := []int{-1, -1}
+	for i, value := range []string{owner, group} {
+		if value != "-" {
+			ids[i], err = strconv.Atoi(value)
+			if err != nil || ids[i] < 0 {
+				return 0, 0, errors.New("target returned invalid file ownership")
+			}
+		}
+	}
+	return ids[0], ids[1], nil
 }
 
 func (t Target) ReadFile(ctx context.Context, path string) ([]byte, error) {

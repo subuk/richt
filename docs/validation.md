@@ -335,10 +335,11 @@ python3 tests/integration/files.py --binary ./bin/richt --work-root /root --targ
 python3 examples/secrets/verify.py ./bin/richt
 ```
 
-The file suite passed all **17 checks**: create/update/no-op/explicit absence,
+This historical run predates saved format `1.7` and its atomic template writes
+and final-symlink replacement contract. The file suite passed all **17 checks**: create/update/no-op/explicit absence,
 root ownership, requested modes and SELinux labels, symlink behavior, missing
-owner/group rejection, frozen saved inputs, inode preservation, sensitive
-displays, partial failure and manual continuation, terminal confirmation, and
+owner/group rejection, frozen saved inputs, the then-current in-place inode
+preservation, sensitive displays, partial failure and manual continuation, terminal confirmation, and
 same-plan apply locking. Its secret checks cover independent YAML sources,
 multiline bytes, private plans and continuation without source files.
 
@@ -600,12 +601,14 @@ python3 tests/integration/files.py --binary ./bin/richt --work-root /root --targ
 The suite allocates unique test directories beneath the specified existing
 roots and removes only those directories afterwards. `--keep` retains them for
 inspection. It verifies create/update/no changes/absent, ownership/mode/SELinux,
-frozen saved inputs, inode preservation, missing owner/group errors, ordinary
-symlink writes, partial progress and continuation, sensitive display, actual
+frozen saved inputs, atomic replacement, missing owner/group errors, final
+symlink replacement without referent changes, partial progress and continuation,
+sensitive display, actual
 terminal confirmation, and concurrent apply locking. It does not install
 packages or manage services.
 
-All 17 checks passed on 2026-11-01 on a disposable AlmaLinux 10.2 x86_64 host
+The earlier 17-check suite, using pre-`1.7` in-place writes and final-symlink
+following, passed on 2026-11-01 on a disposable AlmaLinux 10.2 x86_64 host
 with SELinux Enforcing. This includes two independent YAML sources, multiline
 secret bytes, private plan permissions, continuation after deleting sources,
 requested target mode and SELinux label, and explicit sensitivity when replacing
@@ -808,3 +811,56 @@ were removed; pre-existing workloads remained active, with SELinux Enforcing
 and no failed units. These runs do not establish other distribution/architecture
 support, K3s cluster compatibility, disk-full recovery or exhaustive power-loss
 recovery.
+
+## Atomic config write acceptance
+
+The [prepared file driver](../tests/integration/config_writes.py) verifies the
+version 1.7 template and owned-file publication contract. It requires an
+authorized disposable Linux target, root or explicit noninteractive sudo,
+Python 3.8+, ACL tools, and SELinux Enforcing. Only unique fixture paths are
+changed; private inventories, plans, command logs and `acceptance.json` remain
+under the chosen controller evidence root.
+
+```sh
+python3 tests/integration/config_writes.py --binary ./bin/richt-linux-amd64 \
+  --work-root /root
+python3 tests/integration/config_writes.py --binary ./bin/richt \
+  --host deploy@file-test.example --work-root /tmp
+```
+
+### Recorded config write acceptance — 2026-11-06
+
+KRG-103 passed on AlmaLinux 10.2 x86_64 with Python 3.12.13, DNF 4.20.0,
+systemd 257, and SELinux Enforcing. Builds used base revision
+`cc0231f5370d5de4dbc207e562dda4f75ccd1d3e` plus the feature changes.
+
+| Suite | Result |
+| --- | --- |
+| Local prepared file driver | 40 checks passed |
+| SSH with non-root login and explicit sudo | 41 checks passed |
+| Existing local file/SELinux, terminal and secret regression | 18 checks passed |
+| Existing local validator regression, including real sshd syntax checking | 18 checks passed |
+| Published RPM and oneshot/systemd regression | 33 checks passed with the published `tree` package; no fixture RPMs built |
+| Helper failure injection | 13 tests passed, including backup/receipt publication, rename, removal and directory sync boundaries |
+| Repository verification | `make check`, relevant race tests and `make docs-check` passed |
+
+The prepared file driver covers atomic defaults, explicit in-place writes,
+creation/replacement/removal, content/type/presence/link conflicts, identical-byte
+inode replacement, live attribute drift, final and dangling symlinks, hardlinks,
+independent backups, frozen identities and paths, continuation, validators,
+backup tampering/collision and old-version refusal. Real ACLs, user extended
+attributes, ownership, permissions and SELinux labels were verified on the
+target and backup. A Go boundary test also injects loss of the final progress
+write after publication and verifies safe saved continuation.
+
+The final Linux binary SHA-256 was
+`d44fc6821886c3ed582b656021611651e9db8f58cf3b271df6920b585a9f63e3`;
+the final SSH controller binary was
+`6a318f9be418b54988581576deadb330b020a0cec0dd97dd14a1bea33d593a4b`.
+Managed fixtures, the temporary package and systemd probe were removed;
+`vm.swappiness` returned to 30. The existing exporter remained active, the
+system was running with no failed units, and SELinux remained Enforcing.
+The ACL prerequisite package remains installed. Private evidence retains the
+plans and logs. This does not establish other platforms, compare-and-swap
+against concurrent external writers, exhaustive power-loss recovery or a
+rollback command.

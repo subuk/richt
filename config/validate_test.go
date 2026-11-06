@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -111,10 +110,11 @@ func TestValidatorBeforeDestinationWrite(t *testing.T) {
 				record := filepath.Join(dir, "record")
 				f := &plan.FileChange{Path: path, State: "present", Write: true, Content: "frozen bytes '$HOME' $(literal)\n"}
 				f.Validate = validatorFor(t, result, record, f.Content)
-				var candidatesBefore []string
 				if result == "missing" {
 					f.Validate.Args = []string{filepath.Join(dir, "missing-validator"), "{candidate}"}
-					candidatesBefore, _ = filepath.Glob("/tmp/richt-validate-*")
+				}
+				if _, err := Observe(f); err != nil {
+					t.Fatal(err)
 				}
 				err := executor.Execute(context.Background(), plan.Action{Kind: "overwrite-file", File: f})
 				failed := result == "failure" || result == "missing"
@@ -135,8 +135,6 @@ func TestValidatorBeforeDestinationWrite(t *testing.T) {
 				}
 				if result != "missing" {
 					checkCandidateCleanup(t, record)
-				} else if candidatesAfter, _ := filepath.Glob("/tmp/richt-validate-*"); !reflect.DeepEqual(candidatesBefore, candidatesAfter) {
-					t.Fatal("missing executable leaked a candidate directory")
 				}
 			})
 		}
@@ -148,13 +146,16 @@ func TestValidatorDiscardsRunnerDiagnosticsWithoutSensitiveFlag(t *testing.T) {
 	target := Target{RunInput: func(context.Context, []byte, string, ...string) ([]byte, error) {
 		return []byte(validatorSecret), errors.New(validatorSecret)
 	}}
+	if err := freezeFile(f, &plan.FileState{Kind: "absent"}, nil); err != nil {
+		t.Fatal(err)
+	}
 	err := target.Execute(context.Background(), plan.Action{Kind: "overwrite-file", File: f})
 	if err == nil || err.Error() != "file validator could not execute" {
 		t.Fatalf("runner diagnostics were retained: %v", err)
 	}
 }
 
-func TestValidatedWriteFollowsSymlinkAndPreservesInode(t *testing.T) {
+func TestValidatedWriteReplacesFinalSymlinkAndPreservesReferent(t *testing.T) {
 	dir := t.TempDir()
 	path, link := filepath.Join(dir, "managed"), filepath.Join(dir, "link")
 	if err := os.WriteFile(path, []byte("old"), 0640); err != nil {
@@ -164,15 +165,19 @@ func TestValidatedWriteFollowsSymlinkAndPreservesInode(t *testing.T) {
 		t.Fatal(err)
 	}
 	before, _ := os.Stat(path)
-	f := &plan.FileChange{Path: link, State: "present", Write: true, Content: "new", Validate: validatorFor(t, "success", filepath.Join(dir, "record"), "new")}
+	f := &plan.FileChange{Path: link, State: "present", AtomicWrites: true, Content: "new", Validate: validatorFor(t, "success", filepath.Join(dir, "record"), "new")}
+	if _, err := Observe(f); err != nil {
+		t.Fatal(err)
+	}
 	if err := (Local{}).Execute(context.Background(), plan.Action{Kind: "overwrite-file", File: f}); err != nil {
 		t.Fatal(err)
 	}
 	after, _ := os.Stat(path)
 	entry, _ := os.Lstat(link)
 	content, _ := os.ReadFile(path)
-	if !os.SameFile(before, after) || after.Mode().Perm() != 0640 || entry.Mode()&os.ModeSymlink == 0 || string(content) != "new" {
-		t.Fatal("validated write changed ordinary symlink, permission, or inode behavior")
+	published, _ := os.ReadFile(link)
+	if !os.SameFile(before, after) || after.Mode().Perm() != 0640 || !entry.Mode().IsRegular() || string(content) != "old" || string(published) != "new" {
+		t.Fatal("validated write followed the final symlink or changed its referent")
 	}
 }
 
@@ -185,6 +190,9 @@ func TestFailedValidationDoesNotRestrictSensitiveDestination(t *testing.T) {
 	mode := uint32(0600)
 	f := &plan.FileChange{Path: path, State: "present", Write: true, Sensitive: true, Mode: &mode, Content: validatorSecret}
 	f.Validate = validatorFor(t, "failure", filepath.Join(dir, "record"), f.Content)
+	if _, err := Observe(f); err != nil {
+		t.Fatal(err)
+	}
 	err := (Local{}).Execute(context.Background(), plan.Action{Kind: "overwrite-file", File: f})
 	if err == nil || err.Error() != "sensitive file operation failed" {
 		t.Fatalf("sensitive validation failure: %v", err)
@@ -213,6 +221,9 @@ func TestValidatorTimeoutLeavesDestinationUnopenedAndCleansCandidate(t *testing.
 			f := &plan.FileChange{Path: filepath.Join(dir, "missing"), State: "present", Write: true, Content: "prepared"}
 			f.Validate = validatorFor(t, "timeout", record, f.Content)
 			f.Validate.Timeout = "250ms"
+			if _, err := Observe(f); err != nil {
+				t.Fatal(err)
+			}
 			started := time.Now()
 			err := executor.Execute(context.Background(), plan.Action{Kind: "overwrite-file", File: f})
 			if err == nil || !strings.Contains(err.Error(), "timed out") || time.Since(started) > 3*time.Second {
@@ -247,7 +258,10 @@ func TestValidatorOnlyForContentWrites(t *testing.T) {
 			t.Fatal("attribute-only change invoked validator:", err)
 		}
 	}
-	f.State = "absent"
+	f.State, f.Content = "absent", ""
+	if _, err := Observe(f); err != nil {
+		t.Fatal(err)
+	}
 	if err := (Local{}).Execute(context.Background(), plan.Action{Kind: "remove-file", File: f}); err != nil {
 		t.Fatal("removal invoked validator:", err)
 	}

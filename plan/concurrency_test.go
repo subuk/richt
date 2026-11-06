@@ -309,7 +309,9 @@ func TestSavedConnectionAndOwnershipNames(t *testing.T) {
 	p := manyHosts(1)
 	p.Hosts[0].Transport = "ssh"
 	p.Hosts[0].Connection = &plan.Connection{Host: "alias", User: "alice", Port: 2222, Sudo: true}
-	p.Hosts[0].Tasks[0].File = &plan.FileChange{Owner: "app", Group: "staff"}
+	p.Hosts[0].Tasks[0].File = &plan.FileChange{Path: "/etc/app.conf", Owner: "app", Group: "staff"}
+	p.Hosts[0].Tasks[0].Operation = "file"
+	prepareFileFixture(p.Hosts[0].Tasks[0].File)
 	path := filepath.Join(t.TempDir(), "plan.json")
 	if err := plan.Save(path, p); err != nil {
 		t.Fatal(err)

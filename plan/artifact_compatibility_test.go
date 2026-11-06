@@ -20,7 +20,7 @@ func TestArtifactPlanVersionAndPayloadCompatibility(t *testing.T) {
 	if err := p.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	p.Version = plan.LegacyVersion
+	p.Version = "1.6"
 	if err := p.Validate(); err == nil {
 		t.Fatal("legacy plan accepted a new artifact operation")
 	}
@@ -41,24 +41,14 @@ func TestArtifactPlanVersionAndPayloadCompatibility(t *testing.T) {
 	}
 }
 
-func TestContinuingLegacyPlanPreservesVersionAndProgress(t *testing.T) {
-	p := rpmPlan("all", "present")
-	p.Version = plan.LegacyVersion
-	p.Hosts[0].Tasks[0].Progress.Status = "success"
-	file := filepath.Join(t.TempDir(), "legacy.json")
-	if err := plan.Save(file, p); err != nil {
-		t.Fatal(err)
-	}
-	s, err := plan.Open(file)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer s.Close()
-	if err := s.Save(s.Plan); err != nil {
-		t.Fatal(err)
-	}
-	data, err := os.ReadFile(file)
-	if err != nil || s.Plan.Version != plan.LegacyVersion || !strings.Contains(string(data), `"status": "success"`) || !strings.Contains(string(data), `"version": "1.5"`) {
-		t.Fatalf("legacy continuation changed its contract: %s; %v", data, err)
+func TestOldPlansRequireRepreparation(t *testing.T) {
+	for _, version := range []string{"1.5", "1.6"} {
+		file := filepath.Join(t.TempDir(), "old.json")
+		if err := os.WriteFile(file, []byte(`{"version":"`+version+`","hosts":[{"tasks":[{"file":{"path":"/old"}}]}]}`), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := plan.Open(file); err == nil || !strings.Contains(err.Error(), "prepare a new plan") {
+			t.Fatalf("old version %s: %v", version, err)
+		}
 	}
 }

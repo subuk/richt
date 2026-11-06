@@ -2,12 +2,14 @@ package config
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/subuk/richt/inventory"
@@ -15,18 +17,18 @@ import (
 	"github.com/subuk/richt/transport"
 )
 
-// Exercise the actual target shell scripts on every development platform. Only
-// GNU-specific metadata/account/sync commands are replaced; real Linux coverage
-// belongs to the existing acceptance harness.
+// Exercise target command execution on development platforms. File metadata
+// comes from the actual helper; account fixtures resolve to this process's IDs.
+// Plain-path tests retain GNU-specific stat/sync stand-ins.
 func shellTarget(t *testing.T) (Target, string) {
 	t.Helper()
 	dir := t.TempDir()
 	commands := map[string]string{
 		"stat": `printf '640\n417\n418\n'`,
-		"getent": `case "$1:$3" in
-passwd:target-user) printf 'target-user:x:417:418::/:/bin/sh\n';;
-group:target-group) printf 'target-group:x:418:\n';;
-*) exit 1;; esac`,
+		"getent": fmt.Sprintf(`case "$1:$3" in
+passwd:target-user) printf 'target-user:x:%d:%d::/:/bin/sh\n';;
+group:target-group) printf 'target-group:x:%d:\n';;
+*) exit 1;; esac`, os.Getuid(), os.Getgid(), os.Getgid()),
 		"sync":  `exit 0`,
 		"chown": `printf '%s\n' "$@" > "$TARGET_CHOWN"`,
 	}
@@ -67,7 +69,7 @@ func TestTargetObservationUsesTargetAccountsAndContent(t *testing.T) {
 	}
 }
 
-func TestTargetCreateFollowLinksReadGlobAndRemove(t *testing.T) {
+func TestTargetCreateReplaceFinalLinksReadGlobAndRemove(t *testing.T) {
 	target, dir := shellTarget(t)
 	ctx := context.Background()
 	path := filepath.Join(dir, "parents", "managed.conf")
@@ -93,20 +95,30 @@ func TestTargetCreateFollowLinksReadGlobAndRemove(t *testing.T) {
 	if err := os.Symlink(path, link); err != nil {
 		t.Fatal(err)
 	}
-	f.Path, f.Content = link, "updated through link"
+	f.Path, f.Content, f.AtomicWrites = link, "replacement of link", true
+	if _, err := target.Observe(ctx, f); err != nil {
+		t.Fatal(err)
+	}
 	if err := target.Execute(ctx, plan.Action{Kind: "overwrite-file", File: f}); err != nil {
 		t.Fatal(err)
 	}
 	content, _ = os.ReadFile(path)
-	if string(content) != f.Content {
-		t.Fatal("ordinary symlink write did not follow target")
+	entry, statErr := os.Lstat(link)
+	if string(content) == f.Content || statErr != nil || !entry.Mode().IsRegular() {
+		t.Fatal("target write followed the final symlink instead of replacing it")
 	}
 	paths, err := target.Glob(ctx, filepath.Join(dir, "*.conf"))
 	if err != nil || !reflect.DeepEqual(paths, []string{link}) {
 		t.Fatalf("Glob = %q %v", paths, err)
 	}
-	f.State = "absent"
-	if changed, err := target.Observe(ctx, f); err != nil || !changed || f.Patch != "" {
+	if err := os.Remove(link); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(path, link); err != nil {
+		t.Fatal(err)
+	}
+	f.State, f.Content = "absent", ""
+	if changed, err := target.Observe(ctx, f); err != nil || !changed || f.Expected.Kind != "symlink" {
 		t.Fatalf("symlink absence = %v %v patch=%q", changed, err, f.Patch)
 	}
 	if err := target.Execute(ctx, plan.Action{Kind: "remove-file", File: f}); err != nil {
@@ -123,22 +135,24 @@ func TestTargetCreateFollowLinksReadGlobAndRemove(t *testing.T) {
 func TestTargetOwnershipPreservesUnspecifiedSide(t *testing.T) {
 	target, dir := shellTarget(t)
 	path := filepath.Join(dir, "file")
-	if err := os.WriteFile(path, nil, 0600); err != nil {
+	if err := os.WriteFile(path, []byte("unchanged"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	for _, tt := range []struct{ owner, group, ownership string }{
-		{"target-user", "", "+417"},
-		{"", "target-group", ":+418"},
-		{"target-user", "target-group", "+417:+418"},
+	before, _ := os.Stat(path)
+	for _, tt := range []struct{ owner, group string }{
+		{"target-user", ""}, {"", "target-group"}, {"target-user", "target-group"},
 	} {
-		f := &plan.FileChange{Path: path, State: "present", Owner: tt.owner, Group: tt.group}
+		f := &plan.FileChange{Path: path, State: "present", Content: "unchanged", Owner: tt.owner, Group: tt.group}
+		if _, err := target.Observe(context.Background(), f); err != nil {
+			t.Fatal(err)
+		}
 		if err := target.Execute(context.Background(), plan.Action{Kind: "set-file-attributes", File: f}); err != nil {
 			t.Fatal(err)
 		}
-		got, err := os.ReadFile(filepath.Join(dir, "chown-args"))
-		want := "--\n" + tt.ownership + "\n" + path + "\n"
-		if err != nil || string(got) != want {
-			t.Fatalf("ownership command = %q %v, want %q", got, err, want)
+		after, _ := os.Stat(path)
+		oldIDs, newIDs := before.Sys().(*syscall.Stat_t), after.Sys().(*syscall.Stat_t)
+		if oldIDs.Uid != newIDs.Uid || oldIDs.Gid != newIDs.Gid || after.Mode().Perm() != 0600 || !os.SameFile(before, after) {
+			t.Fatal("explicit ownership changed the unspecified owner/group, mode or inode")
 		}
 	}
 }
@@ -162,10 +176,11 @@ func TestSensitiveTargetErrorsAndInput(t *testing.T) {
 	marker := "synthetic-confidential-marker\nsecond-line"
 	f := &plan.FileChange{Path: "/example", State: "present", Content: marker, Sensitive: true, Write: true}
 	target := Target{
-		Run: func(context.Context, string, ...string) ([]byte, error) { return nil, errors.New(marker) },
+		Run: func(context.Context, string, ...string) ([]byte, error) { return []byte("-\n-\n"), nil },
 		RunInput: func(_ context.Context, input []byte, name string, args ...string) ([]byte, error) {
-			if string(input) != marker {
-				t.Fatal("prepared file content was not sent through stdin")
+			var request fileRequest
+			if err := json.Unmarshal(input, &request); err != nil || request.File == nil || request.File.Content != marker {
+				t.Fatal("prepared file content was not sent through stdin", err)
 			}
 			if strings.Contains(name+strings.Join(args, " "), marker) {
 				t.Fatal("file content was included in target command arguments")
@@ -176,73 +191,68 @@ func TestSensitiveTargetErrorsAndInput(t *testing.T) {
 	if _, err := target.Observe(context.Background(), f); err == nil || err.Error() != "sensitive file observation failed" {
 		t.Fatal("sensitive target observation error was not protected")
 	}
-	for _, kind := range []string{"create-parent-directories", "overwrite-file", "set-file-attributes", "remove-file"} {
+	if err := freezeFile(f, &plan.FileState{Kind: "absent"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, kind := range []string{"overwrite-file", "set-file-attributes", "remove-file"} {
 		if err := target.Execute(context.Background(), plan.Action{Kind: kind, File: f}); err == nil || err.Error() != "sensitive file operation failed" {
 			t.Fatal("sensitive target command error was not protected")
 		}
 	}
 }
 
-func TestSensitiveTargetExplicitModeRestrictsBeforeWrite(t *testing.T) {
+func TestSensitiveTargetPublishesFinalMode(t *testing.T) {
 	target, dir := shellTarget(t)
-	for _, existing := range []bool{false, true} {
+	for _, atomic := range []bool{false, true} {
 		for _, finalMode := range []uint32{0640, 0400, 0000} {
-			t.Run(fmt.Sprintf("existing-%t-mode-%04o", existing, finalMode), func(t *testing.T) {
-				path := filepath.Join(dir, fmt.Sprintf("target-%t-%04o", existing, finalMode))
-				var before os.FileInfo
-				if existing {
-					if err := os.WriteFile(path, []byte("old synthetic content"), 0666); err != nil {
-						t.Fatal("could not create fixture")
-					}
-					if err := os.Chmod(path, 0666); err != nil {
-						t.Fatal("could not set fixture mode")
-					}
-					before, _ = os.Stat(path)
+			t.Run(fmt.Sprintf("atomic-%t-mode-%04o", atomic, finalMode), func(t *testing.T) {
+				path := filepath.Join(dir, fmt.Sprintf("target-%t-%04o", atomic, finalMode))
+				if err := os.WriteFile(path, []byte("old synthetic content"), 0666); err != nil {
+					t.Fatal(err)
 				}
-				f := &plan.FileChange{Path: path, State: "present", Content: "synthetic private content", Sensitive: true, Mode: &finalMode, Write: true}
+				before, _ := os.Stat(path)
+				f := &plan.FileChange{Path: path, State: "present", Content: "synthetic private content", Sensitive: true, Mode: &finalMode, AtomicWrites: atomic}
+				if _, err := target.Observe(context.Background(), f); err != nil {
+					t.Fatal(err)
+				}
 				if err := target.Execute(context.Background(), plan.Action{Kind: "overwrite-file", File: f}); err != nil {
-					t.Fatal("private target overwrite failed")
+					t.Fatal("private target write failed:", err)
 				}
 				written, err := os.Stat(path)
-				if err != nil || written.Mode().Perm() != 0600 {
-					t.Fatal("target was not private immediately after overwrite")
+				if err != nil || written.Mode().Perm() != os.FileMode(finalMode) || os.SameFile(before, written) == atomic {
+					t.Fatal("target did not publish final mode with requested inode behavior", err)
 				}
-				if existing && !os.SameFile(before, written) {
-					t.Fatal("target overwrite replaced the existing inode")
+				if err := os.Chmod(path, 0600); err != nil {
+					t.Fatal(err)
 				}
 				content, err := os.ReadFile(path)
 				if err != nil || string(content) != f.Content {
-					t.Fatal("target overwrite did not retain prepared content")
-				}
-				if err := target.Execute(context.Background(), plan.Action{Kind: "set-file-attributes", File: f}); err != nil {
-					t.Fatal("target final attributes failed")
-				}
-				final, err := os.Stat(path)
-				if err != nil || final.Mode().Perm() != os.FileMode(finalMode) || !os.SameFile(written, final) {
-					t.Fatal("target final attributes did not restore requested mode on the same inode")
+					t.Fatal("target lost prepared content", err)
 				}
 			})
 		}
 	}
 }
 
-func TestSensitiveTargetPermissionFailurePrecedesContentReplacement(t *testing.T) {
+func TestSensitiveTargetConflictPrecedesContentReplacement(t *testing.T) {
 	target, dir := shellTarget(t)
 	path := filepath.Join(dir, "target")
-	const oldContent = "old synthetic content"
-	if err := os.WriteFile(path, []byte(oldContent), 0644); err != nil {
-		t.Fatal("could not create fixture")
-	}
-	if err := os.WriteFile(filepath.Join(dir, "chmod"), []byte("#!/bin/sh\nprintf 'synthetic-confidential-marker' >&2\nexit 1\n"), 0700); err != nil {
-		t.Fatal("could not install permission failure fixture")
+	if err := os.WriteFile(path, []byte("old synthetic content"), 0644); err != nil {
+		t.Fatal(err)
 	}
 	mode := uint32(0600)
-	f := &plan.FileChange{Path: path, State: "present", Content: "synthetic-confidential-marker", Sensitive: true, Mode: &mode, Write: true}
+	f := &plan.FileChange{Path: path, State: "present", Content: "synthetic-confidential-marker", Sensitive: true, Mode: &mode, AtomicWrites: true}
+	if _, err := target.Observe(context.Background(), f); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("external content"), 0644); err != nil {
+		t.Fatal(err)
+	}
 	if err := target.Execute(context.Background(), plan.Action{Kind: "overwrite-file", File: f}); err == nil || err.Error() != "sensitive file operation failed" {
-		t.Fatal("permission failure diagnostic was not protected")
+		t.Fatal("conflict diagnostic was not protected", err)
 	}
 	content, err := os.ReadFile(path)
-	if err != nil || string(content) != oldContent {
-		t.Fatal("content changed before restrictive permissions succeeded")
+	if err != nil || string(content) != "external content" {
+		t.Fatal("content changed before the prepared precondition succeeded")
 	}
 }

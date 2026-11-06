@@ -599,7 +599,7 @@ func (e Local) observe(ctx context.Context, ps preparedService, sequence *config
 			t.Process = &mc
 			maskTask = &t
 			if !*c.Masked {
-				// Removing a full-unit mask must precede file writes, which follow symlinks.
+				// Removing a full-unit mask must precede its prepared file write.
 				unmasks = append(unmasks, t)
 			}
 		}

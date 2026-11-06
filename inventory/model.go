@@ -85,6 +85,8 @@ type Config struct {
 	Mode                string     `json:"mode,omitempty" yaml:"mode"`
 	Template            Template   `json:"template" yaml:"template"`
 	Sensitive           bool       `json:"sensitive,omitempty" yaml:"sensitive"`
+	AtomicWrites        *bool      `json:"atomic_writes,omitempty" yaml:"atomic_writes"`
+	Backup              bool       `json:"backup,omitempty" yaml:"backup"`
 	SELinux             string     `json:"selinux,omitempty" yaml:"selinux"`
 	Validate            *Validator `json:"validate,omitempty" yaml:"validate"`
 	Array               string     `json:"array,omitempty" yaml:"array"`

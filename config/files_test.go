@@ -78,10 +78,16 @@ func TestFileLifecycleAndFrozenPlan(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.Hosts[0].Vars["message"] = "third"
+	if _, err := plan.Apply(context.Background(), p, config.Local{}, nil); err == nil {
+		t.Fatal("apply overwrote an external content edit")
+	}
+	if err := os.WriteFile(path, []byte("first\n"), 0640); err != nil {
+		t.Fatal(err)
+	}
 	apply(t, p)
 	after, _ := os.Stat(path)
-	if !os.SameFile(before, after) {
-		t.Fatal("target was atomically replaced")
+	if os.SameFile(before, after) {
+		t.Fatal("default atomic write retained the previous inode")
 	}
 	b, _ = os.ReadFile(path)
 	if string(b) != "second\n" {
@@ -189,7 +195,7 @@ func TestPreparationErrorsBeforeChanges(t *testing.T) {
 	}
 }
 
-func TestFollowSymlinksIncludingParentAndRemoveNamedLink(t *testing.T) {
+func TestReplaceFinalSymlinkFollowParentAndRemoveNamedLink(t *testing.T) {
 	dir := directory(t)
 	target := filepath.Join(dir, "target")
 	if err := os.WriteFile(target, []byte("unmanaged"), 0600); err != nil {
@@ -199,30 +205,38 @@ func TestFollowSymlinksIncludingParentAndRemoveNamedLink(t *testing.T) {
 	if err := os.Symlink(target, link); err != nil {
 		t.Fatal(err)
 	}
-	apply(t, diff(t, resolved(link, "through target", false)))
+	apply(t, diff(t, resolved(link, "replacement", false)))
+	entry, err := os.Lstat(link)
+	content, _ := os.ReadFile(target)
+	if err != nil || !entry.Mode().IsRegular() || string(content) != "unmanaged" {
+		t.Fatal("final symlink was followed instead of replaced", err)
+	}
 	parent := filepath.Join(dir, "parent")
 	if err := os.Symlink(dir, parent); err != nil {
 		t.Fatal(err)
 	}
 	apply(t, diff(t, resolved(filepath.Join(parent, "target"), "through parent", false)))
+	content, _ = os.ReadFile(target)
+	if string(content) != "through parent\n" {
+		t.Fatal("parent symlink was not followed")
+	}
 	path := filepath.Join(dir, "later")
 	p := diff(t, resolved(path, "saved", false))
 	if err := os.Symlink(target, path); err != nil {
 		t.Fatal(err)
 	}
-	apply(t, p)
-	b, _ := os.ReadFile(target)
-	if string(b) != "saved\n" {
-		t.Fatal(string(b))
+	if _, err := plan.Apply(context.Background(), p, config.Local{}, nil); err == nil {
+		t.Fatal("apply accepted a symlink that appeared after preparation")
 	}
-	r := resolved(link, "", false)
+	r := resolved(path, "", false)
 	r.Hosts[0].Services[0].State = "absent"
 	apply(t, diff(t, r))
-	if _, err := os.Lstat(link); !os.IsNotExist(err) {
+	if _, err := os.Lstat(path); !os.IsNotExist(err) {
 		t.Fatal("named link remains", err)
 	}
-	if _, err := os.Stat(target); err != nil {
-		t.Fatal("removed symlink target", err)
+	content, _ = os.ReadFile(target)
+	if string(content) != "through parent\n" {
+		t.Fatal("removal followed the named symlink")
 	}
 }
 

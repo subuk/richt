@@ -58,7 +58,7 @@ def tty_apply(answer,expect_ok,hold=False):
  if (p.returncode==0)!=expect_ok:raise RuntimeError(('tty',p.returncode,out))
  return out
 try:
-    # create+label, no write during diff, saved sources vanish, stale content ignored
+    # Create+label, no write during diff, saved sources vanish, conflicts refuse mutation.
     open(source,'w').write('message={{.greeting}}\n')
     path=target+'/nested/config';write_inv([('main',path,'        owner: root\n        group: root\n        mode: "0640"\n        selinux: system_u:object_r:etc_t:s0\n')])
     run(['diff','-i',inv,'-o',saved]);assert not os.path.exists(path)
@@ -69,11 +69,12 @@ try:
     label=subprocess.check_output(['ls','-Z',path],text=True);assert 'system_u:object_r:etc_t:s0' in label;checks.append('TTY yes creates parent directories and file with root:root mode0640 and SELinux etc_t on Enforcing host')
     assert 'No changes' in run(['diff','-i',inv]);checks.append('no changes after apply')
     text=open(inv).read().replace('example-one','example-two');open(inv,'w').write(text);run(['diff','-i',inv,'-o',saved]);inode=os.stat(path).st_ino
-    open(path,'w').write('manual-intervening-change\n');os.remove(source);os.remove(inv);run(['apply','-y',saved]);assert open(path).read()=='message=example-two\n' and os.stat(path).st_ino==inode;checks.append('saved apply ignores deleted inventory/template and intervening target content, preserves inode')
+    open(path,'w').write('manual-intervening-change\n');run(['apply','-y',saved],False);assert open(path).read()=='manual-intervening-change\n';checks.append('saved apply refuses intervening target content before publication')
+    open(path,'w').write('message=example-one\n');os.remove(source);os.remove(inv);run(['apply','-y',saved]);assert open(path).read()=='message=example-two\n' and os.stat(path).st_ino!=inode;checks.append('saved apply uses frozen bytes without inventory/template and replaces inode atomically')
     assert 'previously completed' in run(['apply','-y',saved]);checks.append('repeat saved apply skips successful tasks')
     open(source,'w').write('message={{.greeting}}\n');write_inv([('main',path,'')],state='absent');run(['diff','-i',inv,'-o',saved]);run(['apply','-y',saved]);assert not os.path.exists(path);checks.append('explicit absent removes file')
-    # Ordinary writes follow target and parent symlinks.
-    link_target=target+'/link-target';open(link_target,'w').write('old\n');os.symlink(link_target,path);write_inv([('main',path,'')]);run(['diff','-i',inv,'-o',saved]);run(['apply','-y',saved]);assert os.path.islink(path) and open(link_target).read()=='message=example-one\n';os.unlink(path);checks.append('symlink target is written through')
+    # Final symlinks are replaced; parent symlinks are followed.
+    link_target=target+'/link-target';open(link_target,'w').write('old\n');os.symlink(link_target,path);write_inv([('main',path,'')]);run(['diff','-i',inv,'-o',saved]);run(['apply','-y',saved]);assert not os.path.islink(path) and open(path).read()=='message=example-one\n' and open(link_target).read()=='old\n';os.unlink(path);checks.append('final symlink is replaced without changing its referent')
     parent_link=target+'/parent-link';os.symlink(target+'/nested',parent_link);write_inv([('main',parent_link+'/via-link','')]);run(['diff','-i',inv,'-o',saved]);run(['apply','-y',saved]);assert open(target+'/nested/via-link').read()=='message=example-one\n';checks.append('symlink parent is followed')
     for extra in ['        owner: richt-user-does-not-exist\n','        group: richt-group-does-not-exist\n']:
      write_inv([('main',path,extra)]);run(['diff','-i',inv],False)

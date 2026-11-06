@@ -106,17 +106,20 @@ JSON itself.
 Plans, locks, and atomic plan replacements use mode 0600. Keep their containing
 directory private and do not publish the JSON, logs, or temporary artifacts.
 Target permissions follow the file contract: a new file defaults to mode 0644,
-and existing permissions are preserved unless specified. Set `mode: "0600"`
+and existing regular-file permissions are preserved unless specified. Replacing
+a final symlink uses new regular-file defaults; the link metadata belongs to
+its optional backup. Set `mode: "0600"`
 explicitly for a private target. For SSH/sudo, prepared bytes travel through
 stdin instead of command arguments; sources remain on the controller.
 
-When a sensitive file has an explicit `mode`, its write first restricts the
-target to owner-only read/write access (0600), before writing content. The
-following attribute operation applies the requested final permissions and
-ownership. A failed write can leave the target at 0600 until explicit
-continuation. This applies to new and existing files, locally and over SSH/sudo,
-without replacing the inode. Without an explicit mode, the usual default and
-preserved-permission rules still apply.
+Atomic template writes stage bytes privately and apply intended metadata before
+publication. Explicit `atomic_writes: false` selects weaker in-place regular-file
+writes; a sensitive write with an explicit `mode` first restricts the inode to
+0600, and failure may leave that restrictive mode until manual recovery or
+continuation. Backups preserve the prior object's permissions and metadata,
+including for symlinks, rather than forcing 0600. They may retain old secrets;
+protect the target backup and its private receipt as well as the saved plan.
+See [file writes and backups](services/configs/files.md).
 
 Optional config validators stage candidate bytes in a private target directory
 (mode 0700), with a mode 0600 candidate file. Validator stdout and stderr are

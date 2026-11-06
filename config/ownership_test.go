@@ -2,9 +2,10 @@ package config
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/subuk/richt/plan"
@@ -67,7 +68,7 @@ func TestTargetPendingOwnershipIsResolvedAgainAtApply(t *testing.T) {
 	if changed, err := target.Observe(ctx, f, projection); err != nil || !changed || f.Write {
 		t.Fatal(changed, err, f)
 	}
-	uid, gid := uint32(417), uint32(418)
+	uid, gid := uint32(os.Getuid()), uint32(os.Getgid())
 	if changed, err := target.Observe(ctx, f, Ownership{OwnerID: &uid, GroupID: &gid}); err != nil || changed {
 		t.Fatal(changed, err)
 	}
@@ -77,15 +78,19 @@ func TestTargetPendingOwnershipIsResolvedAgainAtApply(t *testing.T) {
 	if err := target.Execute(ctx, plan.Action{Kind: "set-file-attributes", File: f}); err == nil {
 		t.Fatal("apply skipped named identity lookup")
 	}
-	if err := os.WriteFile(filepath.Join(dir, "getent"), []byte("#!/bin/sh\ncase \"$1:$3\" in\npasswd:new-user) printf 'new-user:x:419:420::/:/bin/sh\\n';;\ngroup:new-group) printf 'new-group:x:420:\\n';;\n*) exit 1;; esac\n"), 0700); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "getent"), []byte(fmt.Sprintf("#!/bin/sh\ncase \"$1:$3\" in\npasswd:new-user) printf 'new-user:x:%d:%d::/:/bin/sh\\n';;\ngroup:new-group) printf 'new-group:x:%d:\\n';;\n*) exit 1;; esac\n", os.Getuid(), os.Getgid(), os.Getgid())), 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := target.Execute(ctx, plan.Action{Kind: "set-file-attributes", File: f}); err != nil {
 		t.Fatal(err)
 	}
-	got, err := os.ReadFile(filepath.Join(dir, "chown-args"))
-	if err != nil || !strings.Contains(string(got), "+419:+420") {
-		t.Fatalf("apply did not resolve current target IDs: %s %v", got, err)
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := info.Sys().(*syscall.Stat_t)
+	if ids.Uid != uint32(os.Getuid()) || ids.Gid != uint32(os.Getgid()) {
+		t.Fatal("apply did not resolve current target IDs")
 	}
 	if changed, err := target.ObserveMissing(ctx, f, projection); err != nil || !changed || !f.Write {
 		t.Fatal(changed, err)

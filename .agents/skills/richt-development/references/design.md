@@ -140,11 +140,11 @@ Important invariants across those contracts:
   transaction, scriptlet effects, or RPM checksums; target DNF resolves those at
   apply. RPMs are fetched then and are not embedded as large plan artifacts.
 - Files create necessary parents, require existing named owners/groups on the
-  target, and support owner/group/mode and full SELinux labels. Ordinary file
-  operations follow target and parent symlinks; removal unlinks the named entry.
-  New plans retain owner/group names and resolve them again on apply; numeric
-  IDs may change between preparation and execution. No special inode identity
-  or symlink protection contract is imposed. Missing template variables fail
+  target, and support owner/group/mode and full SELinux labels. Template writes
+  replace the final entry without dereferencing symlinks, including dangling
+  links; removal unlinks only that entry. Atomic replacement changes only the
+  declared hardlink entry. Parent symlinks remain followed. Plans retain
+  owner/group names and resolve them again on apply; numeric IDs may change. Missing template variables fail
   preparation. Optional config validators run at apply against private
   target-side candidate files before writing; command arguments and timeout are prepared inputs.
   Validation and writing share one task, and failure preserves the destination
@@ -180,7 +180,7 @@ namespace with a private login.defs policy; host policy is unchanged. This
 requires the documented namespace capability. Changing a user's primary group
 retains shadow-utils' documented home-file group ownership side effect.
 
-The account operation is an additive version 1.6 payload. It fixes creation,
+The account operation was introduced in version 1.6 and is retained in 1.7. It fixes creation,
 update or deletion inputs, existing numeric identities and group dependencies.
 Execution checks those preconditions and verifies results; an unfinished task
 may accept its already matching result. Automatic IDs are allocated at apply,
@@ -197,8 +197,8 @@ or YUM4 without editing repository policy. It disables both exclusion and
 inclusion filters in that scope. Omission preserves backend defaults; changing
 only the override never changes installed-package matching or triggers a
 reinstall/reaction. Prepared plans display and freeze the value. This additive
-optional input was introduced in saved format 1.5 and remains supported in 1.6;
-readers predating the field reject it as unknown when supplied.
+optional input was introduced in saved format 1.5 and remains supported in the
+current 1.7 schema.
 
 Preparation and diff do not change managed resources. A plan fixes host targets,
 task order, operations, ready file contents/patches and attributes, explicit
@@ -210,23 +210,66 @@ Secrets must be hidden in every Richt-controlled display.
 
 Apply executes prepared inputs without rereading inventory/templates/secrets,
 rendering again, recalculating diff, or performing a general drift comparison. Prepared storage and mount identity,
-signature, consumer, and fstab preconditions are checked at execution. Rendered content and task composition remain fixed. Current system SSH
+signature, consumer, and fstab preconditions are checked at execution. Template
+operations also verify frozen prior contents/presence/type or symlink text. Rendered content and task composition remain fixed. Current system SSH
 configuration may change between preparation and apply, and named ownership is
 resolved again on the target. These are explicit exceptions to frozen inputs,
 not reasons to recalculate tasks. Other incompatible backend semantics fail. Process state reads for planned branches and
 result verification remain execution operations. Successful tasks are not
 rechecked during continuation.
 
-The current saved format is strict, indented JSON schema version `1.6`.
-Version `1.5` remains accepted for its original operations, and continuation
-preserves that version and its progress. Download/archive operations require
-`1.6`; older readers reject the new version. Task IDs
-use original zero-based list positions and operations, never optional name
-labels, and remain stable within a saved plan rather than across inventory
-reordering. Its task shapes, atomic writes, same-plan locking, and restrictive
-plan/lock permissions are
-implemented contracts, not undecided design. Extend them deliberately when new
-capabilities require additional executable inputs.
+The current saved format is strict, indented JSON schema version `1.7`.
+This is a breaking change: reject every older version before execution, with a
+clear instruction to prepare a new plan. There is no migration or legacy
+execution path. Task IDs use original zero-based list positions and operations,
+never optional name labels, and remain stable within a saved plan rather than
+across inventory reordering. Same-plan locking and restrictive plan/lock
+permissions remain implemented contracts.
+
+Template configs and owned systemd units/drop-ins default to
+`atomic_writes: true` and `backup: false`; other config types reject these fields.
+Each prepared file operation fixes a unique 32-character lowercase hex ID,
+explicit prior and desired entry states, prior metadata, and an adjacent
+`<path>.<UTC timestamp>.<operation ID>~` backup path when applicable. Regular
+prior hashes come from the exact diff bytes; symlinks retain link text without
+reading their referent. Expected metadata includes numeric UID/GID, mode and
+base64-valued xattrs. Desired regular states contain the prepared bytes' digest.
+Changed contents/presence/type/link text conflict. Identical bytes in a new
+inode and attribute-only external edits are accepted. Checks apply to both
+write modes and removals, independently of backups, and are not compare-and-swap:
+external writers can race after verification.
+
+Atomic publication validates private original prepared bytes, stages on the
+destination filesystem, preserves/applies current intended ownership, mode,
+ACLs, xattrs and SELinux metadata from current regular files, syncs the staged
+regular file and publishes
+with one rename. No pre-publication failure changes the original destination;
+there is no fallback to in-place writes. Explicit non-atomic mode permits
+partial/truncated regular contents and hardlink shared-inode effects on failure;
+it still replaces final symlinks rather than following them. A regular file
+replacing a symlink uses new-file defaults (0644, executing identity, destination
+default SELinux label) unless explicit attributes are requested; link metadata
+is retained only in its backup. An unfinished write repeats validation and
+publication, including if desired bytes are already installed. The Python 3
+standard-library helper is shared by local and SSH/sudo execution; Unix
+filesystem support is required, with Linux needed for SELinux.
+
+Opt-in backups are independent regular copies or copies of the symlink itself,
+preserving prior metadata without broadening access. Only replacement/removal
+of an existing entry needs a backup; unchanged/attribute-only operations and
+creation need none. Make backups durable before mutation and sync affected
+directory entries afterwards. A private adjacent `<backup path>.richt.json`
+receipt records operation ID and actual backup state/metadata, allowing live
+attribute preservation while retaining frozen content preconditions. Never
+overwrite collisions; continuation verifies and reuses the same backup and
+receipt. Unfinished tasks can recognize desired contents/type or absence, but
+must still satisfy backup, attributes and durability requirements. Missing
+required old backups cannot be recreated from desired bytes. Post-publication
+durability/progress failure may mean the desired state is already installed.
+Backups live on the target and paths appear even for unsaved runs. Keep the
+plan, backup and receipt for recovery or future reversal; there is no rollback
+command, rotation, cleanup or history service, and file restoration alone does
+not restore application runtime state.
 
 The CLI displays saved and newly built plans before applying. Both require
 explicit terminal agreement unless `-y` is supplied; missing TTY without `-y`
@@ -413,8 +456,10 @@ sources. Preparation implements these contracts:
   removed on normal success/failure/timeout, though abrupt termination may leave
   private temporary files behind. Target permissions remain explicitly
   controlled by `mode`.
-  Sensitive writes with an explicit mode restrict the target inode to 0600
-  before writing; the following attribute action sets the requested final mode.
+  Atomic writes stage private bytes and apply intended metadata before
+  publication. Explicit in-place sensitive writes with a requested mode restrict
+  the inode to 0600 before writing, then apply final attributes. Backups retain
+  prior permissions and may contain secrets; their receipts are private.
   Without an explicit mode, existing permissions and the new-file default remain.
   Keep real secrets out of repository fixtures and test reports.
 

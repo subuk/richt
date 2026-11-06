@@ -20,8 +20,10 @@ A [saved plan](files.md) fixes selected hosts, explicit connection inputs,
 task order, operations, file bytes/patches/attributes, package requests, allowed
 systemd process branches, and oneshot argv/timeouts/changed triggers. Apply does
 not reread inventory/templates/secrets, compute a new diff,
-or perform a general drift comparison. A template file changed after diff can be overwritten
-by the prepared write. Completed tasks are skipped without rechecking them on
+or perform a general drift comparison. Template writes and removals verify
+frozen prior contents/presence/type or recognize their own unfinished desired
+result. Intervening content edits fail with a conflict; required old-state
+backups must remain valid. Completed tasks are skipped without rechecking them on
 continuation. Reprepare and review when you want current observations.
 
 These inputs retain defined execution-time dependencies:
@@ -49,8 +51,14 @@ These inputs retain defined execution-time dependencies:
   signatures and unrelated consumers. Fstab edits require the frozen before
   or after contents; they do not overwrite intervening changes.
 
-Template operations follow target and parent symlinks; removal unlinks the
-named entry. Templates have no special inode identity contract. Plain file and
+Template writes replace the final symlink with a regular file without changing
+its referent; removals unlink the named entry. Atomic writes are the default,
+with explicit `atomic_writes: false` retaining weaker in-place regular-file
+writes. Atomic replacement changes only the named hardlink entry. Parent
+symlinks remain followed. Content checks are not strict inode checks or
+compare-and-swap; external writers can still race after verification. Opt-in
+`backup: true` keeps independent prior-object copies and private receipts on
+the target, with no automatic cleanup or rollback. See [file configs](services/configs/files.md). Plain file and
 directory operations freeze the identity of an existing target and reject its
 replacement. Recursive directory removal refuses active mount boundaries.
 Named users/groups must exist or be created by preceding account configs.

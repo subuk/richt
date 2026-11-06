@@ -13,8 +13,8 @@ func TestAccountPlanVersionAndPayloadCompatibility(t *testing.T) {
 	if err := p.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	p.Version = plan.LegacyVersion
-	if err := p.Validate(); err == nil || !strings.Contains(err.Error(), "account operations require") {
+	p.Version = "1.6"
+	if err := p.Validate(); err == nil || !strings.Contains(err.Error(), "prepare a new plan") {
 		t.Fatalf("legacy account plan: %v", err)
 	}
 	p.Version = plan.Version

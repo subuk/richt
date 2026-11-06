@@ -350,7 +350,7 @@ func configSchema(node *yaml.Node) error {
 		typ = n.Value
 	}
 	allowed := map[string]string{
-		"template":  "path owner group mode template sensitive selinux validate",
+		"template":  "path owner group mode template sensitive selinux validate atomic_writes backup",
 		"file":      "path owner group mode",
 		"directory": "path owner group mode",
 		"mdadm":     "array level metadata members filesystem",
@@ -395,6 +395,11 @@ func configSchema(node *yaml.Node) error {
 			return nil
 		}
 		switch key {
+		case "atomic_writes", "backup":
+			value = dereference(value)
+			if value.Kind != yaml.ScalarNode || value.Tag != "!!bool" {
+				return fmt.Errorf("line %d: config %s must be a boolean", value.Line, key)
+			}
 		case "members", "devices", "options":
 			return stringList(value, "config "+key)
 		case "array", "level", "metadata", "vg", "lv", "size", "filesystem", "source", "target":

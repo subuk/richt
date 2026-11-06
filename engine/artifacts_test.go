@@ -290,8 +290,10 @@ func TestArtifactUnselectedOwnershipAliasesWithoutPreparingExcludedServices(t *t
 					return nil, nil
 				}},
 				Files: &config.Target{Run: func(context.Context, string, ...string) ([]byte, error) {
+					return []byte("-\n-\n"), nil
+				}, RunInput: func(context.Context, []byte, string, ...string) ([]byte, error) {
 					observed++
-					return []byte("missing\n0\n0\n0\n-\n-\n\n"), nil
+					return fileObservation("absent", ""), nil
 				}},
 				Mount: mount.Backend{Run: func(_ context.Context, command string, args ...string) ([]byte, error) {
 					if command == "findmnt" {

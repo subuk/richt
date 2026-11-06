@@ -27,3 +27,9 @@ failure that demonstrates saved progress and manual resume.
 See [saved plans and apply](../../docs/files.md) for frozen inputs, confirmation,
 locking, attributes and sensitive output, and the repository acceptance report
 for executed validation results.
+
+Template writes default to `atomic_writes: true` and `backup: false`. Add
+`backup: true` to a config to keep the prior object before replacement or
+removal; diff displays its frozen adjacent backup path. Saved plans use format
+`1.7`; prepare a new plan instead of applying one from an older release.
+See [file writes and backups](../../docs/services/configs/files.md).

@@ -2,6 +2,17 @@ package inventory
 
 import "testing"
 
+func TestTemplateWriteOptionsCannotBeUsedByOtherConfigs(t *testing.T) {
+	no := false
+	for _, typ := range []string{"file", "directory", "mdadm", "lvm-vg", "lvm-lv", "mount", "user", "group"} {
+		for _, c := range []Config{{Type: typ, AtomicWrites: &no}, {Type: typ, Backup: true}} {
+			if err := validateConfig(c); err == nil {
+				t.Fatalf("%s accepted template write options", typ)
+			}
+		}
+	}
+}
+
 func TestTypedConfigOwnership(t *testing.T) {
 	for _, configs := range [][]Config{
 		{{Type: "file", Path: "/etc/fstab"}, {Type: "mount", Source: "/dev/a", Target: "/srv/a", Filesystem: "xfs"}},

@@ -2,6 +2,10 @@ package engine
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"reflect"
@@ -27,7 +31,21 @@ func (missingAccount) ExitCode() int { return 2 }
 // or paths. Backend execution and target shell behavior have their own tests.
 func accountTarget(t *testing.T, exists bool) config.Target {
 	t.Helper()
-	return config.Target{Run: func(_ context.Context, command string, args ...string) ([]byte, error) {
+	return config.Target{RunInput: func(_ context.Context, input []byte, command string, args ...string) ([]byte, error) {
+		if command != "python3" {
+			t.Fatalf("unexpected helper %s", command)
+		}
+		var request struct {
+			Action string `json:"action"`
+		}
+		if err := json.Unmarshal(input, &request); err != nil || request.Action != "observe" {
+			t.Fatal("preparation mutated files")
+		}
+		if !exists {
+			return fileObservation("absent", ""), nil
+		}
+		return fileObservation("regular", "frozen"), nil
+	}, Run: func(_ context.Context, command string, args ...string) ([]byte, error) {
 		switch command {
 		case "uname":
 			return []byte("Linux\n"), nil
@@ -71,11 +89,17 @@ func accountTarget(t *testing.T, exists bool) config.Target {
 				}
 				return []byte("present\n42\n43\n640\n417\n418\n-\n-\n"), nil
 			}
+			if strings.Contains(args[1], "printf '%s\\n%s\\n'") {
+				return []byte("-\n-\n"), nil
+			}
 			if strings.Contains(args[1], "stat -Lc '%a") {
 				if !exists {
 					return []byte("missing\n0\n0\n0\n-\n-\n\n"), nil
 				}
 				return []byte("present\n640\n417\n418\n-\n-\n\nfrozen"), nil
+			}
+			if strings.Contains(args[1], "printf '%s") {
+				return []byte("-\n-\n"), nil
 			}
 		}
 		t.Fatalf("unexpected preparation command %s %v", command, args)
@@ -300,4 +324,16 @@ func TestOwnedSystemdFilesFollowAccountCreationAndPrecedeRemoval(t *testing.T) {
 			t.Fatal(ids)
 		}
 	}
+}
+
+// File helper protocol fixtures contain the same bytes used for the diff.
+func fileObservation(kind, content string) []byte {
+	state := &plan.FileState{Kind: kind}
+	if kind == "regular" {
+		sum := sha256.Sum256([]byte(content))
+		state.SHA256 = hex.EncodeToString(sum[:])
+		state.Metadata = &plan.FileMetadata{UID: 417, GID: 418, Mode: 0640, Xattrs: map[string]string{}}
+	}
+	out, _ := json.Marshal(map[string]any{"state": state, "content": base64.StdEncoding.EncodeToString([]byte(content))})
+	return out
 }

@@ -230,7 +230,9 @@ func TestUnnamedProcessesKeepOwnedAndOrdinaryUnitAssociations(t *testing.T) {
 			}
 			s.Configs = append(s.Configs, inventory.Config{Name: "trigger", Path: "/tmp/richt-order-trigger", Template: inventory.Template{Inline: inline("changed")}})
 			target := config.Target{Run: func(context.Context, string, ...string) ([]byte, error) {
-				return []byte("missing\n0\n0\n0\n-\n-\n\n"), nil
+				return []byte("-\n-\n"), nil
+			}, RunInput: func(context.Context, []byte, string, ...string) ([]byte, error) {
+				return fileObservation("absent", ""), nil
 			}}
 			e := Local{Files: &target, Systemd: systemd.Backend{Run: func(context.Context, string, ...string) ([]byte, error) {
 				return []byte("LoadState=not-found\nActiveState=inactive\nUnitFileState=\nCanReload=no\n"), nil

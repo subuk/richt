@@ -17,10 +17,7 @@ import (
 	"github.com/subuk/richt/inventory"
 )
 
-const Version = "1.6"
-
-// LegacyVersion remains executable with its original resource shapes and progress.
-const LegacyVersion = "1.5"
+const Version = "1.7"
 
 type Plan struct {
 	Version string `json:"version"`
@@ -58,17 +55,23 @@ type Task struct {
 	Progress  Progress        `json:"progress"`
 }
 type FileChange struct {
-	Path      string         `json:"path"`
-	State     string         `json:"state"`
-	Content   string         `json:"content,omitempty"`
-	Patch     string         `json:"patch,omitempty"`
-	Sensitive bool           `json:"sensitive,omitempty"`
-	Write     bool           `json:"write,omitempty"`
-	Owner     string         `json:"owner,omitempty"`
-	Group     string         `json:"group,omitempty"`
-	Mode      *uint32        `json:"mode,omitempty"`
-	SELinux   string         `json:"selinux,omitempty"`
-	Validate  *FileValidator `json:"validate,omitempty"`
+	AtomicWrites bool           `json:"atomic_writes"`
+	Backup       bool           `json:"backup"`
+	OperationID  string         `json:"operation_id"`
+	Expected     *FileState     `json:"expected"`
+	Desired      *FileState     `json:"desired"`
+	BackupPath   string         `json:"backup_path,omitempty"`
+	Path         string         `json:"path"`
+	State        string         `json:"state"`
+	Content      string         `json:"content,omitempty"`
+	Patch        string         `json:"patch,omitempty"`
+	Sensitive    bool           `json:"sensitive,omitempty"`
+	Write        bool           `json:"write,omitempty"`
+	Owner        string         `json:"owner,omitempty"`
+	Group        string         `json:"group,omitempty"`
+	Mode         *uint32        `json:"mode,omitempty"`
+	SELinux      string         `json:"selinux,omitempty"`
+	Validate     *FileValidator `json:"validate,omitempty"`
 }
 
 // FileValidator retains the command and timeout reviewed with the candidate bytes.
@@ -190,6 +193,7 @@ func (c *OneshotChange) Validate() error {
 
 // Action is a concrete operation. Resolve is shared by display and execution.
 type Action struct {
+	Resume      bool
 	Kind        string
 	File        *FileChange
 	RPM         *RPMChange
@@ -226,8 +230,8 @@ func Bind(h Host, e Executor) (Executor, error) {
 }
 
 func (p *Plan) Validate() error {
-	if p.Version != Version && p.Version != LegacyVersion {
-		return fmt.Errorf("incompatible plan version %q (supported %s and %s)", p.Version, LegacyVersion, Version)
+	if p.Version != Version {
+		return fmt.Errorf("incompatible plan version %q (required %s); prepare a new plan", p.Version, Version)
 	}
 	seenHosts := map[string]bool{}
 	for _, h := range p.Hosts {
@@ -261,12 +265,6 @@ func (p *Plan) Validate() error {
 				return fmt.Errorf("host %s: empty or duplicate task ID", h.Name)
 			}
 			ids[t.ID] = true
-			if p.Version == LegacyVersion && (t.Artifact != nil || t.Operation == "artifact") {
-				return fmt.Errorf("task %s: artifact operations require plan version %s", t.ID, Version)
-			}
-			if p.Version == LegacyVersion && (t.Account != nil || t.Operation == "account") {
-				return fmt.Errorf("task %s: account operations require plan version %s", t.ID, Version)
-			}
 			payloads := 0
 			if t.Account != nil {
 				payloads++
@@ -290,6 +288,9 @@ func (p *Plan) Validate() error {
 			}
 			if t.File != nil {
 				payloads++
+				if err := t.File.ValidatePrepared(); err != nil {
+					return fmt.Errorf("task %s: %w", t.ID, err)
+				}
 			}
 			if t.RPM != nil {
 				payloads++
@@ -315,7 +316,8 @@ func (p *Plan) Validate() error {
 			if payloads > 1 {
 				return fmt.Errorf("task %s: mixed operation payloads", t.ID)
 			}
-			if (t.Account != nil) != (t.Operation == "account") ||
+			if (t.File != nil) != (t.Operation == "file") ||
+				(t.Account != nil) != (t.Operation == "account") ||
 				(t.Artifact != nil) != (t.Operation == "artifact") ||
 				(t.Path != nil) != (t.Operation == "path") ||
 				(t.Storage != nil) != (t.Operation == "storage") ||
@@ -426,7 +428,20 @@ func display(w io.Writer, p *Plan, e Executor) error {
 				if f.SELinux != "" {
 					fmt.Fprintf(w, " selinux=%s", f.SELinux)
 				}
+				if a.Kind == "overwrite-file" {
+					if f.AtomicWrites {
+						fmt.Fprint(w, " atomic")
+					} else {
+						fmt.Fprint(w, " non-atomic")
+					}
+				}
+				if f.BackupPath != "" {
+					fmt.Fprintf(w, " backup=%s", f.BackupPath)
+				}
 				fmt.Fprintln(w)
+				if a.Kind == "overwrite-file" && f.Expected != nil && f.Expected.Kind == "symlink" {
+					fmt.Fprintln(w, "      replace final symlink with regular file")
+				}
 				if a.Kind == "overwrite-file" && f.Validate != nil {
 					if f.Sensitive {
 						fmt.Fprintf(w, "      validate candidate before write (arguments hidden: sensitive); timeout %s\n", f.Validate.Timeout)

@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -14,11 +13,9 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/aymanbagabas/go-udiff"
 	"github.com/subuk/richt/inventory"
 	"github.com/subuk/richt/plan"
 	"github.com/subuk/richt/secrets"
-	"golang.org/x/sys/unix"
 )
 
 // Diff renders all templates and validates capabilities before observing resources.
@@ -97,7 +94,10 @@ func Prepare(c inventory.Config, state string, vars map[string]any, lookups ...S
 	if !filepath.IsAbs(c.Path) || filepath.Clean(c.Path) == "/" {
 		return nil, errors.New("file path must be absolute and identify a file")
 	}
-	f := &plan.FileChange{Path: filepath.Clean(c.Path), State: state, Sensitive: c.Sensitive, SELinux: c.SELinux}
+	f := &plan.FileChange{Path: filepath.Clean(c.Path), State: state, Sensitive: c.Sensitive, SELinux: c.SELinux, AtomicWrites: true, Backup: c.Backup}
+	if c.AtomicWrites != nil {
+		f.AtomicWrites = *c.AtomicWrites
+	}
 	f.Owner, f.Group = c.Owner, c.Group
 	if c.Validate != nil {
 		v := &plan.FileValidator{Args: append([]string(nil), c.Validate.Args...), Timeout: c.Validate.Timeout}
@@ -209,66 +209,11 @@ func Observe(f *plan.FileChange, anticipated ...Ownership) (changed bool, err er
 			return false, err
 		}
 	}
-	if f.State == "absent" {
-		info, err := os.Lstat(f.Path)
-		if os.IsNotExist(err) {
-			return false, nil
-		}
-		if err != nil {
-			return false, err
-		}
-		if !info.Mode().IsRegular() && info.Mode()&os.ModeSymlink == 0 {
-			return false, errors.New("target is not a regular file")
-		}
-		old := []byte(nil)
-		if info.Mode().IsRegular() {
-			old, err = os.ReadFile(f.Path)
-		}
-		if err != nil {
-			return false, err
-		}
-		f.Patch = udiff.Unified(f.Path, "/dev/null", string(old), "")
-		return true, nil
-	}
-	file, err := os.OpenFile(f.Path, os.O_RDONLY|unix.O_NONBLOCK, 0)
-	if os.IsNotExist(err) {
-		f.Write = true
-		f.Patch = udiff.Unified("/dev/null", f.Path, "", f.Content)
-		return true, nil
-	}
+	state, old, err := observeEntry(context.Background(), localFileInput, f)
 	if err != nil {
 		return false, err
 	}
-	defer file.Close()
-	info, err := file.Stat()
-	if err != nil {
-		return false, err
-	}
-	if !info.Mode().IsRegular() {
-		return false, errors.New("target is not a regular file")
-	}
-	old, err := io.ReadAll(file)
-	if err != nil {
-		return false, err
-	}
-	f.Write = !bytes.Equal(old, []byte(f.Content))
-	f.Patch = ""
-	if f.Write {
-		f.Patch = udiff.Unified(f.Path, f.Path, string(old), f.Content)
-	}
-	var st unix.Stat_t
-	if err = unix.Fstat(int(file.Fd()), &st); err != nil {
-		return false, err
-	}
-	changed = projection.pending() || f.Write || f.Mode != nil && uint32(st.Mode)&07777 != *f.Mode || uid != -1 && int(st.Uid) != uid || gid != -1 && int(st.Gid) != gid
-	if f.SELinux != "" {
-		label, err := readLabel(file)
-		if err != nil {
-			return false, err
-		}
-		changed = changed || label != f.SELinux
-	}
-	return changed, nil
+	return entryChanged(f, state, old, uid, gid, projection.pending())
 }
 
 // ObserveMissing prepares a file known to become absent before its file task,
@@ -294,8 +239,7 @@ func ObserveMissing(f *plan.FileChange, anticipated ...Ownership) (changed bool,
 		}
 	}
 	f.Write = true
-	f.Patch = udiff.Unified("/dev/null", f.Path, "", f.Content)
-	return true, nil
+	return true, freezeFile(f, &plan.FileState{Kind: "absent"}, nil)
 }
 
 func validateLabelSyntax(label string) error {
@@ -353,8 +297,9 @@ func (Local) Resolve(t plan.Task) ([]plan.Action, error) {
 	if _, err := validatorDuration(f.Validate); err != nil {
 		return nil, err
 	}
+	resume := t.Progress.Status == "running" || t.Progress.Status == "error"
 	if f.State == "absent" {
-		return []plan.Action{{Kind: "remove-file", File: f}}, nil
+		return []plan.Action{{Kind: "remove-file", File: f, Resume: resume}}, nil
 	}
 	if f.State != "present" {
 		return nil, errors.New("invalid file state in plan")
@@ -364,14 +309,10 @@ func (Local) Resolve(t plan.Task) ([]plan.Action, error) {
 			return nil, err
 		}
 	}
-	actions := []plan.Action{{Kind: "create-parent-directories", File: f}}
 	if f.Write {
-		actions = append(actions, plan.Action{Kind: "overwrite-file", File: f})
+		return []plan.Action{{Kind: "overwrite-file", File: f, Resume: resume}}, nil
 	}
-	if f.Owner != "" || f.Group != "" || f.Mode != nil || f.SELinux != "" {
-		actions = append(actions, plan.Action{Kind: "set-file-attributes", File: f})
-	}
-	return actions, nil
+	return []plan.Action{{Kind: "set-file-attributes", File: f, Resume: resume}}, nil
 }
 
 func (Local) Execute(ctx context.Context, a plan.Action) (err error) {
@@ -390,31 +331,13 @@ func (Local) Execute(ctx context.Context, a plan.Action) (err error) {
 	if _, err := (Local{}).Resolve(plan.Task{Operation: "file", File: f}); err != nil {
 		return err
 	}
+	if err := f.ValidatePrepared(); err != nil {
+		return err
+	}
 	if a.Kind == "create-parent-directories" {
 		return os.MkdirAll(filepath.Dir(f.Path), 0755)
 	}
-	if a.Kind == "remove-file" {
-		info, err := os.Lstat(f.Path)
-		if os.IsNotExist(err) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		if !info.Mode().IsRegular() && info.Mode()&os.ModeSymlink == 0 {
-			return errors.New("target is not a regular file")
-		}
-		return os.Remove(f.Path)
-	}
-	flags := os.O_WRONLY | unix.O_NONBLOCK
-	createMode := os.FileMode(0644)
-	privateWrite := a.Kind == "overwrite-file" && f.Sensitive && f.Mode != nil
-	if a.Kind == "overwrite-file" {
-		flags |= os.O_CREATE
-		if privateWrite {
-			createMode = 0600
-		}
-	} else if a.Kind != "set-file-attributes" {
+	if a.Kind != "overwrite-file" && a.Kind != "set-file-attributes" && a.Kind != "remove-file" {
 		return fmt.Errorf("unsupported action %q", a.Kind)
 	}
 	if a.Kind == "overwrite-file" && f.Write && f.Validate != nil {
@@ -422,55 +345,13 @@ func (Local) Execute(ctx context.Context, a plan.Action) (err error) {
 			return err
 		}
 	}
-	file, err := os.OpenFile(f.Path, flags, createMode)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	info, err := file.Stat()
-	if err != nil {
-		return err
-	}
-	if !info.Mode().IsRegular() {
-		return errors.New("target is not a regular file")
-	}
-	if a.Kind == "overwrite-file" {
-		if privateWrite {
-			// Restrict the existing inode before replacing any content. The
-			// separate attribute action applies the explicitly requested mode.
-			if err = unix.Fchmod(int(file.Fd()), 0600); err != nil {
-				return err
-			}
-		}
-		if err = file.Truncate(0); err != nil {
-			return err
-		}
-		if _, err = file.WriteString(f.Content); err != nil {
-			return err
-		}
-		return file.Sync()
-	}
-	uid, gid, err := ownership(f)
-	if err != nil {
-		return err
-	}
-	if uid != -1 || gid != -1 {
-		if err = file.Chown(uid, gid); err != nil {
+	uid, gid := -1, -1
+	if a.Kind != "remove-file" {
+		uid, gid, err = ownership(f)
+		if err != nil {
 			return err
 		}
 	}
-	if f.Mode != nil {
-		if err = unix.Fchmod(int(file.Fd()), *f.Mode); err != nil {
-			return err
-		}
-	}
-	if f.SELinux != "" {
-		if err = validateLabel(f.SELinux); err != nil {
-			return err
-		}
-		if err = writeLabel(file, f.SELinux); err != nil {
-			return err
-		}
-	}
-	return file.Sync()
+	_, err = fileCommand(ctx, localFileInput, fileRequest{Action: a.Kind, File: f, Resume: a.Resume, UID: uid, GID: gid})
+	return err
 }

@@ -225,6 +225,10 @@ func TestSensitivePlanOutputAndProgress(t *testing.T) {
 	}}}}
 	// Keep the second operation nonsensitive while still using the same fake.
 	p.Hosts[0].Tasks[1].File = &plan.FileChange{Path: "/later"}
+	for i := range p.Hosts[0].Tasks {
+		p.Hosts[0].Tasks[i].Operation = "file"
+		prepareFileFixture(p.Hosts[0].Tasks[i].File)
+	}
 	var output bytes.Buffer
 	if err := plan.Display(&output, p, sensitiveExecutor{}); err != nil {
 		t.Fatal("sensitive plan display failed")

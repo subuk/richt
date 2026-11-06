@@ -108,6 +108,11 @@ a missing unit and replacing its mask with an owned unit.
 
 ## Owned units and drop-ins
 
+Owned template files use `atomic_writes: true` and `backup: false` by default.
+Both fields accept explicit booleans on `unit_file` and each override; prepared
+content conflicts, final-symlink replacement, metadata preservation, backup
+receipts and continuation follow the [file contract](../configs/files.md).
+
 Full units and drop-ins use the [config file fields](../configs/files.md),
 including templates, owner/group, mode, SELinux, and sensitivity:
 

@@ -291,6 +291,9 @@ func validateConfig(c Config) error {
 	if typ == "" {
 		typ = "template"
 	}
+	if typ != "template" && (c.AtomicWrites != nil || c.Backup) {
+		return fmt.Errorf("%s config cannot set atomic_writes or backup", typ)
+	}
 	switch typ {
 	case "template", "file", "directory", "mdadm", "lvm-vg", "lvm-lv", "mount", "user", "group":
 	default:

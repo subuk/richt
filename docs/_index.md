@@ -41,7 +41,8 @@ The focused guides are:
 
 Read [limitations](limitations.md) before using a saved plan as an operational
 artifact. Plans contain prepared executable inputs, potentially including
-secrets; apply does not recompute changes or check targets for drift.
+secrets. Apply does not recompute changes; prepared template operations check
+their expected content, presence, entry type and symlink text before mutation.
 
 For contributors, [CI and releases](ci.md) explains the shared checks, binary
 archives, manual publication, and required repository protection settings.

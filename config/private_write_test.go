@@ -11,45 +11,44 @@ import (
 	"github.com/subuk/richt/plan"
 )
 
-func TestSensitiveExplicitModeRestrictsInodeBeforeWrite(t *testing.T) {
-	for _, existing := range []bool{false, true} {
-		for _, finalMode := range []uint32{0640, 0400, 0000} {
-			t.Run(fmt.Sprintf("existing-%t-mode-%04o", existing, finalMode), func(t *testing.T) {
-				path := filepath.Join(directory(t), "target")
-				var before os.FileInfo
-				if existing {
-					if err := os.WriteFile(path, []byte("old synthetic content"), 0666); err != nil {
-						t.Fatal("could not create fixture")
+func TestSensitiveWritePublishesFinalAttributes(t *testing.T) {
+	for _, atomic := range []bool{false, true} {
+		for _, existing := range []bool{false, true} {
+			for _, finalMode := range []uint32{0640, 0400, 0000} {
+				t.Run(fmt.Sprintf("atomic-%t-existing-%t-mode-%04o", atomic, existing, finalMode), func(t *testing.T) {
+					path := filepath.Join(directory(t), "target")
+					var before os.FileInfo
+					if existing {
+						if err := os.WriteFile(path, []byte("old synthetic content"), 0666); err != nil {
+							t.Fatal(err)
+						}
+						before, _ = os.Stat(path)
 					}
-					if err := os.Chmod(path, 0666); err != nil {
-						t.Fatal("could not set fixture mode")
+					f := &plan.FileChange{Path: path, State: "present", Content: "synthetic private content", Sensitive: true, Mode: &finalMode, AtomicWrites: atomic}
+					if _, err := config.Observe(f); err != nil {
+						t.Fatal(err)
 					}
-					before, _ = os.Stat(path)
-				}
-				f := &plan.FileChange{Path: path, State: "present", Content: "synthetic private content", Sensitive: true, Mode: &finalMode, Write: true}
-				e := config.Local{}
-				if err := e.Execute(context.Background(), plan.Action{Kind: "overwrite-file", File: f}); err != nil {
-					t.Fatal("private overwrite failed")
-				}
-				written, err := os.Stat(path)
-				if err != nil || written.Mode().Perm() != 0600 {
-					t.Fatal("file was not private immediately after overwrite")
-				}
-				if existing && !os.SameFile(before, written) {
-					t.Fatal("overwrite replaced the existing inode")
-				}
-				content, err := os.ReadFile(path)
-				if err != nil || string(content) != f.Content {
-					t.Fatal("overwrite did not retain prepared content")
-				}
-				if err := e.Execute(context.Background(), plan.Action{Kind: "set-file-attributes", File: f}); err != nil {
-					t.Fatal("final attributes failed")
-				}
-				final, err := os.Stat(path)
-				if err != nil || final.Mode().Perm() != os.FileMode(finalMode) || !os.SameFile(written, final) {
-					t.Fatal("final attributes did not restore the requested mode on the same inode")
-				}
-			})
+					if err := (config.Local{}).Execute(context.Background(), plan.Action{Kind: "overwrite-file", File: f}); err != nil {
+						t.Fatal("private write failed:", err)
+					}
+					written, err := os.Stat(path)
+					if err != nil || written.Mode().Perm() != os.FileMode(finalMode) {
+						t.Fatal("published file lacks final requested mode", err)
+					}
+					if existing && os.SameFile(before, written) == atomic {
+						t.Fatal("inode replacement does not match atomic_writes")
+					}
+					// Mode000 verifies publication and durability do not reopen the
+					// file for reading after applying final permissions.
+					if err := os.Chmod(path, 0600); err != nil {
+						t.Fatal(err)
+					}
+					content, err := os.ReadFile(path)
+					if err != nil || string(content) != f.Content {
+						t.Fatal("write did not retain prepared content", err)
+					}
+				})
+			}
 		}
 	}
 }
@@ -57,14 +56,17 @@ func TestSensitiveExplicitModeRestrictsInodeBeforeWrite(t *testing.T) {
 func TestSensitiveWithoutModePreservesExistingPermissions(t *testing.T) {
 	path := filepath.Join(directory(t), "target")
 	if err := os.WriteFile(path, nil, 0644); err != nil {
-		t.Fatal("could not create fixture")
+		t.Fatal(err)
 	}
-	f := &plan.FileChange{Path: path, State: "present", Sensitive: true, Content: "synthetic private content"}
+	f := &plan.FileChange{Path: path, State: "present", AtomicWrites: true, Sensitive: true, Content: "synthetic private content"}
+	if _, err := config.Observe(f); err != nil {
+		t.Fatal(err)
+	}
 	if err := (config.Local{}).Execute(context.Background(), plan.Action{Kind: "overwrite-file", File: f}); err != nil {
-		t.Fatal("overwrite failed")
+		t.Fatal("overwrite failed:", err)
 	}
 	info, err := os.Stat(path)
 	if err != nil || info.Mode().Perm() != 0644 {
-		t.Fatal("sensitivity without explicit mode changed permissions")
+		t.Fatal("sensitivity without explicit mode changed permissions", err)
 	}
 }
