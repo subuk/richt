@@ -105,6 +105,13 @@ before the final ordered summary, and any failure produces a nonzero exit.
 Explicit continuation skips successful tasks and retries unfinished tasks.
 There are no automatic retries or rollback.
 
+During execution the CLI shows each active host's current task and elapsed time.
+Use `--progress=plain` for line-oriented logs or `--progress=off` to suppress
+intermediate output. Events from different hosts can interleave; the final
+report retains plan order. Ctrl+C cancels the execution context and stops new
+actions. Canceling the SSH client cannot guarantee termination of a command
+already accepted by the remote host.
+
 All task progress changes and atomic plan saves are synchronized. The adjacent
 lock still prevents two processes applying the same saved plan. A save failure
 stops admission of new actions globally. Already admitted actions are awaited

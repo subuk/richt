@@ -6,8 +6,12 @@ import os
 import pty
 import select
 import shutil
+import signal
+import struct
+import fcntl
 import subprocess
 import tempfile
+import termios
 import time
 import uuid
 parser = argparse.ArgumentParser(description="Run disposable Linux file, SELinux, and terminal acceptance checks.")
@@ -124,6 +128,53 @@ try:
     out=run(['diff','-i',inv,'-o',saved]);assert 'Content hidden' in out
     run(['apply','-y',saved]);assert open(second_secret).read()=='public replacement\n'
     checks.append('explicit sensitivity hides an old secret after removing the secret call')
+    # Progress arrives during a long task; cancellation preserves resumability.
+    progress_inventory=dict(
+      tags=dict(example=dict(services=dict(example={}))),
+      services=dict(example=dict(order=10,
+        configs=[dict(name='trigger',path=target+'/progress-trigger',template=dict(inline='progress\n'))],
+        processes=[dict(name='wait',type='oneshot',command=['/usr/bin/sleep','3'],run_on=['config.trigger'],timeout='10s')])),
+      hosts=[dict(name='local',tags=['example'],transport=dict(type='local'))])
+    with open(inv,'w') as f: json.dump(progress_inventory,f)
+    run(['diff','-i',inv,'-o',saved])
+    progress_log=base+'/progress.log'
+    with open(base+'/progress-result.log','w') as stdout, open(progress_log,'w') as stderr:
+      p=subprocess.Popen([cli,'apply','-y','--progress=plain',saved],stdout=stdout,stderr=stderr)
+      try:
+        deadline=time.monotonic()+10
+        while not any(line.startswith('Started ') and 'task=example/process/0 ' in line for line in open(progress_log).read().splitlines()):
+          if p.poll() is not None or time.monotonic()>deadline:
+            raise RuntimeError('no in-flight task progress: '+open(progress_log).read())
+          time.sleep(0.02)
+        assert p.poll() is None
+        p.send_signal(signal.SIGINT)
+        assert p.wait(timeout=10)!=0
+      finally:
+        if p.poll() is None: p.kill();p.wait()
+    assert 'Apply canceled' in open(progress_log).read()
+    assert [t['progress']['status'] for t in json.load(open(saved))['hosts'][0]['tasks']]==['success','error']
+    checks.append('plain task progress arrives before completion and SIGINT persists cancellation')
+    master,slave=pty.openpty()
+    fcntl.ioctl(slave,termios.TIOCSWINSZ,struct.pack('HHHH',24,100,0,0))
+    p=subprocess.Popen([cli,'apply','-y',saved],stdin=slave,stdout=slave,stderr=slave,close_fds=True)
+    os.close(slave);out=b'';deadline=time.monotonic()+15;refreshed=False
+    try:
+      while time.monotonic()<deadline:
+        ready,_,_=select.select([master],[],[],0.1)
+        if ready:
+          try: chunk=os.read(master,65536)
+          except OSError: break
+          if not chunk: break
+          out+=chunk
+          if b'elapsed=1s' in out and b'\x1b[' in out and p.poll() is None: refreshed=True
+        if p.poll() is not None and not ready: break
+      assert p.wait(timeout=3)==0, out
+    finally:
+      if p.poll() is None: p.kill();p.wait()
+      os.close(master)
+    assert refreshed, out
+    assert b'Previously completed' in out and b'Result:' in out, out
+    checks.append('TTY elapsed display refreshes while task runs and saved continuation skips success')
     print(json.dumps({'checks':checks,'count':len(checks),'selinux':subprocess.check_output(['getenforce'],text=True).strip()},indent=2))
 finally:
     if args.keep:

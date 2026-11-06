@@ -131,6 +131,14 @@ saved plan; it does not change its hosts, tasks, inputs, or progress.
 
 ## Progress, locking, and continuation
 
+The CLI shows preparation and execution progress on stderr while work is in
+flight. Interactive terminals receive an updating display with elapsed time;
+redirected output receives event lines and periodic waiting messages. Use
+`--progress=plain` to force line output or `--progress=off` to disable it.
+See the [CLI reference](cli.md#apply-flags-and-results). Embedded Go callers
+can subscribe to the same task lifecycle through the separate
+[event API](embedding.md); rendering is not part of plan persistence.
+
 Task progress is recorded as running before execution, then success only after
 result verification, or failure. Saved progress is written atomically to the
 same JSON file before and after each task. The stable adjacent `.lock` file

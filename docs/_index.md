@@ -38,6 +38,8 @@ The focused guides are:
 - [SSH and sudo](ssh.md): client configuration, authentication, privileges,
   and parallel hosts.
 - [Secrets](secrets.md): source lookup, sensitive display, and real saved bytes.
+- [Embedding in Go](embedding.md): public packages, progress events, cancellation,
+  and saved-plan continuation for applications using Richt.
 
 Read [limitations](limitations.md) before using a saved plan as an operational
 artifact. Plans contain prepared executable inputs, potentially including

@@ -49,6 +49,27 @@ different selection.
 
 ## Apply flags and results
 
+`diff` and `apply` accept `--progress=auto|plain|off` (default `auto`). Progress
+goes to stderr; the reviewed plan and final report go to stdout. In a terminal,
+`auto` maintains a compact display of counts, active host/task labels and elapsed
+time, refreshed every second. Completion and failure messages remain in the
+scrollback. The display fits the terminal; additional active tasks are counted
+even when their rows do not fit.
+
+With redirected stderr, `auto` uses ordinary lines, as does `plain`. Task events
+appear immediately, with a reminder every 30 seconds while work is outstanding.
+`off` suppresses intermediate progress. Preparation reports rendering,
+capability checks and host/service observation, including for `diff`.
+
+Elapsed time indicates that Richt is still waiting for an operation. It does
+not prove remote activity or estimate completion time. Counts describe tasks,
+not a percentage of work inside a package transaction, download or command.
+
+```sh
+richt apply -y --progress=plain plan.json >result.txt 2>progress.log
+richt diff --progress=off -i inventory.yaml
+```
+
 `-y` or `--yes` skips Richt's confirmation prompt. Otherwise apply requires a
 terminal and explicit `y` or `yes`; empty/negative responses cancel. Piped
 input is not terminal agreement. The plan is displayed in both modes. This flag
@@ -64,6 +85,13 @@ apply](ssh.md) for persistence and cancellation details.
 The final report includes per-host completed, previously completed, failed, and
 blocked tasks, plus the saved path and manual continuation instruction when
 applicable. Forced termination can prevent a final report.
+
+Ctrl+C requests cancellation: Richt stops admitting further actions, waits for
+active actions to return, and reports the resulting progress. A remote command
+or systemd job may still have taken effect. Continue a saved plan explicitly
+after checking the cause; see [continuation](continuation.md). A failure to save
+progress is reported separately from execution success and makes the invocation
+fail, even when an operation has already succeeded.
 
 Successful commands exit 0. Kong argument-parsing errors exit 2; execution,
 validation, compatibility, cancellation, and task failures exit nonzero

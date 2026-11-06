@@ -608,6 +608,21 @@ The [DEB reference](../../../../docs/services/binaries/deb.md) owns exact syntax
 and boundaries. [Linux validation](../../../../docs/validation.md) records actual
 runtime results separately from Go tests and compilation.
 
+## Live progress and embedding (KRG-104)
+
+KRG-104 adds live CLI progress and a public observer API consumed by that CLI
+and embedded Go applications. `plan.ApplyOptions.Observer` receives detached
+task lifecycle events separately from persistence, with serialized callbacks
+outside the progress lock. A slow observer applies synchronous backpressure;
+there is no event history or remote stream. Execution success and progress-save
+failure remain distinct, and any save failure makes the run fail.
+`engine.DiffOptions.Observer` reports preparation activity without changing
+rendering/observation order or inventory inspection. CLI progress uses stderr,
+supports `auto`, `plain`, and `off`, and displays elapsed waiting time without
+inventing operation percentages. Caller-owned contexts handle cancellation;
+CLI signals cancel through that context. See [embedding](../../../../docs/embedding.md)
+and [CLI progress](../../../../docs/cli.md). Saved-plan version remains `1.8`.
+
 ## Later scope
 
 NetBox inventory/plugin/rendering, URL inventory and template sources,

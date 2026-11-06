@@ -1011,3 +1011,34 @@ All managed socket/service fixtures and the two newly installed libvirt packages
 were removed. The existing exporter stayed active, systemd reported running
 with no failed units, and SELinux remained Enforcing. Private evidence retains
 inventories, saved plans, command output and the expected failure diagnostics.
+
+## Live CLI progress and embedded events (KRG-104)
+
+Validated on 2026-11-06 using source `0c77c37` plus the KRG-104 changes on the
+disposable AlmaLinux 10.2 x86_64 target, with SELinux Enforcing, systemd 257,
+DNF 4.20, RPM 4.19.1.1 and Python 3.12.13. The Linux binary SHA-256 was
+`fa723f176d66ecf9dcd148786405e6cb8de88906daa709d914e788c0b823a7e1`.
+
+| Coverage | Result |
+| --- | --- |
+| File, SELinux, secrets, terminal and live progress (`tests/integration/files.py`) | 20 checks passed |
+| Oneshot/systemd execution and continuation (`tests/integration/oneshot.py`, without `--package`) | 28 checks passed |
+| Config validator regression (`tests/integration/config_validation.py`) | 18 checks passed |
+| Repository validation | `make check` passed |
+| Concurrent event delivery, preparation and CLI | `go test -race ./plan ./engine ./cli` passed |
+| Documentation | `make docs-check` passed |
+
+The expanded file harness confirms that plain progress appears while a long
+oneshot is still executing, SIGINT records unfinished progress, and a subsequent
+TTY apply refreshes elapsed time before completion while skipping prior
+successes. The existing suites continue to cover private saved inputs,
+locking/confirmation, sensitive output, failures and continuation.
+Go tests cover observer sequencing, callback serialization outside the progress
+lock, cancellation notification while awaiting an active task, injected save
+failures, detached event data, plain heartbeats and terminal clipping.
+
+This run did not perform package transactions or establish new platform support.
+Remote command termination remains subject to the existing SSH/systemd limits;
+the timer reports elapsed waiting time rather than remote operation percentages.
+Private evidence retains command logs and saved test inputs; temporary managed
+resources are cleaned up by the harnesses.

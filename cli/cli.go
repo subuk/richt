@@ -2,7 +2,6 @@
 package cli
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -15,6 +14,7 @@ import (
 	"github.com/subuk/richt/inventory"
 	"github.com/subuk/richt/inventoryyaml"
 	"github.com/subuk/richt/plan"
+	"golang.org/x/sys/unix"
 	"golang.org/x/term"
 )
 
@@ -29,13 +29,15 @@ type arguments struct {
 	} `cmd:"" help:"Inspect YAML inventory."`
 	Diff struct {
 		selection
-		Output string `short:"o" help:"Save an executable JSON plan." type:"path"`
+		Output   string `short:"o" help:"Save an executable JSON plan." type:"path"`
+		Progress string `default:"auto" enum:"auto,plain,off" help:"Progress on stderr: auto, plain, or off."`
 	} `cmd:"" help:"Show changes without modifying resources."`
 	Apply struct {
 		selection
 		Plan        string `arg:"" optional:"" help:"Saved plan to execute and update." type:"path"`
 		Yes         bool   `short:"y" help:"Apply without a confirmation prompt."`
 		Parallelism int    `default:"20" help:"Maximum number of hosts to apply concurrently (positive)."`
+		Progress    string `default:"auto" enum:"auto,plain,off" help:"Progress on stderr: auto, plain, or off."`
 	} `cmd:"" help:"Apply a saved plan, or build and apply changes."`
 }
 type selection struct {
@@ -62,6 +64,11 @@ func (s selection) specified() bool {
 
 // Run executes richt and returns a process exit code.
 func Run(args []string, stdout, stderr io.Writer) int {
+	return RunContext(context.Background(), args, stdout, stderr)
+}
+
+// RunContext executes richt with cancellation shared by preparation and apply.
+func RunContext(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	var flags arguments
 	var exited bool
 	var exitCode int
@@ -87,7 +94,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "richt: %v\n", err)
 		return 2
 	}
-	if err = execute(parsed.Command(), flags, os.Stdin, stdout); err != nil {
+	if err = executeContext(ctx, parsed.Command(), flags, os.Stdin, stdout, stderr); err != nil {
 		fmt.Fprintf(stderr, "richt: %v\n", err)
 		return 1
 	}
@@ -95,6 +102,10 @@ func Run(args []string, stdout, stderr io.Writer) int {
 }
 
 func execute(command string, f arguments, stdin *os.File, out io.Writer) error {
+	return executeContext(context.Background(), command, f, stdin, out, io.Discard)
+}
+
+func executeContext(ctx context.Context, command string, f arguments, stdin *os.File, out, stderr io.Writer) error {
 	switch command {
 	case "inventory validate":
 		r, err := f.Inventory.Validate.load()
@@ -116,7 +127,7 @@ func execute(command string, f arguments, stdin *os.File, out io.Writer) error {
 		if err != nil {
 			return err
 		}
-		p, err := engine.Diff(r)
+		p, err := prepare(ctx, r, stderr, f.Diff.Progress)
 		if err != nil {
 			return err
 		}
@@ -152,7 +163,7 @@ func execute(command string, f arguments, stdin *os.File, out io.Writer) error {
 			if err != nil {
 				return err
 			}
-			p, err = engine.Diff(r)
+			p, err = prepare(ctx, r, stderr, f.Apply.Progress)
 			if err != nil {
 				return err
 			}
@@ -160,21 +171,43 @@ func execute(command string, f arguments, stdin *os.File, out io.Writer) error {
 		if err := plan.Display(out, p, engine.Local{}); err != nil {
 			return err
 		}
-		if err := confirm(stdin, out, f.Apply.Yes); err != nil {
+		if err := confirmContext(ctx, stdin, out, f.Apply.Yes); err != nil {
 			return err
 		}
-		result, err := plan.Apply(context.Background(), p, engine.Local{}, persist, plan.ApplyOptions{HostConcurrency: f.Apply.Parallelism})
+		progress := newProgress(stderr, f.Apply.Progress, "Applying")
+		result, err := plan.Apply(ctx, p, engine.Local{}, persist, plan.ApplyOptions{HostConcurrency: f.Apply.Parallelism, Observer: progress.apply})
+		progressErr := progress.stop()
 		result.PlanPath = f.Apply.Plan
 		printErr := plan.DisplayResult(out, result)
 		if err != nil {
 			return err
+		}
+		if progressErr != nil {
+			return progressErr
 		}
 		return printErr
 	}
 	return fmt.Errorf("unsupported command %q", command)
 }
 
+func prepare(ctx context.Context, r *inventory.Resolved, stderr io.Writer, mode string) (*plan.Plan, error) {
+	progress := newProgress(stderr, mode, "Preparing")
+	p, err := (engine.Local{}).Diff(ctx, r, engine.DiffOptions{Observer: progress.prepare})
+	progressErr := progress.stop()
+	if err != nil {
+		return nil, err
+	}
+	return p, progressErr
+}
+
 func confirm(stdin *os.File, out io.Writer, yes bool) error {
+	return confirmContext(context.Background(), stdin, out, yes)
+}
+
+func confirmContext(ctx context.Context, stdin *os.File, out io.Writer, yes bool) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if yes {
 		return nil
 	}
@@ -184,12 +217,50 @@ func confirm(stdin *os.File, out io.Writer, yes bool) error {
 	if _, err := fmt.Fprint(out, "Apply these changes? [y/N] "); err != nil {
 		return err
 	}
-	answer, err := bufio.NewReader(stdin).ReadString('\n')
+	answer, err := readConfirmation(ctx, stdin)
 	if err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		return fmt.Errorf("apply canceled: confirmation was not received")
 	}
 	if strings.ToLower(strings.TrimSpace(answer)) != "y" && strings.ToLower(strings.TrimSpace(answer)) != "yes" {
 		return fmt.Errorf("apply canceled")
 	}
 	return nil
+}
+
+// Polling keeps cancellation bounded without leaving a goroutine reading from
+// the caller's terminal after RunContext returns. Canonical terminal input is
+// read only after it becomes available; stdin remains owned by the caller.
+func readConfirmation(ctx context.Context, stdin *os.File) (string, error) {
+	var answer strings.Builder
+	var next [1]byte
+	for {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+		fds := []unix.PollFd{{Fd: int32(stdin.Fd()), Events: unix.POLLIN}}
+		_, err := unix.Poll(fds, 100)
+		if err == unix.EINTR {
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		if fds[0].Revents == 0 {
+			continue
+		}
+		n, err := stdin.Read(next[:])
+		if err != nil {
+			return "", err
+		}
+		if n == 0 {
+			return "", io.EOF
+		}
+		answer.WriteByte(next[0])
+		if next[0] == '\n' {
+			return answer.String(), nil
+		}
+	}
 }

@@ -221,16 +221,32 @@ func task(service, id, component, operation string) plan.Task {
 }
 
 // Diff completes rendering before host observation. No repository is contacted.
-func (e Local) Diff(ctx context.Context, r *inventory.Resolved) (*plan.Plan, error) {
+func (e Local) Diff(ctx context.Context, r *inventory.Resolved, options ...DiffOptions) (*plan.Plan, error) {
 	if r == nil {
 		return nil, errors.New("resolved inventory is nil")
+	}
+	if len(options) > 1 {
+		return nil, errors.New("diff accepts at most one options value")
+	}
+	var observer func(PrepareEvent)
+	if len(options) == 1 {
+		observer = options[0].Observer
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	prepared := make([][]preparedService, len(r.Hosts))
 	lookup := secrets.New(r.SecretSources)
 	for hi, h := range r.Hosts {
 		for _, s := range h.Services {
+			if err := reportPreparation(ctx, observer, PrepareEvent{Phase: "rendering", Host: h.Name, Service: s.Name}); err != nil {
+				return nil, err
+			}
 			ps := preparedService{service: s}
 			add := func(id, component, ref, process string, c inventory.Config) error {
+				if err := ctx.Err(); err != nil {
+					return err
+				}
 				if c.Type != "" && c.Type != "template" {
 					ps.files = append(ps.files, preparedFile{id: id, component: component, ref: ref, definition: &c})
 					return nil
@@ -262,6 +278,9 @@ func (e Local) Diff(ctx context.Context, r *inventory.Resolved) (*plan.Plan, err
 				return nil
 			}
 			for index, binary := range s.Definition.Binaries {
+				if err := ctx.Err(); err != nil {
+					return nil, err
+				}
 				b := preparedBinary{index: index, name: binary.Name}
 				var err error
 				switch binary.Type {
@@ -327,6 +346,9 @@ func (e Local) Diff(ctx context.Context, r *inventory.Resolved) (*plan.Plan, err
 	// Capability checks happen before observing the first service or writing anything.
 	bound := make([]Local, len(r.Hosts))
 	for hi, h := range r.Hosts {
+		if err := reportPreparation(ctx, observer, PrepareEvent{Phase: "checking", Host: h.Name}); err != nil {
+			return nil, err
+		}
 		executor, err := e.ForHost(host(h))
 		if err != nil {
 			return nil, fmt.Errorf("host %s: %w", h.Name, err)
@@ -336,7 +358,13 @@ func (e Local) Diff(ctx context.Context, r *inventory.Resolved) (*plan.Plan, err
 		checkedArtifacts := false
 		checkedAccounts := false
 		for _, service := range prepared[hi] {
+			if err := reportPreparation(ctx, observer, PrepareEvent{Phase: "checking", Host: h.Name, Service: service.service.Name}); err != nil {
+				return nil, err
+			}
 			for _, f := range service.files {
+				if err := ctx.Err(); err != nil {
+					return nil, err
+				}
 				if c := f.definition; c != nil && (c.Type == "user" || c.Type == "group") && !checkedAccounts {
 					if err := bound[hi].Accounts.Check(ctx); err != nil {
 						return nil, fmt.Errorf("host %s: %w", h.Name, err)
@@ -345,6 +373,9 @@ func (e Local) Diff(ctx context.Context, r *inventory.Resolved) (*plan.Plan, err
 				}
 			}
 			for _, prepared := range service.binaries {
+				if err := ctx.Err(); err != nil {
+					return nil, err
+				}
 				if prepared.artifact != nil {
 					if !checkedArtifacts {
 						if err := bound[hi].Artifacts.Check(ctx); err != nil {
@@ -375,6 +406,9 @@ func (e Local) Diff(ctx context.Context, r *inventory.Resolved) (*plan.Plan, err
 		}
 	}
 	for hi, h := range r.Hosts {
+		if err := reportPreparation(ctx, observer, PrepareEvent{Phase: "observing", Host: h.Name}); err != nil {
+			return nil, err
+		}
 		ph := host(h)
 		sequence := newConfigSequence()
 		ownership := prepared[hi]
@@ -387,10 +421,16 @@ func (e Local) Diff(ctx context.Context, r *inventory.Resolved) (*plan.Plan, err
 		if err := checkAccountOrder(prepared[hi]); err != nil {
 			return nil, fmt.Errorf("host %s: %w", h.Name, err)
 		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if err := bound[hi].checkConfigPaths(ctx, prepared[hi]); err != nil {
 			return nil, fmt.Errorf("host %s: %w", h.Name, err)
 		}
 		for _, ps := range prepared[hi] {
+			if err := reportPreparation(ctx, observer, PrepareEvent{Phase: "observing", Host: h.Name, Service: ps.service.Name}); err != nil {
+				return nil, err
+			}
 			tasks, err := bound[hi].observe(ctx, ps, sequence)
 			if err != nil {
 				return nil, fmt.Errorf("host %s service %s: %w", h.Name, ps.service.Name, err)
@@ -398,6 +438,9 @@ func (e Local) Diff(ctx context.Context, r *inventory.Resolved) (*plan.Plan, err
 			ph.Tasks = append(ph.Tasks, tasks...)
 		}
 		p.Hosts = append(p.Hosts, ph)
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	return p, p.Validate()
 }
@@ -410,6 +453,9 @@ func (e Local) observe(ctx context.Context, ps preparedService, sequence *config
 	var binaries, files, processes, unmasks []plan.Task
 	packageChanged := false
 	for _, position := range positions(len(ps.binaries), absent) {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		binary := ps.binaries[position]
 		var yes bool
 		var err error
@@ -445,6 +491,9 @@ func (e Local) observe(ctx context.Context, ps preparedService, sequence *config
 	statuses := map[string]systemd.Status{}
 	processChanges := map[string]*plan.ProcessChange{}
 	for _, index := range order {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		name := strconv.Itoa(index)
 		v := s.Definition.Processes[index]
 		if v.Type == "oneshot" {
@@ -478,6 +527,9 @@ func (e Local) observe(ctx context.Context, ps preparedService, sequence *config
 		statuses[name], processChanges[name] = status, c
 	}
 	for i := range ps.files {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		f := &ps.files[i]
 		if f.definition != nil {
 			t, yes, err := e.observeTyped(ctx, s, *f, sequence)
@@ -517,6 +569,9 @@ func (e Local) observe(ctx context.Context, ps preparedService, sequence *config
 			}
 		}
 		var yes bool
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if (unmaskFullUnit || hidden) && e.Files != nil {
 			yes, err = e.Files.ObserveMissing(ctx, f.file, ownership)
 		} else if unmaskFullUnit || hidden {
@@ -549,6 +604,9 @@ func (e Local) observe(ctx context.Context, ps preparedService, sequence *config
 		}
 	}
 	for _, index := range order {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		name := strconv.Itoa(index)
 		v := s.Definition.Processes[index]
 		if v.Type == "oneshot" {
