@@ -579,6 +579,9 @@ func (e Local) observe(ctx context.Context, ps preparedService, sequence *config
 		}
 		// Reload declarations are capabilities, even when no input currently changes.
 		if !absent && len(v.ReloadOn) > 0 {
+			if strings.HasSuffix(v.Unit, ".socket") {
+				return nil, fmt.Errorf("process %s: systemd socket units do not support reload_on; use restart_on", processLabels[name])
+			}
 			canReload, err := e.Systemd.ReloadSupported(ctx, v.Unit, status, unitFiles)
 			if err != nil {
 				return nil, fmt.Errorf("process %s: %w", processLabels[name], err)

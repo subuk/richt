@@ -149,60 +149,64 @@ func TestListsFreezeDeclaredOrderIdentityAndContinuation(t *testing.T) {
 }
 
 func TestAbsentReversesEachListAndKeepsStopBeforeDisable(t *testing.T) {
-	dir := tempDir(t)
-	s := inventory.Service{}
-	for i, name := range []string{"z-last-alphabetically", "", "a-first-alphabetically"} {
-		path := filepath.Join(dir, fmt.Sprint(i))
-		if err := os.WriteFile(path, []byte("old"), 0600); err != nil {
-			t.Fatal(err)
-		}
-		s.Binaries = append(s.Binaries, inventory.Binary{Name: name, Package: fmt.Sprintf("demo-%d", i)})
-		s.Configs = append(s.Configs, inventory.Config{Name: name, Path: path, Template: inventory.Template{Inline: inline("unused")}})
-		s.Processes = append(s.Processes, inventory.Process{Name: name, Unit: fmt.Sprintf("demo-%d.service", i)})
-	}
-	r := resolved(s)
-	r.Hosts[0].Services[0].State = "absent"
-	// A later service still follows the first service's removal work.
-	laterPath := filepath.Join(dir, "later")
-	if err := os.WriteFile(laterPath, []byte("old"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	later := inventory.ResolvedService{Assignment: inventory.Assignment{Name: "later", State: "absent"}, Definition: inventory.Service{Configs: []inventory.Config{{Path: laterPath, Template: inventory.Template{Inline: inline("unused")}}}}}
-	r.Hosts[0].Services = append(r.Hosts[0].Services, later)
-	e := Local{RPM: rpm.Backend{Run: func(_ context.Context, command string, args ...string) ([]byte, error) {
-		if command == "dnf" {
-			return []byte("4.20.0"), nil
-		}
-		return []byte("demo-0\t0:1-1.noarch\ndemo-1\t0:1-1.noarch\ndemo-2\t0:1-1.noarch"), nil
-	}}, Systemd: systemd.Backend{Run: func(context.Context, string, ...string) ([]byte, error) {
-		return []byte("LoadState=loaded\nActiveState=active\nUnitFileState=enabled\n"), nil
-	}}}
-	p, err := e.Diff(context.Background(), r)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var expected []string
-	for _, service := range []string{"app"} {
-		for i := 2; i >= 0; i-- {
-			expected = append(expected, fmt.Sprintf("%s/process/%d", service, i), fmt.Sprintf("%s/process/%d/enabled", service, i))
-		}
-		for _, category := range []string{"config", "binary"} {
-			for i := 2; i >= 0; i-- {
-				expected = append(expected, fmt.Sprintf("%s/%s/%d", service, category, i))
+	for _, suffix := range []string{"service", "socket"} {
+		t.Run(suffix, func(t *testing.T) {
+			dir := tempDir(t)
+			s := inventory.Service{}
+			for i, name := range []string{"z-last-alphabetically", "", "a-first-alphabetically"} {
+				path := filepath.Join(dir, fmt.Sprint(i))
+				if err := os.WriteFile(path, []byte("old"), 0600); err != nil {
+					t.Fatal(err)
+				}
+				s.Binaries = append(s.Binaries, inventory.Binary{Name: name, Package: fmt.Sprintf("demo-%d", i)})
+				s.Configs = append(s.Configs, inventory.Config{Name: name, Path: path, Template: inventory.Template{Inline: inline("unused")}})
+				s.Processes = append(s.Processes, inventory.Process{Name: name, Unit: fmt.Sprintf("demo-%d.%s", i, suffix)})
 			}
-		}
-		expected = append(expected, service+"/systemd/daemon-reload")
-	}
-	expected = append(expected, "later/config/0")
-	if !reflect.DeepEqual(taskIDs(p), expected) {
-		t.Fatalf("absence tasks %v; expected %v", taskIDs(p), expected)
-	}
-	executor := &orderedExecutor{}
-	if _, err := plan.Apply(context.Background(), p, executor, nil); err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(executor.executed, expected) {
-		t.Fatal("execution changed prepared order", executor.executed)
+			r := resolved(s)
+			r.Hosts[0].Services[0].State = "absent"
+			// A later service still follows the first service's removal work.
+			laterPath := filepath.Join(dir, "later")
+			if err := os.WriteFile(laterPath, []byte("old"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			later := inventory.ResolvedService{Assignment: inventory.Assignment{Name: "later", State: "absent"}, Definition: inventory.Service{Configs: []inventory.Config{{Path: laterPath, Template: inventory.Template{Inline: inline("unused")}}}}}
+			r.Hosts[0].Services = append(r.Hosts[0].Services, later)
+			e := Local{RPM: rpm.Backend{Run: func(_ context.Context, command string, args ...string) ([]byte, error) {
+				if command == "dnf" {
+					return []byte("4.20.0"), nil
+				}
+				return []byte("demo-0\t0:1-1.noarch\ndemo-1\t0:1-1.noarch\ndemo-2\t0:1-1.noarch"), nil
+			}}, Systemd: systemd.Backend{Run: func(context.Context, string, ...string) ([]byte, error) {
+				return []byte("LoadState=loaded\nActiveState=active\nUnitFileState=enabled\n"), nil
+			}}}
+			p, err := e.Diff(context.Background(), r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var expected []string
+			for _, service := range []string{"app"} {
+				for i := 2; i >= 0; i-- {
+					expected = append(expected, fmt.Sprintf("%s/process/%d", service, i), fmt.Sprintf("%s/process/%d/enabled", service, i))
+				}
+				for _, category := range []string{"config", "binary"} {
+					for i := 2; i >= 0; i-- {
+						expected = append(expected, fmt.Sprintf("%s/%s/%d", service, category, i))
+					}
+				}
+				expected = append(expected, service+"/systemd/daemon-reload")
+			}
+			expected = append(expected, "later/config/0")
+			if !reflect.DeepEqual(taskIDs(p), expected) {
+				t.Fatalf("absence tasks %v; expected %v", taskIDs(p), expected)
+			}
+			executor := &orderedExecutor{}
+			if _, err := plan.Apply(context.Background(), p, executor, nil); err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(executor.executed, expected) {
+				t.Fatal("execution changed prepared order", executor.executed)
+			}
+		})
 	}
 }
 

@@ -164,29 +164,33 @@ func TestServiceFilterDoesNotAssignServices(t *testing.T) {
 }
 
 func TestOwnershipChecksAllAssignments(t *testing.T) {
-	for _, tc := range []struct {
-		name          string
-		first, second Service
-		resource      string
-	}{
-		{"file", Service{Configs: []Config{namedConfig("a", inlineConfig("/etc/app/../same"))}}, Service{Configs: []Config{namedConfig("b", inlineConfig("/etc/same"))}}, "file /etc/same"},
-		{"package", Service{Binaries: []Binary{{Name: "a", Type: "rpm", Manager: "dnf", Package: "shared"}}}, Service{Binaries: []Binary{{Name: "b", Type: "rpm", Manager: "yum", Package: "shared"}}}, "package rpm:shared"},
-		{"unit", Service{Processes: []Process{{Name: "a", Type: "systemd", Unit: "shared.service"}}}, Service{Processes: []Process{{Name: "b", Type: "systemd", Unit: "shared.service"}}}, "systemd unit shared.service"},
-		{"unit-file", Service{Configs: []Config{namedConfig("unit", inlineConfig("/usr/lib/systemd/system/shared.service"))}}, Service{Processes: []Process{{Name: "b", Type: "systemd", Unit: "shared.service"}}}, "systemd unit shared.service"},
-		{"dropin", Service{Configs: []Config{namedConfig("override", inlineConfig("/etc/systemd/system/shared.service.d/override.conf"))}}, Service{Processes: []Process{{Name: "b", Type: "systemd", Unit: "shared.service"}}}, "systemd unit shared.service"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			in := fixture()
-			setService(in, "repo", tc.first)
-			setService(in, "app", tc.second)
-			_, err := in.Resolve(Selectors{Hosts: []string{"lanst"}, Services: []string{"app"}})
-			if err == nil {
-				t.Fatal("filter hid ownership conflict")
-			}
-			for _, part := range []string{"lanst", tc.resource, "repo/", "app/"} {
-				if !strings.Contains(err.Error(), part) {
-					t.Fatalf("missing %s: %v", part, err)
-				}
+	for _, suffix := range []string{"service", "socket"} {
+		t.Run(suffix, func(t *testing.T) {
+			for _, tc := range []struct {
+				name          string
+				first, second Service
+				resource      string
+			}{
+				{"file", Service{Configs: []Config{namedConfig("a", inlineConfig("/etc/app/../same"))}}, Service{Configs: []Config{namedConfig("b", inlineConfig("/etc/same"))}}, "file /etc/same"},
+				{"package", Service{Binaries: []Binary{{Name: "a", Type: "rpm", Manager: "dnf", Package: "shared"}}}, Service{Binaries: []Binary{{Name: "b", Type: "rpm", Manager: "yum", Package: "shared"}}}, "package rpm:shared"},
+				{"unit", Service{Processes: []Process{{Name: "a", Type: "systemd", Unit: "shared." + suffix}}}, Service{Processes: []Process{{Name: "b", Type: "systemd", Unit: "shared." + suffix}}}, "systemd unit shared." + suffix},
+				{"unit-file", Service{Configs: []Config{namedConfig("unit", inlineConfig("/usr/lib/systemd/system/shared."+suffix))}}, Service{Processes: []Process{{Name: "b", Type: "systemd", Unit: "shared." + suffix}}}, "systemd unit shared." + suffix},
+				{"dropin", Service{Configs: []Config{namedConfig("override", inlineConfig("/etc/systemd/system/shared."+suffix+".d/override.conf"))}}, Service{Processes: []Process{{Name: "b", Type: "systemd", Unit: "shared." + suffix}}}, "systemd unit shared." + suffix},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					in := fixture()
+					setService(in, "repo", tc.first)
+					setService(in, "app", tc.second)
+					_, err := in.Resolve(Selectors{Hosts: []string{"lanst"}, Services: []string{"app"}})
+					if err == nil {
+						t.Fatal("filter hid ownership conflict")
+					}
+					for _, part := range []string{"lanst", tc.resource, "repo/", "app/"} {
+						if !strings.Contains(err.Error(), part) {
+							t.Fatalf("missing %s: %v", part, err)
+						}
+					}
+				})
 			}
 		})
 	}
@@ -225,11 +229,15 @@ func TestDuplicateResourcesWithinService(t *testing.T) {
 }
 
 func TestProcessCanOwnItsUnitAndMultipleDropins(t *testing.T) {
-	in := fixture()
-	unit := inlineConfig("/etc/systemd/system/app.service")
-	setService(in, "app", Service{Processes: []Process{{Name: "web", Type: "systemd", Unit: "app.service", UnitFile: &unit, Overrides: map[string]Config{"a.conf": inlineConfig("/etc/systemd/system/app.service.d/a.conf"), "b.conf": inlineConfig("/etc/systemd/system/app.service.d/b.conf")}}}})
-	if _, err := in.Resolve(Selectors{}); err != nil {
-		t.Fatal(err)
+	for _, suffix := range []string{"service", "socket"} {
+		t.Run(suffix, func(t *testing.T) {
+			in := fixture()
+			unit := inlineConfig("/etc/systemd/system/app." + suffix)
+			setService(in, "app", Service{Processes: []Process{{Name: "web", Type: "systemd", Unit: "app." + suffix, UnitFile: &unit, Overrides: map[string]Config{"a.conf": inlineConfig("/etc/systemd/system/app." + suffix + ".d/a.conf"), "b.conf": inlineConfig("/etc/systemd/system/app." + suffix + ".d/b.conf")}}}})
+			if _, err := in.Resolve(Selectors{}); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
 

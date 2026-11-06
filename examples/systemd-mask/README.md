@@ -67,6 +67,13 @@ runtime-to-persistent conversion, removal of both masks, hidden enablement links
 missing units, owned-unit safety, and saved-plan continuation after an intentional
 mask failure and deletion of the inventory.
 
+Socket checks use a separate unique socket/service pair. They cover listening
+state, enablement, persistent and runtime masks, full units and drop-ins,
+coalesced restarts, unsupported reload, and continuation after a socket cannot
+start while its activated service is still active. The service is explicitly
+stopped before continuing; socket operations never add hidden service tasks.
+See the [socket example](../systemd-socket/README.md) for a small owned listener.
+
 The same harness also prepares and applies an ordered service with four configs
 and four owned processes. It mixes reverse-alphabetical names (`z-first`, then
 `a-third`) with two unnamed items in each list. This demonstrates that declaration

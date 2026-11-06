@@ -10,7 +10,7 @@ backend unit or executable name.
 A process-only service can manage a unit supplied outside Richt. A Richt service
 may also contain several processes; it is not synonymous with one daemon.
 
-Select [systemd](systemd.md) with `type: systemd` to manage service-unit
+Select [systemd](systemd.md) with `type: systemd` to manage service and socket unit
 state, enablement, masks, full units, drop-ins, and reload capability.
 Select [oneshot](oneshot.md) with `type: oneshot` to execute a prepared argv
 once when linked binaries or configs change. A oneshot does not need systemd.

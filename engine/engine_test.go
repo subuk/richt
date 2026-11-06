@@ -34,85 +34,134 @@ func fakeSystemd(active string, canReload bool) systemd.Backend {
 	}}
 }
 func TestRealInputsMergeAndDeclaredProcessOrder(t *testing.T) {
-	path := filepath.Join(tempDir(t), "app.conf")
-	s := inventory.Service{Binaries: []inventory.Binary{{Name: "app", Type: "rpm", Package: "demo", Version: "0:2.0-1.noarch"}}, Configs: []inventory.Config{{Name: "main", Path: path, Template: inventory.Template{Inline: inline("new")}}}, Processes: []inventory.Process{
-		{Name: "z-first", Unit: "first.service", RestartOn: []string{"binary.app"}, ReloadOn: []string{"config.main"}},
-		{Name: "a-last", Unit: "last.service", ReloadOn: []string{"config.main"}},
-	}}
-	e := Local{RPM: rpm.Backend{Run: func(_ context.Context, name string, args ...string) ([]byte, error) {
-		if name == "dnf" {
-			return []byte("4.20.0\n"), nil
-		}
-		return []byte("demo\t0:1.0-1.noarch\n"), nil
-	}}, Systemd: fakeSystemd("active", true)}
-	p, err := e.Diff(context.Background(), resolved(s))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var order, reactions []string
-	for _, task := range p.Hosts[0].Tasks {
-		if task.Process != nil {
-			order = append(order, task.Component)
-			reactions = append(reactions, task.Process.Reaction)
-		}
-	}
-	if strings.Join(order, ",") != "process/z-first,process/a-last" || strings.Join(reactions, ",") != "restart,reload" {
-		t.Fatal(order, reactions)
-	}
-	// Once both resources match, declarations alone cause no reaction.
-	if err = os.WriteFile(path, []byte("new"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	e.RPM.Run = func(_ context.Context, name string, args ...string) ([]byte, error) {
-		if name == "dnf" {
-			return []byte("4.20.0"), nil
-		}
-		return []byte("demo\t0:2.0-1.noarch"), nil
-	}
-	p, err = e.Diff(context.Background(), resolved(s))
-	if err != nil || len(p.Hosts[0].Tasks) != 0 {
-		t.Fatal(p, err)
+	for _, suffix := range []string{"service", "socket"} {
+		t.Run(suffix, func(t *testing.T) {
+			path := filepath.Join(tempDir(t), "app.conf")
+			s := inventory.Service{Binaries: []inventory.Binary{{Name: "app", Type: "rpm", Package: "demo", Version: "0:2.0-1.noarch"}}, Configs: []inventory.Config{{Name: "main", Path: path, Template: inventory.Template{Inline: inline("new")}}}, Processes: []inventory.Process{
+				{Name: "z-first", Unit: "first." + suffix, RestartOn: []string{"binary.app"}, ReloadOn: []string{"config.main"}},
+				{Name: "a-last", Unit: "last." + suffix, ReloadOn: []string{"config.main"}},
+			}}
+			wantReactions := "restart,reload"
+			if suffix == "socket" {
+				for i := range s.Processes {
+					s.Processes[i].RestartOn = append(s.Processes[i].RestartOn, s.Processes[i].ReloadOn...)
+					s.Processes[i].ReloadOn = nil
+				}
+				wantReactions = "restart,restart"
+			}
+			e := Local{RPM: rpm.Backend{Run: func(_ context.Context, name string, args ...string) ([]byte, error) {
+				if name == "dnf" {
+					return []byte("4.20.0\n"), nil
+				}
+				return []byte("demo\t0:1.0-1.noarch\n"), nil
+			}}, Systemd: fakeSystemd("active", true)}
+			p, err := e.Diff(context.Background(), resolved(s))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var order, reactions []string
+			for _, task := range p.Hosts[0].Tasks {
+				if task.Process != nil {
+					order = append(order, task.Component)
+					reactions = append(reactions, task.Process.Reaction)
+				}
+			}
+			if strings.Join(order, ",") != "process/z-first,process/a-last" || strings.Join(reactions, ",") != wantReactions {
+				t.Fatal(order, reactions)
+			}
+			// Once both resources match, declarations alone cause no reaction.
+			if err = os.WriteFile(path, []byte("new"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			e.RPM.Run = func(_ context.Context, name string, args ...string) ([]byte, error) {
+				if name == "dnf" {
+					return []byte("4.20.0"), nil
+				}
+				return []byte("demo\t0:2.0-1.noarch"), nil
+			}
+			p, err = e.Diff(context.Background(), resolved(s))
+			if err != nil || len(p.Hosts[0].Tasks) != 0 {
+				t.Fatal(p, err)
+			}
+		})
 	}
 }
 func TestResumeKeepsPendingReactionAfterSuccessfulConfig(t *testing.T) {
-	path := filepath.Join(tempDir(t), "app.conf")
-	calls := 0
-	fail := true
-	s := inventory.Service{Configs: []inventory.Config{{Name: "main", Path: path, Template: inventory.Template{Inline: inline("frozen")}}}, Processes: []inventory.Process{{Name: "main", Unit: "demo.service", ReloadOn: []string{"config.main"}}}}
-	e := Local{Systemd: systemd.Backend{Run: func(_ context.Context, _ string, args ...string) ([]byte, error) {
-		if args[0] == "show" {
-			return []byte("LoadState=loaded\nActiveState=active\nUnitFileState=disabled\nCanReload=yes\n"), nil
-		}
-		if args[0] == "reload" {
-			calls++
-			if fail {
-				return nil, errors.New("reload command failed")
+	for _, suffix := range []string{"service", "socket"} {
+		t.Run(suffix, func(t *testing.T) {
+			path := filepath.Join(tempDir(t), "app.conf")
+			reaction := "reload"
+			if suffix == "socket" {
+				reaction = "restart"
 			}
-		}
-		return nil, nil
-	}}}
-	p, err := e.Diff(context.Background(), resolved(s))
-	if err != nil {
-		t.Fatal(err)
-	}
-	saves := 0
-	persist := func(*plan.Plan) error { saves++; return nil }
-	if _, err = plan.Apply(context.Background(), p, e, persist); err == nil {
-		t.Fatal("expected process failure")
-	}
-	if p.Hosts[0].Tasks[0].Progress.Status != "success" || p.Hosts[0].Tasks[1].Progress.Status != "error" {
-		t.Fatal(p)
-	}
-	if err = os.WriteFile(path, []byte("changed after failure"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	fail = false
-	if _, err = plan.Apply(context.Background(), p, e, persist); err != nil {
-		t.Fatal(err)
-	}
-	data, _ := os.ReadFile(path)
-	if string(data) != "changed after failure" || calls != 2 || saves < 6 {
-		t.Fatal(string(data), calls, saves)
+			calls := 0
+			fail := true
+			s := inventory.Service{Configs: []inventory.Config{{Name: "main", Path: path, Template: inventory.Template{Inline: inline("frozen")}}}, Processes: []inventory.Process{{Name: "main", Unit: "demo." + suffix}}}
+			if suffix == "service" {
+				s.Processes[0].ReloadOn = []string{"config.main"}
+			} else {
+				s.Processes[0].RestartOn = []string{"config.main"}
+			}
+			e := Local{Systemd: systemd.Backend{Run: func(_ context.Context, _ string, args ...string) ([]byte, error) {
+				if args[0] == "show" {
+					return []byte("LoadState=loaded\nActiveState=active\nUnitFileState=disabled\nCanReload=yes\n"), nil
+				}
+				if args[0] == reaction {
+					calls++
+					if fail {
+						return nil, errors.New("lifecycle command failed")
+					}
+				}
+				return nil, nil
+			}}}
+			p, err := e.Diff(context.Background(), resolved(s))
+			if err != nil {
+				t.Fatal(err)
+			}
+			filename := filepath.Join(tempDir(t), "plan.json")
+			if err := plan.Save(filename, p); err != nil {
+				t.Fatal(err)
+			}
+			store, err := plan.Open(filename)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = plan.Apply(context.Background(), store.Plan, e, store.Save); err == nil {
+				t.Fatal("expected process failure")
+			}
+			if store.Plan.Hosts[0].Tasks[0].Progress.Status != "success" || store.Plan.Hosts[0].Tasks[1].Progress.Status != "error" {
+				t.Fatal(store.Plan)
+			}
+			if err := store.Close(); err != nil {
+				t.Fatal(err)
+			}
+			if err = os.WriteFile(path, []byte("changed after failure"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			fail = false
+			// Applying the saved plan uses its frozen reaction without inventory.
+			s.Processes = nil
+			s.Configs = nil
+			store, err = plan.Open(filename)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer store.Close()
+			pending := store.Plan.Hosts[0].Tasks[1].Process
+			if pending.Unit != "demo."+suffix || pending.Reaction != reaction {
+				t.Fatal("saved unit or reaction changed", pending)
+			}
+			if _, err = plan.Apply(context.Background(), store.Plan, e, store.Save); err != nil {
+				t.Fatal(err)
+			}
+			data, _ := os.ReadFile(path)
+			if string(data) != "changed after failure" || calls != 2 {
+				t.Fatal(string(data), calls)
+			}
+			if _, err = plan.Apply(context.Background(), store.Plan, e, store.Save); err != nil || calls != 2 {
+				t.Fatal("completed continuation repeated lifecycle", err, calls)
+			}
+		})
 	}
 }
 func TestMissingPackageUnitRequiresReloadProof(t *testing.T) {
@@ -365,70 +414,74 @@ func TestSecretByteChangesTriggerRealReload(t *testing.T) {
 }
 
 func TestMaskingHasIndependentSavedProgress(t *testing.T) {
-	yes, no := true, false
-	path := filepath.Join(tempDir(t), "app.conf")
-	s := inventory.Service{Configs: []inventory.Config{{Name: "main", Path: path, Template: inventory.Template{Inline: inline("frozen")}}}, Processes: []inventory.Process{{Name: "main", Unit: "demo.service", State: "stopped", Enabled: &no, Masked: &yes}}}
-	active, enabled, load := "active", "enabled", "loaded"
-	maskFails := true
-	var commands []string
-	e := Local{Systemd: systemd.Backend{Run: func(_ context.Context, _ string, args ...string) ([]byte, error) {
-		if args[0] == "show" {
-			return []byte("LoadState=" + load + "\nActiveState=" + active + "\nUnitFileState=" + enabled + "\n"), nil
-		}
-		commands = append(commands, args[0])
-		switch args[0] {
-		case "disable":
-			enabled = "disabled"
-		case "stop":
-			active = "inactive"
-		case "mask":
-			if active != "inactive" || enabled != "disabled" {
-				t.Fatal("masked before stop and disable")
+	for _, suffix := range []string{"service", "socket"} {
+		t.Run(suffix, func(t *testing.T) {
+			yes, no := true, false
+			path := filepath.Join(tempDir(t), "app.conf")
+			s := inventory.Service{Configs: []inventory.Config{{Name: "main", Path: path, Template: inventory.Template{Inline: inline("frozen")}}}, Processes: []inventory.Process{{Name: "main", Unit: "demo." + suffix, State: "stopped", Enabled: &no, Masked: &yes}}}
+			active, enabled, load := "active", "enabled", "loaded"
+			maskFails := true
+			var commands []string
+			e := Local{Systemd: systemd.Backend{Run: func(_ context.Context, _ string, args ...string) ([]byte, error) {
+				if args[0] == "show" {
+					return []byte("LoadState=" + load + "\nActiveState=" + active + "\nUnitFileState=" + enabled + "\n"), nil
+				}
+				commands = append(commands, args[0])
+				switch args[0] {
+				case "disable":
+					enabled = "disabled"
+				case "stop":
+					active = "inactive"
+				case "mask":
+					if active != "inactive" || enabled != "disabled" {
+						t.Fatal("masked before stop and disable")
+					}
+					if maskFails {
+						return nil, errors.New("mask rejected")
+					}
+					load, enabled = "masked", "masked"
+				}
+				return nil, nil
+			}}}
+			p, err := e.Diff(context.Background(), resolved(s))
+			if err != nil {
+				t.Fatal(err)
 			}
-			if maskFails {
-				return nil, errors.New("mask rejected")
+			planPath := filepath.Join(tempDir(t), "plan.json")
+			if err := plan.Save(planPath, p); err != nil {
+				t.Fatal(err)
 			}
-			load, enabled = "masked", "masked"
-		}
-		return nil, nil
-	}}}
-	p, err := e.Diff(context.Background(), resolved(s))
-	if err != nil {
-		t.Fatal(err)
-	}
-	planPath := filepath.Join(tempDir(t), "plan.json")
-	if err := plan.Save(planPath, p); err != nil {
-		t.Fatal(err)
-	}
-	store, err := plan.Open(planPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = plan.Apply(context.Background(), store.Plan, e, store.Save); err == nil {
-		t.Fatal("expected failed mask")
-	}
-	tasks := store.Plan.Hosts[0].Tasks
-	if tasks[len(tasks)-1].Operation != "systemd-mask" || tasks[len(tasks)-1].Progress.Status != "error" || tasks[len(tasks)-2].Progress.Status != "success" {
-		t.Fatal(tasks)
-	}
-	if err := store.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte("edited after failure"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	maskFails = false
-	store, err = plan.Open(planPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
-	if _, err := plan.Apply(context.Background(), store.Plan, e, store.Save); err != nil {
-		t.Fatal(err)
-	}
-	data, err := os.ReadFile(path)
-	if err != nil || string(data) != "edited after failure" || strings.Join(commands, ",") != "disable,stop,mask,mask" {
-		t.Fatal(string(data), commands, err)
+			store, err := plan.Open(planPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = plan.Apply(context.Background(), store.Plan, e, store.Save); err == nil {
+				t.Fatal("expected failed mask")
+			}
+			tasks := store.Plan.Hosts[0].Tasks
+			if tasks[len(tasks)-1].Operation != "systemd-mask" || tasks[len(tasks)-1].Progress.Status != "error" || tasks[len(tasks)-2].Progress.Status != "success" {
+				t.Fatal(tasks)
+			}
+			if err := store.Close(); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, []byte("edited after failure"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			maskFails = false
+			store, err = plan.Open(planPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer store.Close()
+			if _, err := plan.Apply(context.Background(), store.Plan, e, store.Save); err != nil {
+				t.Fatal(err)
+			}
+			data, err := os.ReadFile(path)
+			if err != nil || string(data) != "edited after failure" || strings.Join(commands, ",") != "disable,stop,mask,mask" {
+				t.Fatal(string(data), commands, err)
+			}
+		})
 	}
 }
 

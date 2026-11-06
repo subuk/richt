@@ -12,7 +12,7 @@ import (
 )
 
 var namePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
-var unitPattern = regexp.MustCompile(`^[A-Za-z0-9_@:.\\-]+\.service$`)
+var unitPattern = regexp.MustCompile(`^[A-Za-z0-9_@:.\\-]+\.(service|socket)$`)
 
 func validName(kind, name string) error {
 	if !namePattern.MatchString(name) {
@@ -205,7 +205,7 @@ func validateService(s Service) error {
 			return fmt.Errorf("process.%s: systemd cannot set command or run_on", name)
 		}
 		if !unitPattern.MatchString(p.Unit) {
-			return fmt.Errorf("process.%s unit: expected a systemd .service unit name", name)
+			return fmt.Errorf("process.%s unit: expected a systemd .service or .socket unit name", name)
 		}
 		if p.State != "" && p.State != "running" && p.State != "stopped" {
 			return fmt.Errorf("process.%s state: expected running or stopped", name)

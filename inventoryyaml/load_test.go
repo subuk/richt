@@ -41,9 +41,11 @@ hosts:
 `
 
 func TestLoadResolvesDeclaringFilesWithoutReadingTemplatesOrSecrets(t *testing.T) {
-	dir := t.TempDir()
-	filename := filepath.Join(dir, "richt.yaml")
-	write(t, filename, `secret_sources:
+	for _, suffix := range []string{"service", "socket"} {
+		t.Run(suffix, func(t *testing.T) {
+			dir := t.TempDir()
+			filename := filepath.Join(dir, "richt.yaml")
+			write(t, filename, `secret_sources:
   default:
     type: yaml
     file: secrets/not-readable.yaml
@@ -61,7 +63,7 @@ hosts:
     tags: [common]
     transport: {type: local}
 `)
-	write(t, filepath.Join(dir, "services/app.yaml"), `order: 10
+			write(t, filepath.Join(dir, "services/app.yaml"), strings.ReplaceAll(`order: 10
 configs:
   - name: main
     path: /etc/app/../app.conf
@@ -78,45 +80,47 @@ processes:
     overrides:
       10-runtime.conf:
         template: {inline: "[Service]\nRestart=always\n"}
-`)
-	secret := filepath.Join(dir, "secrets/not-readable.yaml")
-	// Invalid source contents must not affect inventory-only inspection.
-	write(t, secret, "credential: [NEVER_PRINT_SECRET\n")
-	if err := os.Chmod(secret, 0000); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(secret, 0600) })
-	in, err := Load(filename)
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := in.Services["app"]
-	if s.SourceFile != filepath.Join(dir, "services/app.yaml") || s.Configs[0].Template.File != filepath.Join(dir, "services/templates/app.gotmpl") {
-		t.Fatalf("source-relative paths: %#v", s)
-	}
-	if s.Configs[0].Path != "/etc/app.conf" {
-		t.Fatal("target not normalized")
-	}
-	p := s.Processes[0]
-	if p.UnitFile.Path != "/etc/systemd/system/app.service" || p.UnitFile.Template.File != filepath.Join(dir, "services/templates/app.service.gotmpl") {
-		t.Fatalf("unit_file: %#v", p.UnitFile)
-	}
-	if p.Overrides["10-runtime.conf"].Path != "/etc/systemd/system/app.service.d/10-runtime.conf" {
-		t.Fatalf("override: %#v", p.Overrides)
-	}
-	out, err := in.Resolve(inventory.Selectors{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	encoded, err := json.Marshal(out)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(encoded), "NEVER_PRINT_SECRET") {
-		t.Fatal("secret source values leaked")
-	}
-	if in.SecretSources["production"].File != filepath.Join(dir, "secrets/not-existing.yaml") {
-		t.Fatal("secret path not source-relative")
+`, "app.service", "app."+suffix))
+			secret := filepath.Join(dir, "secrets/not-readable.yaml")
+			// Invalid source contents must not affect inventory-only inspection.
+			write(t, secret, "credential: [NEVER_PRINT_SECRET\n")
+			if err := os.Chmod(secret, 0000); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = os.Chmod(secret, 0600) })
+			in, err := Load(filename)
+			if err != nil {
+				t.Fatal(err)
+			}
+			s := in.Services["app"]
+			if s.SourceFile != filepath.Join(dir, "services/app.yaml") || s.Configs[0].Template.File != filepath.Join(dir, "services/templates/app.gotmpl") {
+				t.Fatalf("source-relative paths: %#v", s)
+			}
+			if s.Configs[0].Path != "/etc/app.conf" {
+				t.Fatal("target not normalized")
+			}
+			p := s.Processes[0]
+			if p.UnitFile.Path != "/etc/systemd/system/app."+suffix || p.UnitFile.Template.File != filepath.Join(dir, "services/templates/app."+suffix+".gotmpl") {
+				t.Fatalf("unit_file: %#v", p.UnitFile)
+			}
+			if p.Overrides["10-runtime.conf"].Path != "/etc/systemd/system/app."+suffix+".d/10-runtime.conf" {
+				t.Fatalf("override: %#v", p.Overrides)
+			}
+			out, err := in.Resolve(inventory.Selectors{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			encoded, err := json.Marshal(out)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(string(encoded), "NEVER_PRINT_SECRET") {
+				t.Fatal("secret source values leaked")
+			}
+			if in.SecretSources["production"].File != filepath.Join(dir, "secrets/not-existing.yaml") {
+				t.Fatal("secret path not source-relative")
+			}
+		})
 	}
 }
 

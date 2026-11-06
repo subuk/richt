@@ -105,6 +105,8 @@ module:
         - systemd-mask/inventory.yaml
         - systemd-mask/running.yaml
         - systemd-mask/verify.py
+        - systemd-socket/README.md
+        - systemd-socket/inventory.yaml
         - typed-configs/README.md
         - typed-configs/inventory.yaml
         - validated-ssh/README.md

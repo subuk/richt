@@ -75,7 +75,7 @@ func (b Backend) Status(ctx context.Context, unit string) (Status, error) {
 	return s, nil
 }
 
-var unitPattern = regexp.MustCompile(`^[A-Za-z0-9_@:.\\-]+\.service$`)
+var unitPattern = regexp.MustCompile(`^[A-Za-z0-9_@:.\\-]+\.(service|socket)$`)
 
 func Validate(c *plan.ProcessChange) error {
 	if c == nil || !unitPattern.MatchString(c.Unit) || strings.HasPrefix(c.Unit, "-") {
@@ -86,6 +86,9 @@ func Validate(c *plan.ProcessChange) error {
 	}
 	if c.Reaction != "" && c.Reaction != "reload" && c.Reaction != "restart" {
 		return errors.New("invalid process reaction")
+	}
+	if c.Reaction == "reload" && strings.HasSuffix(c.Unit, ".socket") {
+		return errors.New("systemd socket units do not support reload")
 	}
 	if c.Masked != nil && *c.Masked && (c.State != "stopped" || c.Enabled != nil && *c.Enabled) {
 		return errors.New("a masked process must target stopped and cannot be enabled")
@@ -389,6 +392,10 @@ func ReloadSupported(unitName string, status Status, files []*plan.FileChange) (
 }
 
 func (b Backend) ReloadSupported(ctx context.Context, unitName string, status Status, files []*plan.FileChange) (supported bool, err error) {
+	// Service-only settings cannot confer reload capability on socket units.
+	if !strings.HasSuffix(unitName, ".service") {
+		return false, nil
+	}
 	defer func() {
 		if err != nil {
 			for _, f := range files {

@@ -15,28 +15,35 @@ import (
 )
 
 func TestLifecycleBranches(t *testing.T) {
-	for _, tc := range []struct{ active, target, reaction, want string }{{"inactive", "running", "restart", "start"}, {"inactive", "running", "reload", "start"}, {"active", "running", "reload", "reload"}, {"active", "running", "restart", "restart"}, {"active", "running", "", ""}, {"active", "stopped", "restart", "stop"}, {"inactive", "stopped", "restart", ""}} {
-		t.Run(strings.Join([]string{tc.active, tc.target, tc.reaction}, "/"), func(t *testing.T) {
-			active := tc.active
-			var commands []string
-			b := Backend{Run: func(_ context.Context, _ string, args ...string) ([]byte, error) {
-				if args[0] == "show" {
-					return []byte(fmt.Sprintf("LoadState=loaded\nActiveState=%s\nUnitFileState=disabled\nCanReload=yes\n", active)), nil
+	for _, suffix := range []string{"service", "socket"} {
+		t.Run(suffix, func(t *testing.T) {
+			for _, tc := range []struct{ active, target, reaction, want string }{{"inactive", "running", "restart", "start"}, {"inactive", "running", "reload", "start"}, {"active", "running", "reload", "reload"}, {"active", "running", "restart", "restart"}, {"active", "running", "", ""}, {"active", "stopped", "restart", "stop"}, {"inactive", "stopped", "restart", ""}} {
+				if suffix == "socket" && tc.reaction == "reload" {
+					continue
 				}
-				commands = append(commands, args[0])
-				if args[0] == "stop" {
-					active = "inactive"
-				} else {
-					active = "active"
-				}
-				return nil, nil
-			}}
-			err := b.Execute(context.Background(), plan.Action{Kind: "systemd", Process: &plan.ProcessChange{Unit: "demo.service", State: tc.target, Reaction: tc.reaction, Timeout: "1s"}})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if strings.Join(commands, ",") != tc.want {
-				t.Fatal(commands)
+				t.Run(strings.Join([]string{tc.active, tc.target, tc.reaction}, "/"), func(t *testing.T) {
+					active := tc.active
+					var commands []string
+					b := Backend{Run: func(_ context.Context, _ string, args ...string) ([]byte, error) {
+						if args[0] == "show" {
+							return []byte(fmt.Sprintf("LoadState=loaded\nActiveState=%s\nUnitFileState=disabled\nCanReload=yes\n", active)), nil
+						}
+						commands = append(commands, args[0])
+						if args[0] == "stop" {
+							active = "inactive"
+						} else {
+							active = "active"
+						}
+						return nil, nil
+					}}
+					err := b.Execute(context.Background(), plan.Action{Kind: "systemd", Process: &plan.ProcessChange{Unit: "demo." + suffix, State: tc.target, Reaction: tc.reaction, Timeout: "1s"}})
+					if err != nil {
+						t.Fatal(err)
+					}
+					if strings.Join(commands, ",") != tc.want {
+						t.Fatal(commands)
+					}
+				})
 			}
 		})
 	}
@@ -67,23 +74,27 @@ func TestTimeoutAndCommandFailureHaveNoRetries(t *testing.T) {
 	}
 }
 func TestEnablementIsIndependent(t *testing.T) {
-	state := "active"
-	enabled := "enabled"
-	var commands []string
-	no := false
-	b := Backend{Run: func(_ context.Context, _ string, args ...string) ([]byte, error) {
-		if args[0] == "show" {
-			return []byte("LoadState=loaded\nActiveState=" + state + "\nUnitFileState=" + enabled + "\nCanReload=no\n"), nil
-		}
-		commands = append(commands, args[0])
-		enabled = "disabled"
-		return nil, nil
-	}}
-	if err := b.Execute(context.Background(), plan.Action{Kind: "systemd-enable", Process: &plan.ProcessChange{Unit: "demo.service", State: "running", Enabled: &no, Timeout: "1s"}}); err != nil {
-		t.Fatal(err)
-	}
-	if strings.Join(commands, ",") != "disable" || state != "active" {
-		t.Fatal(commands, state)
+	for _, suffix := range []string{"service", "socket"} {
+		t.Run(suffix, func(t *testing.T) {
+			state := "active"
+			enabled := "enabled"
+			var commands []string
+			no := false
+			b := Backend{Run: func(_ context.Context, _ string, args ...string) ([]byte, error) {
+				if args[0] == "show" {
+					return []byte("LoadState=loaded\nActiveState=" + state + "\nUnitFileState=" + enabled + "\nCanReload=no\n"), nil
+				}
+				commands = append(commands, args[0])
+				enabled = "disabled"
+				return nil, nil
+			}}
+			if err := b.Execute(context.Background(), plan.Action{Kind: "systemd-enable", Process: &plan.ProcessChange{Unit: "demo." + suffix, State: "running", Enabled: &no, Timeout: "1s"}}); err != nil {
+				t.Fatal(err)
+			}
+			if strings.Join(commands, ",") != "disable" || state != "active" {
+				t.Fatal(commands, state)
+			}
+		})
 	}
 }
 func TestReloadParserResetsAndContinuations(t *testing.T) {
@@ -157,6 +168,69 @@ func TestReloadSupportedReadsTargetFiles(t *testing.T) {
 	}
 }
 
+func TestSocketCannotAcquireServiceReloadCapability(t *testing.T) {
+	for _, content := range []string{"[Service]\nExecReload=/bin/true\n", "[Service]\nType=notify-reload\n"} {
+		for _, path := range []string{"app.socket", "app.socket.d/20-reload.conf"} {
+			b := Backend{
+				ReadFile: func(context.Context, string) ([]byte, error) { t.Fatal("read socket reload settings"); return nil, nil },
+				Glob: func(context.Context, string) ([]string, error) {
+					t.Fatal("globbed socket reload settings")
+					return nil, nil
+				},
+			}
+			yes, err := b.ReloadSupported(context.Background(), "app.socket", Status{CanReload: true, Fragment: "/target/app.socket"}, []*plan.FileChange{{Path: "/etc/systemd/system/" + path, Content: content}})
+			if err != nil || yes {
+				t.Fatalf("socket gained reload from %s: %v, %v", path, yes, err)
+			}
+		}
+	}
+}
+
+func TestSavedUnitValidationBeforeExecution(t *testing.T) {
+	yes := true
+	for _, operation := range []string{"systemd", "systemd-enable", "systemd-mask"} {
+		for _, unit := range []string{"app.service", "app.socket", "app@instance.socket", "app.timer", "app.target", "app.path", "app.mount", "-app.socket", "/app.socket", "app.socket/child", "app socket", ".socket"} {
+			t.Run(operation+"/"+unit, func(t *testing.T) {
+				c := &plan.ProcessChange{Unit: unit, State: "stopped", Timeout: "1s"}
+				if operation == "systemd-enable" {
+					c.Enabled = &yes
+				} else if operation == "systemd-mask" {
+					c.Masked = &yes
+				}
+				valid := unit == "app.service" || unit == "app.socket" || unit == "app@instance.socket"
+				b := Backend{Run: func(context.Context, string, ...string) ([]byte, error) {
+					t.Fatal("executed invalid unit")
+					return nil, nil
+				}}
+				_, err := b.Resolve(plan.Task{Operation: operation, Process: c})
+				if (err == nil) != valid {
+					t.Fatalf("unit %q validation: %v", unit, err)
+				}
+				if !valid && b.Execute(context.Background(), plan.Action{Kind: operation, Process: c}) == nil {
+					t.Fatal("executed invalid saved unit")
+				}
+			})
+		}
+	}
+	c := &plan.ProcessChange{Unit: "app.socket", State: "running", Reaction: "reload", Timeout: "1s"}
+	if _, err := (Backend{}).Resolve(plan.Task{Operation: "systemd", Process: c}); err == nil || !strings.Contains(err.Error(), "do not support reload") {
+		t.Fatal("accepted socket reload", err)
+	}
+}
+
+func TestReloadStillRequiresRuntimeCapability(t *testing.T) {
+	b := Backend{Run: func(_ context.Context, _ string, args ...string) ([]byte, error) {
+		if args[0] != "show" {
+			t.Fatal("ran unsupported reload", args)
+		}
+		return []byte("LoadState=loaded\nActiveState=active\nCanReload=no\n"), nil
+	}}
+	err := b.Execute(context.Background(), plan.Action{Kind: "systemd", Process: &plan.ProcessChange{Unit: "app.service", State: "running", Reaction: "reload", Timeout: "1s"}})
+	if err == nil || !strings.Contains(err.Error(), "does not support reload") {
+		t.Fatal(err)
+	}
+}
+
 func TestUnitDiagnosticsDoNotExposeContentOrUnexpectedState(t *testing.T) {
 	const private = "EXAMPLE_PRIVATE_UNIT_VALUE"
 	if _, err := ReloadSetting("[Service]\n"+private+"\n", false); err == nil || strings.Contains(err.Error(), private) {
@@ -204,52 +278,56 @@ func TestDefaultLocalCommandFailureDoesNotExposeUnitOutput(t *testing.T) {
 }
 
 func TestMaskCommandsAndVerification(t *testing.T) {
-	for _, tc := range []struct {
-		name, initial, want string
-		target              bool
-	}{
-		{"mask-loaded", "disabled", "mask -- demo.service", true},
-		{"mask-missing", "not-found", "mask -- demo.service", true},
-		{"persist-runtime-mask", "masked-runtime", "mask -- demo.service", true},
-		{"already-persistent", "masked", "", true},
-		{"unmask-persistent", "masked", "unmask -- demo.service,unmask --runtime -- demo.service", false},
-		{"unmask-runtime", "masked-runtime", "unmask -- demo.service,unmask --runtime -- demo.service", false},
-		{"already-unmasked", "disabled", "", false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			state := tc.initial
-			var commands []string
-			b := Backend{Run: func(_ context.Context, name string, args ...string) ([]byte, error) {
-				if name != "systemctl" {
-					t.Fatal(name)
-				}
-				if args[0] == "show" {
-					load := "loaded"
-					if strings.HasPrefix(state, "masked") {
-						load = "masked"
-					} else if state == "not-found" {
-						load = "not-found"
+	for _, suffix := range []string{"service", "socket"} {
+		t.Run(suffix, func(t *testing.T) {
+			for _, tc := range []struct {
+				name, initial, want string
+				target              bool
+			}{
+				{"mask-loaded", "disabled", "mask -- demo.service", true},
+				{"mask-missing", "not-found", "mask -- demo.service", true},
+				{"persist-runtime-mask", "masked-runtime", "mask -- demo.service", true},
+				{"already-persistent", "masked", "", true},
+				{"unmask-persistent", "masked", "unmask -- demo.service,unmask --runtime -- demo.service", false},
+				{"unmask-runtime", "masked-runtime", "unmask -- demo.service,unmask --runtime -- demo.service", false},
+				{"already-unmasked", "disabled", "", false},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					state := tc.initial
+					var commands []string
+					b := Backend{Run: func(_ context.Context, name string, args ...string) ([]byte, error) {
+						if name != "systemctl" {
+							t.Fatal(name)
+						}
+						if args[0] == "show" {
+							load := "loaded"
+							if strings.HasPrefix(state, "masked") {
+								load = "masked"
+							} else if state == "not-found" {
+								load = "not-found"
+							}
+							return []byte("LoadState=" + load + "\nActiveState=inactive\nUnitFileState=" + state + "\n"), nil
+						}
+						commands = append(commands, strings.Join(args, " "))
+						if args[0] == "mask" {
+							state = "masked"
+						} else if len(args) > 1 && args[1] == "--runtime" {
+							state = "not-found"
+						}
+						return nil, nil
+					}}
+					c := &plan.ProcessChange{Unit: "demo." + suffix, State: "stopped", Masked: &tc.target, Timeout: "1s"}
+					actions, err := b.Resolve(plan.Task{Operation: "systemd-mask", Process: c})
+					if err != nil || len(actions) != 1 {
+						t.Fatal(actions, err)
 					}
-					return []byte("LoadState=" + load + "\nActiveState=inactive\nUnitFileState=" + state + "\n"), nil
-				}
-				commands = append(commands, strings.Join(args, " "))
-				if args[0] == "mask" {
-					state = "masked"
-				} else if len(args) > 1 && args[1] == "--runtime" {
-					state = "not-found"
-				}
-				return nil, nil
-			}}
-			c := &plan.ProcessChange{Unit: "demo.service", State: "stopped", Masked: &tc.target, Timeout: "1s"}
-			actions, err := b.Resolve(plan.Task{Operation: "systemd-mask", Process: c})
-			if err != nil || len(actions) != 1 {
-				t.Fatal(actions, err)
-			}
-			if err := b.Execute(context.Background(), actions[0]); err != nil {
-				t.Fatal(err)
-			}
-			if got := strings.Join(commands, ","); got != tc.want {
-				t.Fatalf("commands %q; want %q", got, tc.want)
+					if err := b.Execute(context.Background(), actions[0]); err != nil {
+						t.Fatal(err)
+					}
+					if got := strings.Join(commands, ","); got != strings.ReplaceAll(tc.want, "demo.service", "demo."+suffix) {
+						t.Fatalf("commands %q; want %q", got, tc.want)
+					}
+				})
 			}
 		})
 	}
@@ -279,24 +357,28 @@ func TestMaskFailureAndTimeoutDoNotRetry(t *testing.T) {
 }
 
 func TestMaskedUnitsSupportStopButRejectImplicitStart(t *testing.T) {
-	for _, state := range []string{"running", "stopped"} {
-		t.Run(state, func(t *testing.T) {
-			active := "active"
-			var commands []string
-			b := Backend{Run: func(_ context.Context, _ string, args ...string) ([]byte, error) {
-				if args[0] == "show" {
-					return []byte("LoadState=masked\nActiveState=" + active + "\nUnitFileState=masked\n"), nil
-				}
-				commands = append(commands, args[0])
-				active = "inactive"
-				return nil, nil
-			}}
-			err := b.Execute(context.Background(), plan.Action{Kind: "systemd", Process: &plan.ProcessChange{Unit: "demo.service", State: state, Timeout: "1s"}})
-			if state == "running" && (err == nil || len(commands) != 0) {
-				t.Fatal(err, commands)
-			}
-			if state == "stopped" && (err != nil || strings.Join(commands, ",") != "stop") {
-				t.Fatal(err, commands)
+	for _, suffix := range []string{"service", "socket"} {
+		t.Run(suffix, func(t *testing.T) {
+			for _, state := range []string{"running", "stopped"} {
+				t.Run(state, func(t *testing.T) {
+					active := "active"
+					var commands []string
+					b := Backend{Run: func(_ context.Context, _ string, args ...string) ([]byte, error) {
+						if args[0] == "show" {
+							return []byte("LoadState=masked\nActiveState=" + active + "\nUnitFileState=masked\n"), nil
+						}
+						commands = append(commands, args[0])
+						active = "inactive"
+						return nil, nil
+					}}
+					err := b.Execute(context.Background(), plan.Action{Kind: "systemd", Process: &plan.ProcessChange{Unit: "demo." + suffix, State: state, Timeout: "1s"}})
+					if state == "running" && (err == nil || len(commands) != 0) {
+						t.Fatal(err, commands)
+					}
+					if state == "stopped" && (err != nil || strings.Join(commands, ",") != "stop") {
+						t.Fatal(err, commands)
+					}
+				})
 			}
 		})
 	}

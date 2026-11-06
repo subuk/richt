@@ -6,35 +6,39 @@ import (
 )
 
 func TestMaskTargetsValidatedWithoutObservation(t *testing.T) {
-	yes, no := true, false
-	for _, tt := range []struct {
-		name    string
-		process Process
-		config  bool
-		invalid bool
-	}{
-		{"mask stopped", Process{State: "stopped", Masked: &yes}, false, false},
-		{"explicit unmask", Process{Masked: &no}, false, false},
-		{"default running", Process{Masked: &yes}, false, true},
-		{"running", Process{State: "running", Masked: &yes}, false, true},
-		{"enabled", Process{State: "stopped", Enabled: &yes, Masked: &yes}, false, true},
-		{"owned unit", Process{State: "stopped", Masked: &yes, UnitFile: func() *Config { c := inlineConfig("/etc/systemd/system/demo.service"); return &c }()}, false, true},
-		{"ordinary owned unit", Process{State: "stopped", Masked: &yes}, true, true},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			p := tt.process
-			p.Type = "systemd"
-			p.Unit = "demo.service"
-			s := Service{Processes: []Process{namedProcess("demo", p)}}
-			if tt.config {
-				s.Configs = []Config{namedConfig("unit", inlineConfig("/etc/systemd/system/demo.service"))}
-			}
-			err := validateService(s)
-			if (err != nil) != tt.invalid {
-				t.Fatalf("validation = %v, invalid = %t", err, tt.invalid)
-			}
-			if err != nil && !strings.Contains(err.Error(), "masked") {
-				t.Fatal(err)
+	for _, suffix := range []string{"service", "socket"} {
+		t.Run(suffix, func(t *testing.T) {
+			yes, no := true, false
+			for _, tt := range []struct {
+				name    string
+				process Process
+				config  bool
+				invalid bool
+			}{
+				{"mask stopped", Process{State: "stopped", Masked: &yes}, false, false},
+				{"explicit unmask", Process{Masked: &no}, false, false},
+				{"default running", Process{Masked: &yes}, false, true},
+				{"running", Process{State: "running", Masked: &yes}, false, true},
+				{"enabled", Process{State: "stopped", Enabled: &yes, Masked: &yes}, false, true},
+				{"owned unit", Process{State: "stopped", Masked: &yes, UnitFile: func() *Config { c := inlineConfig("/etc/systemd/system/demo." + suffix); return &c }()}, false, true},
+				{"ordinary owned unit", Process{State: "stopped", Masked: &yes}, true, true},
+			} {
+				t.Run(tt.name, func(t *testing.T) {
+					p := tt.process
+					p.Type = "systemd"
+					p.Unit = "demo." + suffix
+					s := Service{Processes: []Process{namedProcess("demo", p)}}
+					if tt.config {
+						s.Configs = []Config{namedConfig("unit", inlineConfig("/etc/systemd/system/demo."+suffix))}
+					}
+					err := validateService(s)
+					if (err != nil) != tt.invalid {
+						t.Fatalf("validation = %v, invalid = %t", err, tt.invalid)
+					}
+					if err != nil && !strings.Contains(err.Error(), "masked") {
+						t.Fatal(err)
+					}
+				})
 			}
 		})
 	}

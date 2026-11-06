@@ -864,3 +864,53 @@ The ACL prerequisite package remains installed. Private evidence retains the
 plans and logs. This does not establish other platforms, compare-and-swap
 against concurrent external writers, exhaustive power-loss recovery or a
 rollback command.
+
+## Systemd socket units (KRG-106)
+
+Validated on 2026-11-06 on the disposable AlmaLinux 10.2 x86_64 target with
+systemd 257 and SELinux Enforcing, using source `ef628425a025` plus the KRG-106
+changes. The existing service/mask harness now also exercises an isolated Unix
+socket and its activation service.
+
+| Coverage | Result |
+| --- | --- |
+| Local root service/socket lifecycle, masks, reactions and continuation | 44 checks passed |
+| SSH with noninteractive sudo, same service/socket suite | 44 checks passed |
+| File, SELinux, terminal and secret regression | 18 checks passed |
+| Owned echo socket walkthrough | Activation, echo, empty diff and absent cleanup passed |
+| Packaged libvirt proxy socket recipe | 11 checks passed |
+| Repository checks | `make check`, Python syntax and `make docs-check` passed |
+
+Socket checks include active/listening state and enablement, owned full units
+and drop-ins, one restart for simultaneous definition changes, no-op, rejection
+of reload even with a misleading Service/ExecReload section, persistent/runtime
+masks, and unmasking. Socket stop/removal/masking preserved the isolated active
+service's invocation. This systemd version refused to start the socket while
+that service remained active. Explicitly stopping the service through Richt
+allowed continuation of the original saved plan after its inventory was deleted.
+A separate intentional mask failure verified that continuation skips successful
+file tasks and preserves later edits to those files.
+
+The libvirt recipe used AlmaLinux's `libvirt-daemon-proxy` and `libvirt-libs`
+`11.10.0-12.9.el10_2.alma.1`: `virtproxyd.service` stopped/disabled, the three
+local socket units running/enabled/unmasked, and TCP/TLS socket units
+stopped/disabled/masked. A managed primary-socket drop-in set `SocketGroup=root`
+and changed `SocketMode` from `0600` to `0660`; the actual socket permissions,
+single restart, mask/unmask and fresh empty diffs were verified. The vendor
+unit's `Also=` enablement links remain systemd behavior. No hypervisor driver,
+VM, remote authentication or distribution migration was tested. This validates
+that socket recipe on AlmaLinux 10.2, not a complete libvirt installation or
+other distributions. See the upstream [libvirt daemon guide](https://libvirt.org/daemons.html)
+for socket configuration and daemon layouts.
+
+Reproduce the service/socket suite using the commands in the
+[mask walkthrough](../examples/systemd-mask/README.md), and the standalone
+[echo socket example](../examples/systemd-socket/README.md).
+The Linux binary SHA-256 was
+`bcc711e67560424d8b7a215f98f41effbb8da05683938a8a1e2ef37d932654a9`;
+the SSH controller SHA-256 was
+`bf90e235451ce4d69d84010e1b4a6b2b39d58f3587112f3a1e21f81f8e693d14`.
+All managed socket/service fixtures and the two newly installed libvirt packages
+were removed. The existing exporter stayed active, systemd reported running
+with no failed units, and SELinux remained Enforcing. Private evidence retains
+inventories, saved plans, command output and the expected failure diagnostics.

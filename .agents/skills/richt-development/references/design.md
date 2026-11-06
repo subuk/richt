@@ -125,6 +125,11 @@ Important invariants across those contracts:
   and cannot enable a unit or coexist with an owned full unit at the mask path.
   Explicit unmask precedes owned file writes, enablement and lifecycle; masking
   follows requested stop/disable. Absent assignments preserve mask state.
+- Systemd processes accept `.service` and `.socket` units. Socket `running`
+  means ActiveState=active, not an active application service. Socket operations
+  do not infer or manage the activated service; dependencies remain systemd's
+  responsibility. Socket units support restart reactions but not reload, and
+  service-only ExecReload/notify-reload settings cannot prove socket capability.
 - A lifecycle command and verified target state are one task. Start/reload/restart
   must reach running, stop must reach stopped. Command and polling share the
   process timeout, a positive Go duration defaulting to 5s. Running is not an

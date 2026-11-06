@@ -1,0 +1,44 @@
+tags:
+  example:
+    services:
+      listener: {}
+services:
+  listener:
+    order: 10
+    configs:
+      - path: /etc/systemd/system/richt-socket-example@.service
+        template:
+          inline: |
+            [Unit]
+            Description=Richt disposable socket echo connection
+            [Service]
+            ExecStart=/usr/bin/cat
+            StandardInput=socket
+            StandardOutput=socket
+    processes:
+      - name: listener
+        type: systemd
+        unit: richt-socket-example.socket
+        state: running
+        enabled: true
+        unit_file:
+          template:
+            inline: |
+              [Unit]
+              Description=Richt disposable socket listener
+              [Socket]
+              ListenStream=/run/richt-socket-example.sock
+              Accept=yes
+              RemoveOnStop=yes
+              [Install]
+              WantedBy=sockets.target
+        overrides:
+          20-access.conf:
+            template:
+              inline: |
+                [Socket]
+                SocketMode=0600
+hosts:
+  - name: local
+    tags: [example]
+    transport: {type: local}

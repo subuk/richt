@@ -1,6 +1,6 @@
 ---
 title: "systemd"
-description: "Manage service-unit state, enablement, masks, owned definitions, and verified reload capability."
+description: "Manage service and socket units, enablement, masks, owned definitions, and verified reload capability."
 weight: 10
 ---
 
@@ -20,7 +20,7 @@ processes:
 | --- | --- | --- |
 | `name` | no | Nonempty optional label, unique within the process list |
 | `type` | yes | `systemd` |
-| `unit` | yes | A systemd `.service` unit name |
+| `unit` | yes | A systemd `.service` or `.socket` unit name; other unit types are unsupported |
 | `state` | no | `running` (default), or `stopped` |
 | `enabled` | no | Boolean; omission preserves current enablement |
 | `masked` | no | Boolean; `true` requests a persistent mask, `false` removes persistent and runtime masks; omission preserves masks |
@@ -50,6 +50,40 @@ During a lifecycle task, `active` is running; `inactive` or `failed` is stopped.
 Unexpected load/activation states fail explicitly. Start, reload, and restart
 must reach active; stop must reach inactive or failed. Status is polled while
 waiting. This verifies systemd state, not application readiness.
+
+For a socket, `running` means `ActiveState=active` (normally listening), not
+that its activated service is running. Richt operates only on the declared unit;
+it does not infer a related service from the socket name. Stopping or masking a
+socket does not guarantee that an already activated service stops. Declare that
+service separately when its state needs management. Systemd's own dependencies
+still apply. In particular, starting or restarting a socket can fail while its
+associated service is active; Richt reports the failure without implicitly
+stopping that service. Explicitly stop the service before restarting the socket
+when the unit configuration requires it.
+
+For an installed socket, the existing process fields work directly:
+
+```yaml
+processes:
+  - name: listener
+    type: systemd
+    unit: example-app.socket
+    state: running
+    enabled: true
+    masked: false
+    overrides:
+      20-access.conf:
+        template:
+          inline: |
+            [Socket]
+            SocketMode=0600
+```
+
+This example requires the socket and its activation service to be installed.
+The [socket walkthrough](../../../examples/systemd-socket/README.md) provides
+an isolated pair with owned definitions. Libvirt's monolithic and modular daemon
+layouts require their own distribution-specific recipe; socket support alone
+does not configure a working hypervisor.
 
 A lifecycle command and its result check form one persisted task. The command
 and all waiting share the process timeout. Command errors and timeouts fail the
@@ -152,6 +186,11 @@ secret call or requesting absence. [File sensitivity](../configs/files.md#sensit
 and [secrets](../../secrets.md) define the full protection contract.
 
 ## Reload capability
+
+Socket units do not support `reload_on`; use `restart_on` for their linked
+changes. A `[Service] ExecReload=` or `Type=notify-reload` entry in a socket
+definition cannot establish reload capability. The following capability rules
+apply to service units.
 
 For a present assignment, every declared `reload_on` is checked during
 preparation, even with no current input changes. Absent assignments skip this

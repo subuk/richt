@@ -71,6 +71,11 @@ capability during preparation, even if none of its inputs currently changes or
 a restart would win. Absent assignments do not require reload capability. Unsupported
 reload fails explicitly and never falls back to restart.
 
+Socket units support restart reactions, but not `reload_on`. Their owned unit
+and drop-in changes use the same single restart reaction. Richt does not add a
+restart task for the activated service; manage that service explicitly.
+Systemd's own unit dependencies still apply.
+
 The [systemd capability reference](processes/systemd.md#reload-capability) explains
 how existing and prepared unit definitions are checked, `ExecReload` resets,
 `Type=notify-reload`, and the requirements for a first package installation.
