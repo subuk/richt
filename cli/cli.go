@@ -11,6 +11,7 @@ import (
 
 	"github.com/alecthomas/kong"
 	"github.com/subuk/richt/engine"
+	"github.com/subuk/richt/facts"
 	"github.com/subuk/richt/inventory"
 	"github.com/subuk/richt/inventoryyaml"
 	"github.com/subuk/richt/plan"
@@ -28,13 +29,16 @@ type arguments struct {
 		Validate selection `cmd:"" help:"Validate inventory and selected assignments."`
 		Show     selection `cmd:"" help:"Show resolved inventory as JSON."`
 	} `cmd:"" help:"Inspect YAML inventory."`
-	Diff struct {
+	Facts factsArguments `cmd:"" help:"Collect or inspect cached Linux host facts as JSON."`
+	Diff  struct {
 		selection
+		preparationFacts
 		Output   string `short:"o" help:"Save an executable JSON plan." type:"path"`
 		Progress string `default:"auto" enum:"auto,plain,off" help:"Progress on stderr: auto, plain, or off."`
 	} `cmd:"" help:"Show changes without modifying resources."`
 	Apply struct {
 		selection
+		preparationFacts
 		Plan        string `arg:"" optional:"" help:"Saved plan to execute and update." type:"path"`
 		Yes         bool   `short:"y" help:"Apply without a confirmation prompt."`
 		Parallelism int    `default:"20" help:"Maximum number of hosts to apply concurrently (positive)."`
@@ -135,12 +139,18 @@ func executeContext(ctx context.Context, command string, f arguments, stdin *os.
 		enc := json.NewEncoder(out)
 		enc.SetIndent("", "  ")
 		return enc.Encode(r)
+	case "facts":
+		return executeFacts(ctx, f.Facts, out, stderr, collectHostFacts)
 	case "diff":
+		options, err := f.Diff.preparationFacts.options()
+		if err != nil {
+			return err
+		}
 		r, sources, err := f.Diff.selection.load(ctx)
 		if err != nil {
 			return err
 		}
-		p, err := prepare(ctx, r, sources, stderr, f.Diff.Progress)
+		p, err := prepare(ctx, r, sources, stderr, f.Diff.Progress, options)
 		if err != nil {
 			return err
 		}
@@ -158,9 +168,16 @@ func executeContext(ctx context.Context, command string, f arguments, stdin *os.
 		if f.Apply.Parallelism <= 0 {
 			return fmt.Errorf("parallelism must be positive")
 		}
+		options, err := f.Apply.preparationFacts.options()
+		if err != nil {
+			return err
+		}
 		var p *plan.Plan
 		var persist func(*plan.Plan) error
 		if f.Apply.Plan != "" {
+			if f.Apply.preparationFacts.specified() {
+				return fmt.Errorf("facts preparation options cannot be used with a saved plan")
+			}
 			if f.Apply.selection.specified() {
 				return fmt.Errorf("inventory, source settings, and host/tag/service filters cannot be used with a saved plan")
 			}
@@ -176,7 +193,7 @@ func executeContext(ctx context.Context, command string, f arguments, stdin *os.
 			if err != nil {
 				return err
 			}
-			p, err = prepare(ctx, r, sources, stderr, f.Apply.Progress)
+			p, err = prepare(ctx, r, sources, stderr, f.Apply.Progress, options)
 			if err != nil {
 				return err
 			}
@@ -203,9 +220,9 @@ func executeContext(ctx context.Context, command string, f arguments, stdin *os.
 	return fmt.Errorf("unsupported command %q", command)
 }
 
-func prepare(ctx context.Context, r *inventory.Resolved, sources *source.Client, stderr io.Writer, mode string) (*plan.Plan, error) {
+func prepare(ctx context.Context, r *inventory.Resolved, sources *source.Client, stderr io.Writer, mode string, options facts.Options) (*plan.Plan, error) {
 	progress := newProgress(stderr, mode, "Preparing")
-	p, err := (engine.Local{}).Diff(ctx, r, engine.DiffOptions{Observer: progress.prepare, Sources: sources})
+	p, err := (engine.Local{}).Diff(ctx, r, engine.DiffOptions{Observer: progress.prepare, Sources: sources, Facts: &options})
 	progressErr := progress.stop()
 	if err != nil {
 		return nil, err

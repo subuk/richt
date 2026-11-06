@@ -1,0 +1,18 @@
+os = {{ fact "os.id" }}
+arch = {{ fact "architecture" }}
+workers = {{ fact "cpu.logical_count" }}
+memory_bytes = {{ fact "memory.total_bytes" }}
+{{ range fact "network.interfaces" }}
+interface = {{ .name }}
+mtu = {{ .mtu }}
+{{ range .addresses }}
+address = {{ .address }}/{{ .prefix_length }}
+{{ end }}
+{{ end }}
+default_ipv4_status = {{ fact "network.default_ipv4.status" }}
+{{ with fact "network.default_ipv4.interface" }}
+{{ with index (fact "network.interfaces") . }}
+default_ipv4_interface = {{ .name }}
+default_ipv4_mac = {{ .mac }}
+{{ end }}
+{{ end }}

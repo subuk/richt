@@ -1109,3 +1109,62 @@ Remote command termination remains subject to the existing SSH/systemd limits;
 the timer reports elapsed waiting time rather than remote operation percentages.
 Private evidence retains command logs and saved test inputs; temporary managed
 resources are cleaned up by the harnesses.
+
+## Host facts (KRG-109)
+
+Validated on 2026-11-07 using source `80a87b0` plus the KRG-109 changes.
+The disposable Linux target ran AlmaLinux 10.2 x86_64, Python 3.12.13,
+iproute2 6.17.0 and SELinux Enforcing. SSH runs used a macOS controller and
+the existing non-root login, both without sudo and with explicit `sudo -n`.
+
+| Coverage | Result |
+| --- | --- |
+| Facts, local transport without sudo | 16 checks passed |
+| Facts, local transport with explicit sudo | 16 checks passed |
+| Facts, SSH transport without sudo | 16 checks passed |
+| Facts, SSH transport with explicit sudo | 16 checks passed |
+| Files, SELinux, secrets, terminal and progress regression | 20 checks passed |
+| Oneshot/systemd and continuation regression, without package transactions | 28 checks passed |
+| Repository checks | `make check` passed |
+| Facts, transport, rendering, engine, CLI and inventory concurrency | `go test -race ./facts ./transport ./config ./engine ./cli ./inventory ./inventoryyaml` passed |
+| Documentation | `make docs-check` passed |
+
+The facts harness is reproducible on an authorized disposable target:
+
+```sh
+# Native Linux binary on a Linux controller/target.
+python3 tests/integration/facts.py --binary ./bin/richt-linux-amd64 --work-root /tmp/facts-local
+python3 tests/integration/facts.py --binary ./bin/richt-linux-amd64 --sudo --work-root /tmp/facts-local-sudo
+# Native controller binary with an existing SSH login and optional sudo.
+python3 tests/integration/facts.py --binary ./bin/richt --host deploy@test-host --work-root /tmp/facts-ssh
+python3 tests/integration/facts.py --binary ./bin/richt --host deploy@test-host --sudo --work-root /tmp/facts-ssh-sudo
+```
+
+It checks target uname/hostname, typed CPU/RAM/network data, assigned and
+unassigned hosts, cache provenance and stale inspection, refresh/no-cache,
+lazy template branches, and saved-plan failure/continuation after inventory and
+cache deletion. Cached-only inspection uses a missing template and executable
+traps to prove that it opens no template and runs no target command.
+The harness mutates only a unique target directory and removes it on exit;
+private command logs and `acceptance.json` remain under the controller work root.
+
+Final facts acceptance Linux binary SHA-256:
+`ac7d69147cde7c341a55cb178c23c9156f2931c8583c6073047778c9aeae75cf`.
+Final facts acceptance macOS controller binary SHA-256:
+`a3ff46813d1d71271a7657bc773c4f973c4bbd504afe55b94a51ef95869aa14d`.
+The binaries were built before committing the implementation; these hashes
+identify the tested working-tree builds rather than a release artifact.
+The file/systemd regressions used Linux build
+`205ea1f7584c5a9d39e61ca7644c0ca9400ef06f5bb8f256a37c7bba93a0ea5a`,
+before the final malformed-route/null and OS-release UTF-8 guards. All four
+facts modes were rerun after those guards were added.
+
+Go fixtures additionally cover Debian/RPM OS metadata, strict defaults and
+availability, literal interface names, route priority/preference and ambiguity,
+malformed output, cancellation and bounded buffers, cache I/O/publication
+failures, concurrent writers, strict template fields and sensitive diagnostics.
+Debian-family collection was fixture-tested, not live-tested in this run.
+No package transaction or network configuration change was performed. All
+temporary managed resources were removed; postflight showed SELinux Enforcing,
+the system running and no failed units. Existing application workloads were
+outside the acceptance scope.

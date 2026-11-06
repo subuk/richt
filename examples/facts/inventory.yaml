@@ -1,0 +1,17 @@
+tags:
+  example:
+    services: {facts-report: {}}
+services:
+  facts-report:
+    order: 10
+    configs:
+      - path: /var/tmp/richt-facts-example/report.conf
+        template:
+          file: report.gotmpl
+hosts:
+  - name: example
+    tags: [example]
+    transport: {type: local}
+  - name: unassigned
+    tags: []
+    transport: {type: local}

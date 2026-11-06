@@ -14,8 +14,17 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/subuk/richt/facts"
 	"github.com/subuk/richt/inventory"
 )
+
+// Transport combines command execution and read-only host observations.
+type Transport interface {
+	Run(context.Context, string, ...string) ([]byte, error)
+	RunInput(context.Context, []byte, string, ...string) ([]byte, error)
+	RunDiscard(context.Context, string, ...string) error
+	Facts(context.Context) (facts.Snapshot, error)
+}
 
 // Client retains the explicit connection inputs. OpenSSH reads its normal
 // configuration, identities, agent, and known-hosts files on every invocation.

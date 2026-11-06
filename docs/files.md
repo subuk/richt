@@ -31,6 +31,12 @@ managed resources.
 Missing template variables fail preparation. An `absent` assignment prepares
 explicit removal without rendering templates or reading secret sources.
 
+Templates may lazily access [host facts](facts.md) while rendering. Facts are
+frozen into rendered bytes only; no full snapshot or cache data is stored in
+the plan. Saved-plan apply and continuation never collect facts or read their
+cache, even if facts have changed or the cache has been deleted. Facts cache
+flags are preparation options and are rejected with saved plans.
+
 A saved plan fixes selected hosts, explicit connection inputs, task order,
 operations, rendered file contents and patches, requested attributes and
 owner/group names, file validators and their timeouts, atomic-write and backup

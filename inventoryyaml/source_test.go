@@ -83,6 +83,9 @@ secret_sources: {default: {type: yaml, file: missing-secrets.yaml}}
 	if err != nil {
 		t.Fatal(err)
 	}
+	if in.SourceIdentity != filename || resolved.SourceIdentity != filename {
+		t.Fatal("configured local inventory identity was not retained")
+	}
 	if resolved.Hosts[0].Services[1].State != "absent" {
 		t.Fatal("absence lost")
 	}
@@ -111,6 +114,13 @@ hosts: [{name: example, tags: [common], transport: {type: local}}]
 	if in.SecretSources["production"].File != secrets {
 		t.Fatal("client secret binding lost")
 	}
+	resolved, err := in.Resolve(inventory.Selectors{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if in.SourceIdentity != server.URL+"/inventory.yaml" || resolved.SourceIdentity != in.SourceIdentity {
+		t.Fatal("redirect replaced configured root inventory identity")
+	}
 	inline, s := in.Services["inline"], in.Services["remote"]
 	if inline.SourceURL != server.URL+"/tenant/root/inventory.yaml" || inline.Configs[0].Template.URL != server.URL+"/tenant/templates/inline" {
 		t.Fatalf("inventory redirect base lost: %#v", inline)
@@ -124,6 +134,9 @@ hosts: [{name: example, tags: [common], transport: {type: local}}]
 	}
 	if !strings.Contains(string(encoded), `"source_url"`) || !strings.Contains(string(encoded), `"sha256":"`+strings.ToLower(hash)+`"`) {
 		t.Fatalf("resolved source metadata missing: %s", encoded)
+	}
+	if strings.Contains(string(encoded), "SourceIdentity") || strings.Contains(string(encoded), "source_identity") {
+		t.Fatal("controller cache identity leaked into inventory output")
 	}
 	if got := requests(); len(got) != 4 {
 		t.Fatalf("only inventory and service documents may be read: %v", got)

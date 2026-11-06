@@ -18,6 +18,8 @@ not execute against a host during `go test`.
 | `inventory` | Construct `Inventory`; `Resolve(Selectors)` validates and resolves assignments without host or secret access. |
 | `inventoryyaml` | `Load` and `LoadWithOptions` adapt local or HTTPS YAML into inventory. |
 | `source` | `New(Options)` creates a bounded authenticated HTTPS client; `Read(ctx, url, sha256)` returns a byte snapshot and final response URL. |
+| `facts` | Typed `Snapshot`, strict `Lookup`, cache `Options`/`Identity`, and lazy `NewProvider`/`Get`. |
+| `transport` | `Transport.Facts(ctx)` observes a Linux target; `New(inventory.Transport)` creates the local/SSH implementation without contacting it. |
 | `engine` | `Local.Diff(ctx, resolved, ...DiffOptions)` prepares executable inputs. `Local` also dispatches execution through the selected local/SSH backends. |
 | `plan` | Inspect `Plan`, use `Display` for safe human-readable review, `Save`/`Open` for protected persistence and locking, and `Apply` for execution. |
 | `cli` | `RunContext` accepts a caller-owned context; `Run` retains the background-context entry point. Applications using domain packages supply their own confirmation and UI. |
@@ -97,11 +99,12 @@ user-defined display labels.
 ## Preparation and cancellation
 
 `engine.DiffOptions.Observer` receives `PrepareEvent` values with `Phase`,
-`Host` and `Service`. Phases are `rendering`, `checking` and `observing`; an
+`Host` and `Service`. Phases are `rendering`, `facts`, `checking` and `observing`; an
 empty service identifies host-wide checks. Calls are synchronous and precede
 the corresponding work. These are activity labels, not task completions or
-estimated percentages. All template preparation still precedes host
-observation. Inventory inspection can fetch inventory/service documents, never
+estimated percentages. Template preparation precedes resource observation. An
+evaluated `fact` call can collect target observations while rendering; templates
+without evaluated fact calls retain the existing ordering. Inventory inspection can fetch inventory/service documents, never
 templates or secret values, and has no progress subscription.
 
 ## HTTPS source clients
@@ -146,6 +149,60 @@ bytes are needed; `engine.Local.Diff` shares its default within the diff. The
 client caches bytes, while each host renders with its own variables and secret
 lookup. Context cancellation reaches HTTPS requests. See [HTTPS sources](sources.md)
 for validation, redirect rules, defaults and saved-plan boundaries.
+
+## Host facts
+
+`engine.DiffOptions.Facts` is an optional `*facts.Options`. Nil selects the
+72-hour cache default; an explicit options value keeps its zero `MaxAge`, which
+forces collection. `NoCache` disables persistent reads/writes, `Refresh` bypasses
+reads, and `CacheDir` isolates storage. `CachedOnly` is for inspection and is
+rejected during preparation. Providers initialize only on the first evaluated
+fact lookup and are shared by all host templates, including units/drop-ins.
+
+```go
+prepared, err := (engine.Local{}).Diff(ctx, resolved, engine.DiffOptions{
+    Facts: &facts.Options{
+        CacheDir: "/private/app-cache/facts",
+        MaxAge: facts.DefaultMaxAge,
+    },
+})
+```
+
+Loaded and resolved inventories retain `SourceIdentity` as non-serialized
+metadata: the configured absolute local root path or requested HTTPS root URL.
+The cache namespaces by that source and explicit host/transport inputs. For an
+inventory constructed in memory, set a stable `SourceIdentity` yourself or use
+`Facts: &facts.Options{NoCache: true}`. An inventory without evaluated fact calls
+needs no identity and never accesses the cache. Source identity is configured
+identity, without resolving DNS/SSH aliases or HTTP redirect destinations;
+retargeting requires explicit refresh.
+
+`engine.DiffOptions.FactTransport` accepts
+`func(inventory.Transport) (transport.Transport, error)` for an embedded
+transport implementation or test double. The public `transport.Transport`
+interface includes `Run`, `RunInput`, `RunDiscard`, and
+`Facts(context.Context) (facts.Snapshot, error)`. Its
+constructor is lazy; the engine calls it only when collection is necessary,
+so cache hits require no target contact. Custom collectors must return complete,
+validated snapshots and honor cancellation; the built-in collector has a
+30-second host timeout. `facts.NewProvider(identity, options, collect)` wraps a
+collection callback, and `Get(ctx)` returns a detached `facts.Result` containing
+`Snapshot`, `Source`, `Age`, and `Stale`. `Lookup(ctx, path)` validates schema
+paths before obtaining the immutable per-invocation snapshot.
+
+For direct file-template preparation, use
+`config.PrepareWithOptions(ctx, config, state, vars, config.PrepareOptions{...})`.
+Options contain `Sources *source.Client`, `Secrets config.SecretLookup`, and
+`Fact func(context.Context, string) (any, error)`. The fact callback receives a
+schema path and returns its typed value. Callers composing multiple templates
+must share a host-scoped provider and keep values isolated between hosts.
+The older `Prepare` and `PrepareContext` entry points remain available.
+Absent assignments do not acquire templates or invoke either lookup.
+
+Facts are rendered preparation inputs only. Saved-plan apply and continuation
+have no dependency on the facts cache or collector and do not persist a full
+snapshot. See [host facts](facts.md) for schema, target requirements, cache
+failure policy, and privacy boundaries.
 
 ## Caller cancellation
 

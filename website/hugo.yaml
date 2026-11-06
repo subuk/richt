@@ -82,6 +82,9 @@ module:
         - deb/inventory.yaml
         - continuation/inventory.yaml
         - continuation/README.md
+        - facts/README.md
+        - facts/inventory.yaml
+        - facts/report.gotmpl
         - files/inventory.yaml
         - files/greeting.conf.gotmpl
         - files/README.md

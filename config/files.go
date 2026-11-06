@@ -13,6 +13,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/subuk/richt/facts"
 	"github.com/subuk/richt/inventory"
 	"github.com/subuk/richt/plan"
 	"github.com/subuk/richt/secrets"
@@ -88,6 +89,14 @@ type SecretLookup interface {
 	Lookup(key, source string) (string, error)
 }
 
+// PrepareOptions supplies controller sources and host-scoped template lookups.
+// Fact is evaluated only by an executed fact call, never while parsing.
+type PrepareOptions struct {
+	Sources *source.Client
+	Secrets SecretLookup
+	Fact    func(context.Context, string) (any, error)
+}
+
 // Prepare freezes rendered content and requested ownership names for a file task.
 // The optional lookup is shared across all preparations in a diff.
 func Prepare(c inventory.Config, state string, vars map[string]any, lookups ...SecretLookup) (*plan.FileChange, error) {
@@ -98,6 +107,16 @@ func Prepare(c inventory.Config, state string, vars map[string]any, lookups ...S
 // Sources may be shared across preparations to freeze remote template bytes.
 // A nil source client is initialized only when a remote template is needed.
 func PrepareContext(ctx context.Context, c inventory.Config, state string, vars map[string]any, sources *source.Client, lookups ...SecretLookup) (*plan.FileChange, error) {
+	options := PrepareOptions{Sources: sources}
+	if len(lookups) > 0 {
+		options.Secrets = lookups[0]
+	}
+	return PrepareWithOptions(ctx, c, state, vars, options)
+}
+
+// PrepareWithOptions freezes rendered inputs using optional host facts and
+// secrets. Absent assignments do not acquire templates or invoke lookups.
+func PrepareWithOptions(ctx context.Context, c inventory.Config, state string, vars map[string]any, options PrepareOptions) (*plan.FileChange, error) {
 	if c.Type != "" && c.Type != "template" {
 		return nil, errors.New("config type: expected template")
 	}
@@ -143,11 +162,11 @@ func PrepareContext(ctx context.Context, c inventory.Config, state string, vars 
 	if state == "absent" {
 		return f, nil
 	}
-	text, err := acquireTemplate(ctx, c.Template, sources)
+	text, err := acquireTemplate(ctx, c.Template, options.Sources)
 	if err != nil {
 		return nil, templateReadError(c.Sensitive, err)
 	}
-	if err := renderTemplate(f, text, vars, lookups); err != nil {
+	if err := renderTemplate(ctx, f, text, vars, options); err != nil {
 		return nil, err
 	}
 	return f, nil
@@ -185,8 +204,9 @@ func templateReadError(sensitive bool, err error) error {
 	return fmt.Errorf("read template: %w", err)
 }
 
-func renderTemplate(f *plan.FileChange, text string, vars map[string]any, lookups []SecretLookup) error {
+func renderTemplate(ctx context.Context, f *plan.FileChange, text string, vars map[string]any, options PrepareOptions) error {
 	var secretFailure string
+	var factFailure string
 	failSecret := func(message string) (string, error) {
 		secretFailure = message
 		return "", errors.New(message)
@@ -209,15 +229,36 @@ func renderTemplate(f *plan.FileChange, text string, vars map[string]any, lookup
 				return failSecret("secret source must be a string")
 			}
 		}
-		if len(lookups) == 0 || lookups[0] == nil {
+		if options.Secrets == nil {
 			return failSecret("secret lookup is unavailable")
 		}
-		value, err := lookups[0].Lookup(key, source)
+		value, err := options.Secrets.Lookup(key, source)
 		if err != nil {
 			return failSecret("secret lookup failed")
 		}
 		return value, nil
 	}}
+	funcs["fact"] = func(path string) (any, error) {
+		fail := func(message string) (any, error) {
+			factFailure = message
+			return nil, errors.New(message)
+		}
+		if err := facts.ValidatePath(path); err != nil {
+			return fail("unknown fact path")
+		}
+		if options.Fact == nil {
+			return fail("fact lookup is unavailable")
+		}
+		value, err := options.Fact(ctx, path)
+		if err != nil {
+			if errors.Is(err, facts.ErrCacheIO) {
+				return fail("fact cache I/O failed; use --no-facts-cache to disable persistent caching")
+			}
+			return fail("fact lookup failed")
+		}
+		return value, nil
+	}
+	funcs["index"] = templateIndex
 	tpl, err := template.New("config").Option("missingkey=error").Funcs(funcs).Parse(text)
 	if err != nil {
 		// Parser errors can include arbitrary template text before a secret call
@@ -226,8 +267,14 @@ func renderTemplate(f *plan.FileChange, text string, vars map[string]any, lookup
 	}
 	var b bytes.Buffer
 	if err := tpl.Execute(&b, vars); err != nil {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if secretFailure != "" {
 			return errors.New("render template: " + secretFailure)
+		}
+		if factFailure != "" {
+			return errors.New("render template: " + factFailure)
 		}
 		return errors.New("render template: execution failed")
 	}

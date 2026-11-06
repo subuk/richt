@@ -221,8 +221,9 @@ func task(service, id, component, operation string) plan.Task {
 	return plan.Task{ID: service + "/" + id, Service: service, Component: component, Operation: operation, Progress: plan.Progress{Status: "pending"}}
 }
 
-// Diff acquires and renders templates before host observation. Package repositories
-// are not contacted during preparation.
+// Diff acquires and renders templates before resource observation. An evaluated
+// fact call may observe its host during rendering. Package repositories are not
+// contacted during preparation.
 func (e Local) Diff(ctx context.Context, r *inventory.Resolved, options ...DiffOptions) (*plan.Plan, error) {
 	if r == nil {
 		return nil, errors.New("resolved inventory is nil")
@@ -232,7 +233,9 @@ func (e Local) Diff(ctx context.Context, r *inventory.Resolved, options ...DiffO
 	}
 	var observer func(PrepareEvent)
 	var sources *source.Client
+	var settings DiffOptions
 	if len(options) == 1 {
+		settings = options[0]
 		observer = options[0].Observer
 		sources = options[0].Sources
 	}
@@ -242,6 +245,7 @@ func (e Local) Diff(ctx context.Context, r *inventory.Resolved, options ...DiffO
 	prepared := make([][]preparedService, len(r.Hosts))
 	lookup := secrets.New(r.SecretSources)
 	for hi, h := range r.Hosts {
+		factLookup := hostFacts(r, h, settings)
 		for _, s := range h.Services {
 			if err := reportPreparation(ctx, observer, PrepareEvent{Phase: "rendering", Host: h.Name, Service: s.Name}); err != nil {
 				return nil, err
@@ -265,7 +269,7 @@ func (e Local) Diff(ctx context.Context, r *inventory.Resolved, options ...DiffO
 						return fmt.Errorf("host %s service %s %s: %w", h.Name, s.Name, component, err)
 					}
 				}
-				f, err := config.PrepareContext(ctx, c, s.State, h.Vars, sources, lookup)
+				f, err := config.PrepareWithOptions(ctx, c, s.State, h.Vars, config.PrepareOptions{Sources: sources, Secrets: lookup, Fact: factLookup})
 				if err != nil {
 					return fmt.Errorf("host %s service %s %s: %w", h.Name, s.Name, component, err)
 				}

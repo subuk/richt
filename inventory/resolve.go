@@ -32,7 +32,7 @@ func (in *Inventory) Resolve(s Selectors) (*Resolved, error) {
 		}
 	}
 	hostSet, tagSet, serviceSet := stringSet(s.Hosts), stringSet(s.Tags), stringSet(s.Services)
-	out := &Resolved{Hosts: []ResolvedHost{}, SecretSources: in.SecretSources}
+	out := &Resolved{Hosts: []ResolvedHost{}, SecretSources: in.SecretSources, SourceIdentity: in.SourceIdentity}
 	hosts := append([]Host(nil), in.Hosts...)
 	sort.Slice(hosts, func(i, j int) bool { return hosts[i].Name < hosts[j].Name })
 	for _, h := range hosts {

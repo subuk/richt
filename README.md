@@ -9,7 +9,8 @@ Tags assign service target states to hosts; service definitions set execution or
 Inspect the inventory, prepare changes with `diff`, review the executable plan,
 and explicitly `apply` it. Current backends provide RPM and DEB packages, checksum-pinned HTTPS downloads and archive trees, templated
 files, and systemd or change-triggered oneshot processes over local or SSH
-transport, with explicit noninteractive sudo, bounded host concurrency, and local YAML secret sources.
+transport, with explicit noninteractive sudo, bounded host concurrency, local YAML secret sources, and [cached Linux host facts](docs/facts.md) available
+in JSON and templates.
 
 ## Start here
 
@@ -61,6 +62,7 @@ The [documentation index](docs/_index.md) links the complete first-version guide
   [configs](docs/services/configs/_index.md), and [processes](docs/services/processes/_index.md).
 - [Saved plans and apply](docs/files.md), [manual continuation](docs/continuation.md).
 - [CLI commands and flags](docs/cli.md), [SSH/sudo and concurrency](docs/ssh.md).
+- [Host facts and template lookup](docs/facts.md), [facts example](examples/facts/README.md).
 - [Secrets and sensitive output](docs/secrets.md), [limitations](docs/limitations.md).
 - [Examples](docs/examples.md): [ready vmango RPMs](examples/vmango/README.md),
   [two YAML secret sources](examples/secrets/README.md),

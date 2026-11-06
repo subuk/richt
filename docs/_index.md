@@ -39,6 +39,8 @@ The focused guides are:
   retry using the same plan.
 - [SSH and sudo](ssh.md): client configuration, authentication, privileges,
   and parallel hosts.
+- [Host facts](facts.md): typed Linux observations, controller caching, offline
+  inspection, and lazy template lookup.
 - [Secrets](secrets.md): source lookup, sensitive display, and real saved bytes.
 - [Embedding in Go](embedding.md): public packages, progress events, cancellation,
   and saved-plan continuation for applications using Richt.

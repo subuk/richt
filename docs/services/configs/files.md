@@ -62,6 +62,10 @@ the absolute target `path`. See [inventory file
 references](../../inventory.md#schema-and-file-references).
 
 Templates use Go `text/template` with the host's complete merged variables.
+The strict `fact "os.id"` function accesses [host facts](../../facts.md). It
+lazily obtains one cached or live snapshot per host and preparation, also for
+systemd-owned unit/drop-in templates. Unknown paths fail; known unpopulated
+fields return typed defaults. Facts do not change variable precedence.
 Missing variables fail preparation. Standard built-ins such as `printf`, `index`,
 and `slice` remain available. For example:
 

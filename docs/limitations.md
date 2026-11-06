@@ -5,7 +5,7 @@ description: "Understand supported backends, frozen-input boundaries, and deferr
 weight: 110
 ---
 
-Richt currently implements local/SSH transport, explicit noninteractive sudo,
+Richt currently implements [cached Linux host facts](facts.md), local/SSH transport, explicit noninteractive sudo,
 strict local or HTTPS YAML inventory, pinned HTTPS services and templates,
 RPM through DNF 4/YUM 4, DEB through APT, checksum-pinned public
 HTTPS downloads and tar.gz archive trees, systemd and oneshot
@@ -86,6 +86,13 @@ purging are unsupported. Supplementary groups are exact only when explicitly
 listed; omission preserves them. User deletion preserves same-name groups using
 a private mount namespace and requires that target capability. See
 [local accounts](services/configs/accounts.md).
+
+Facts cover OS, kernel, architecture, hostname, online logical CPUs, host-visible
+RAM, interfaces/addresses and IPv4/IPv6 main-table defaults. They do not infer a
+primary IP, perform DNS FQDN lookup, resolve policy routing/VRFs, inventory disks,
+packages or services, run custom executable facts, or harvest environment/secrets.
+Cache hits use configured identity; alias retargeting and reinstallation require
+explicit refresh. Fact values affect preparation only.
 
 ## Failure and removal
 

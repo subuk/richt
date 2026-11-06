@@ -3,10 +3,13 @@
 package inventory
 
 type Inventory struct {
-	Tags          map[string]Tag               `json:"tags" yaml:"tags"`
-	Services      map[string]ServiceDefinition `json:"services" yaml:"services"`
-	Hosts         []Host                       `json:"hosts" yaml:"hosts"`
-	SecretSources map[string]SecretSource      `json:"secret_sources,omitempty" yaml:"secret_sources"`
+	// SourceIdentity is the configured root document location, retained only for
+	// controller-side derived data. It is not inventory syntax or plan input.
+	SourceIdentity string                       `json:"-" yaml:"-"`
+	Tags           map[string]Tag               `json:"tags" yaml:"tags"`
+	Services       map[string]ServiceDefinition `json:"services" yaml:"services"`
+	Hosts          []Host                       `json:"hosts" yaml:"hosts"`
+	SecretSources  map[string]SecretSource      `json:"secret_sources,omitempty" yaml:"secret_sources"`
 }
 
 type Tag struct {
@@ -146,8 +149,9 @@ type SecretSource struct {
 type Selectors struct{ Hosts, Tags, Services []string }
 
 type Resolved struct {
-	Hosts         []ResolvedHost          `json:"hosts"`
-	SecretSources map[string]SecretSource `json:"secret_sources,omitempty"`
+	SourceIdentity string                  `json:"-" yaml:"-"`
+	Hosts          []ResolvedHost          `json:"hosts"`
+	SecretSources  map[string]SecretSource `json:"secret_sources,omitempty"`
 }
 
 type ResolvedHost struct {

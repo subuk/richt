@@ -12,6 +12,7 @@ execution. Recorded results and their limits live in [validation](validation.md)
 
 | Scenario | Source | Scope and prerequisites |
 | --- | --- | --- |
+| Linux facts and templates | [Host facts](../examples/facts/README.md) | Linux target with iproute2 JSON support; read-only collection, cached inspection, and a rendered file under `/var/tmp`. |
 | First local file | [Quickstart](quickstart.md) | A fresh temporary directory; no root, RPM, or systemd. Create/update/no changes/explicit removal. |
 | Split inventory and service files | [File inventory](../examples/files/inventory.yaml) and [service](../examples/files/service.yaml) | Local `/var/tmp/richt-example/greeting.conf`; template path relative to the service file. |
 | HTTPS inventory, services and templates | [HTTPS sources](../examples/https-sources/README.md) | Publish a pinned catalog from local files; controller HTTPS trust, optional scoped credentials, and local secret bindings. Saved plans retain rendered bytes. |

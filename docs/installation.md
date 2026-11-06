@@ -65,6 +65,11 @@ target. Windows controller support is deferred to
 [KRG-92](https://linear.app/krglv/issue/KRG-92/support-windows-as-an-ssh-only-controller).
 This release workflow does not publish DEB, RPM, or Docker artifacts.
 
+[Host facts](facts.md) additionally require Linux targets with readable procfs/sysfs,
+Python 3 isolated mode, standard tools, and iproute2 supporting JSON
+link/address/route commands.
+Facts can be collected over SSH from either supported controller platform.
+
 ## Build from source
 
 Obtain a checkout with Git, then run the build commands from its root:

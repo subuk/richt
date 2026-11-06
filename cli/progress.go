@@ -213,6 +213,35 @@ func (p *progress) apply(e plan.Event) {
 	}
 }
 
+func (p *progress) factHost(host string, started, failed bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.stopped || p.mode == "off" {
+		return
+	}
+	label := "host=" + cleanProgress(host)
+	line := "Completed facts " + label
+	if started {
+		p.active[host] = activeTask{label, p.now()}
+		line = "Collecting facts " + label
+	} else {
+		delete(p.active, host)
+		if failed {
+			p.failed++
+			line = "Failed facts " + label
+		} else {
+			p.succeeded++
+		}
+	}
+	p.clearLocked()
+	if p.mode == "plain" || !started {
+		p.lineLocked(line)
+	}
+	if p.mode == "tty" {
+		p.renderLocked(p.now())
+	}
+}
+
 func (p *progress) refresh(now time.Time) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -239,6 +268,9 @@ func (p *progress) summaryLocked(now time.Time) string {
 	elapsed := progressElapsed(now.Sub(p.started))
 	if p.phase == "Preparing" {
 		return fmt.Sprintf("Preparing elapsed=%s", elapsed)
+	}
+	if p.phase == "Collecting facts" {
+		return fmt.Sprintf("Collecting facts total=%d completed=%d failed=%d active=%d elapsed=%s", p.total, p.succeeded, p.failed, len(p.active), elapsed)
 	}
 	pending := max(0, p.total-p.succeeded-p.skipped-p.failed-p.blocked-len(p.active))
 	if p.mode == "tty" {

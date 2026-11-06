@@ -651,6 +651,33 @@ credentials or source URLs; apply and continuation do not reopen these sources.
 Package repositories and binary artifacts retain their existing apply-time
 network contracts. See [HTTPS sources](../../../../docs/sources.md).
 
+## Host facts (KRG-109)
+
+The public transport boundary exposes `Facts(ctx)` for Linux local and SSH
+observation, respecting explicit noninteractive sudo and normal OpenSSH policy.
+The versioned `facts` schema covers OS metadata, target uname, hostname, online
+logical CPUs, host-visible RAM, named interfaces/addresses, and separate IPv4
+and IPv6 main-table default routes. Collection is read-only, bounded and
+cancelable; unavailable schema values have typed defaults plus availability
+metadata. Unknown schema paths and malformed collection responses are errors.
+Route ambiguity never becomes a guessed primary IP or arbitrary interface.
+
+`richt facts` supports host/tag selection, bounded concurrency, deterministic
+JSON and cached-only inspection. A private atomic controller cache defaults to
+72 hours and isolates inventory source, host, explicit connection and versions.
+Cache I/O failures are fatal; a failed refresh neither replaces nor silently
+falls back to an older record. Explicit no-cache mode retains invocation-local
+snapshots. Alias retargeting and reinstallation require explicit refresh.
+
+The strict `fact` template function lazily obtains one snapshot per host per
+preparation and applies to configs and systemd-owned files. Inventory variables
+and selection remain unchanged. Only evaluated fact calls can read a target
+during rendering; ordinary resource observation still follows rendering.
+Inventory inspection does not access facts or their cache. Saved plans retain
+rendered bytes and version `1.8`, without fact snapshots; apply/continuation
+never reopen the cache or collect facts. See [host facts](../../../../docs/facts.md)
+for schema, prerequisites, route rules, flags and examples.
+
 ## Later scope
 
 NetBox inventory/plugin/rendering,

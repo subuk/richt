@@ -12,6 +12,7 @@ With no command, Richt prints help. `richt --version` prints the build version.
 | --- | --- |
 | `richt inventory validate [selection]` | Load and validate YAML, references, merged variables, selected assignments, and resource ownership. |
 | `richt inventory show [selection]` | Perform the same validation and print resolved inventory as indented JSON. |
+| `richt facts [host/tag selection]` | Collect or inspect cached Linux host facts as deterministic JSON. |
 | `richt diff [selection] [-o PLAN.json]` | Prepare and display changes by observing targets; optionally save the executable JSON plan. |
 | `richt apply [selection] [-y] [--parallelism N]` | Build, display, confirm, and apply a new plan; progress lives only in memory. |
 | `richt apply PLAN.json [-y] [--parallelism N]` | Display, confirm, execute, and update a saved plan; continue unfinished tasks on a later explicit invocation. |
@@ -51,9 +52,24 @@ are argument errors with a saved plan.
 A saved plan already fixes its hosts and tasks. Build a new plan if you need a
 different selection.
 
+## Facts and preparation cache flags
+
+`facts` accepts host/tag selection without `--service`, including unassigned
+hosts, plus positive `--parallelism` (default 20), `--progress`, `--refresh`,
+`--cached`, `--facts-cache-dir`, `--facts-max-age` (default 72h), and
+`--no-facts-cache`. Cached inspection never contacts targets; stale snapshots
+are marked explicitly. A host failure preserves the other host results in JSON
+and makes the invocation fail. Cached mode conflicts with refresh and no-cache.
+
+`diff` and inventory-based `apply` accept `--facts-cache-dir`,
+`--facts-max-age`, `--refresh-facts`, and `--no-facts-cache`. Negative ages fail;
+zero forces collection. These flags are rejected with saved plans, including
+explicit values equal to their defaults. See [host facts](facts.md) for schema,
+template lookup, cache isolation, failure policy, and target requirements.
+
 ## Apply flags and results
 
-`diff` and `apply` accept `--progress=auto|plain|off` (default `auto`). Progress
+`facts`, `diff`, and `apply` accept `--progress=auto|plain|off` (default `auto`). Progress
 goes to stderr; the reviewed plan and final report go to stdout. In a terminal,
 `auto` maintains a compact display of counts, active host/task labels and elapsed
 time, refreshed every second. Completion and failure messages remain in the

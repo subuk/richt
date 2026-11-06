@@ -82,7 +82,7 @@ func LoadWithOptions(ctx context.Context, location string, options LoadOptions) 
 	if err != nil {
 		return nil, err
 	}
-	in := &inventory.Inventory{Tags: doc.Tags, Hosts: doc.Hosts, SecretSources: doc.SecretSources, Services: map[string]inventory.ServiceDefinition{}}
+	in := &inventory.Inventory{SourceIdentity: location, Tags: doc.Tags, Hosts: doc.Hosts, SecretSources: doc.SecretSources, Services: map[string]inventory.ServiceDefinition{}}
 	if in.SecretSources == nil {
 		in.SecretSources = map[string]inventory.SecretSource{}
 	}
