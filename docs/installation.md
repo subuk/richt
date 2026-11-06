@@ -109,9 +109,9 @@ agent, central server, NetBox, or Argo CD.
 
 | Role | Requirements and verified scope |
 | --- | --- |
-| Inventory inspection | The Richt binary and local inventory/service YAML. It does not contact hosts or open templates or secret sources. |
+| Inventory inspection | The Richt binary and local or HTTPS inventory/service YAML. HTTPS needs controller network access and trusted CA roots; optional explicit client settings supply extra trust/authentication. It does not contact hosts or open templates or secret values. |
 | Local file execution | Python 3 standard library and Unix filesystem support for template observation/writes/backups; Linux for SELinux metadata. Filesystem access to the declared targets; named owners/groups must exist or be created by preceding account configs. Linux acceptance covers ownership, permissions, symlinks, and SELinux. |
-| SSH controller | Richt and system OpenSSH `ssh` in `PATH`; local template and secret files for preparation. macOS has been used as a controller. |
+| SSH controller | Richt and system OpenSSH `ssh` in `PATH`; local or pinned HTTPS templates and local secret bindings for preparation. HTTPS source acquisition runs on the controller. macOS has been used as a controller. |
 | SSH target | Linux shell and standard GNU coreutils/findutils, `getent`, Python 3 standard library for template files, plus the utilities needed by selected resources. No Go toolchain or Richt binary is needed there. |
 | RPM resources | DNF 4, or YUM 4 backed by DNF 4, and an RPM database. Repository/network access is needed when DNF executes the transaction. |
 | DEB resources | Linux, APT 2.2+ with apt-cache/apt-config, dpkg/dpkg-query and Python 3.8+ standard library; standard APT/dpkg paths and protected root-owned configuration. Repository/network access is needed for conditional metadata refresh and installation at apply. |

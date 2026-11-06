@@ -4,6 +4,13 @@ description: "Resolve local secret sources during preparation and protect execut
 weight: 80
 ---
 
+Local inventories declare YAML secret sources directly. For remote inventory
+and service documents, the operator provides named local bindings through an
+explicit `--source-config` file; remote documents cannot declare local secret
+paths. The same file can configure HTTPS authentication, whose credentials are
+separate from template secret values. Client bindings also work with local
+inventories; duplicate source names are rejected. See [HTTPS sources](sources.md#explicit-client-settings).
+
 Secret values are fetched during plan preparation on the machine running
 `diff` or `apply -i`. Inventory inspection does not open secret sources, and
 applying a saved plan never fetches them again. Local files, SSH/sudo files,

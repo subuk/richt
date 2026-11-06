@@ -27,7 +27,7 @@ configs:
 | `name` | no | Nonempty reference label, unique within the config list |
 | `type` | no | `template` (default); other types use their own [config fields](_index.md) |
 | `path` | yes | Absolute target file path, normalized during resolution |
-| `template` | yes | Exactly one of `file` or `inline`; an empty inline string is valid |
+| `template` | yes | Exactly one of `file`, `inline`, or `url`; an empty inline string is valid; `url` requires `sha256` |
 | `owner` | no | Target user name; omission preserves existing ownership |
 | `group` | no | Target group name; omission preserves existing ownership |
 | `mode` | no | Quoted octal string such as `"0644"`; omission preserves existing permissions; new files default to 0644 |
@@ -53,7 +53,11 @@ config-list entries provide labels for reaction references.
 `template.file` reads a local template on the machine preparing the plan,
 including for SSH targets. Paths are relative to the declaring service file;
 inline services use the inventory file as their base. Absolute local paths are
-accepted; URL sources are unsupported. These source paths are independent of
+accepted. `template.url` fetches a SHA-256-pinned HTTPS template on the controller
+before rendering. Remote documents resolve relative URLs against their final
+response URL; local documents require absolute HTTPS URLs. Remote documents
+cannot use `template.file`. See [HTTPS sources](../../sources.md) for examples,
+authentication, trust and limits. These source paths are independent of
 the absolute target `path`. See [inventory file
 references](../../inventory.md#schema-and-file-references).
 

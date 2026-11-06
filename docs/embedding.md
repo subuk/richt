@@ -16,7 +16,8 @@ not execute against a host during `go test`.
 | Package | Entry points and responsibility |
 | --- | --- |
 | `inventory` | Construct `Inventory`; `Resolve(Selectors)` validates and resolves assignments without host or secret access. |
-| `inventoryyaml` | `Load` is the optional YAML input adapter. |
+| `inventoryyaml` | `Load` and `LoadWithOptions` adapt local or HTTPS YAML into inventory. |
+| `source` | `New(Options)` creates a bounded authenticated HTTPS client; `Read(ctx, url, sha256)` returns a byte snapshot and final response URL. |
 | `engine` | `Local.Diff(ctx, resolved, ...DiffOptions)` prepares executable inputs. `Local` also dispatches execution through the selected local/SSH backends. |
 | `plan` | Inspect `Plan`, use `Display` for safe human-readable review, `Save`/`Open` for protected persistence and locking, and `Apply` for execution. |
 | `cli` | `RunContext` accepts a caller-owned context; `Run` retains the background-context entry point. Applications using domain packages supply their own confirmation and UI. |
@@ -100,8 +101,53 @@ user-defined display labels.
 empty service identifies host-wide checks. Calls are synchronous and precede
 the corresponding work. These are activity labels, not task completions or
 estimated percentages. All template preparation still precedes host
-observation. Inventory inspection remains side-effect free and has no progress
-subscription.
+observation. Inventory inspection can fetch inventory/service documents, never
+templates or secret values, and has no progress subscription.
+
+## HTTPS source clients
+
+Create one `source.Client` per preparation and pass it through loading and diff
+to share downloaded byte snapshots, limits, and scoped authentication:
+
+```go
+sources, err := source.New(source.Options{CAFile: "/path/to/extra-ca.pem"})
+if err != nil {
+    return err
+}
+in, err := inventoryyaml.LoadWithOptions(ctx, inventoryURL, inventoryyaml.LoadOptions{
+    Sources: sources,
+    SHA256: inventoryDigest,
+    SecretSources: map[string]inventory.SecretSource{
+        "production": {Type: "yaml", File: "/private/secrets.yaml"},
+    },
+})
+if err != nil {
+    return err
+}
+resolved, err := in.Resolve(inventory.Selectors{})
+if err != nil {
+    return err
+}
+prepared, err := (engine.Local{}).Diff(ctx, resolved, engine.DiffOptions{Sources: sources})
+```
+
+`source.Options` also accepts `Auth []source.Auth` and configurable `Timeout`,
+`MaxBytes`, `MaxTotalBytes`, `MaxDocuments`, and `MaxRedirects`. Authentication
+entries contain `Origin`, `PathPrefix`, and either `BearerToken` or
+`Username`/`Password`. Embedded callers own credential acquisition; the CLI's
+env/file reference format belongs to `--source-config`. Never log credential
+values. `inventoryyaml.LoadOptions.SecretSources` requires absolute local YAML
+paths and rejects collisions with inventory declarations.
+
+`config.PrepareContext(ctx, config, state, vars, sources, lookups...)` acquires
+then renders one template. Existing `config.Prepare` uses a background context
+and a nil source client. Nil clients create a default only when remote template
+bytes are needed; `engine.Local.Diff` shares its default within the diff. The
+client caches bytes, while each host renders with its own variables and secret
+lookup. Context cancellation reaches HTTPS requests. See [HTTPS sources](sources.md)
+for validation, redirect rules, defaults and saved-plan boundaries.
+
+## Caller cancellation
 
 The caller owns the context. Connect an application's Cancel button to
 `context.WithCancel`; a terminal executable can use `signal.NotifyContext`.

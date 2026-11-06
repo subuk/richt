@@ -4,6 +4,73 @@ description: "Recorded Linux acceptance results, environment, commands, and limi
 weight: 120
 ---
 
+## HTTPS inventory, services and templates — 2026-11-07
+
+KRG-80 and KRG-81 were validated from source `df0f1e548fc3` plus these changes
+using a macOS controller and two separate disposable AlmaLinux 10.2 x86_64
+hosts, non-root SSH logins and explicit noninteractive sudo. Both targets kept
+SELinux Enforcing. The target stack included DNF 4.20.0, RPM 4.19.1.1 and
+systemd 257. The controller binary SHA-256 was
+`579d1e391ce32daaf6f6465b52099e24da54e1c655ba237d9c66b3e7c39b16ed`;
+the Linux regression binary SHA-256 was
+`e18677f6b4a99ab824db8bd1399e23bd5a0acec0937b2d089a46a3b17d4982d8`.
+
+The new `tests/integration/sources.py` harness passed **51 checks**. It creates
+a private controller HTTPS server with a temporary trusted CA and scoped bearer
+authentication, then exercises a standalone inventory and a reusable pinned
+service catalog. Its published `tree` RPM, owned unit/drop-in and unique file
+fixtures were removed, restoring both hosts' initial package state. No custom
+RPM or shared application service was created or replaced.
+
+Coverage includes equivalent local/HTTPS inventory resolution and selectors,
+relative URLs after root/service redirects, local inventory with an HTTPS
+service reference, and one template snapshot shared across two hosts. Inspection
+uses an SSH trap and an unavailable secret file to prove that it downloads only
+definitions. Real apply verifies the package, sensitive config contents and
+permissions, active/enabled unit and drop-in, followed by empty diffs from both
+local and remote inventories. Root, service and template checksum mismatches
+fail without producing a plan or changing target resources.
+
+After preparing changed contents, the harness shuts down the HTTPS server and
+deletes client settings, credentials, the CA/key and local secret source. Saved
+apply still installs the frozen contents. A separate partial failure completes
+one host and blocks later tasks on the other; explicit continuation skips its
+successful first task, preserves a later external edit to that completed file,
+and applies the remaining frozen bytes without any source access. Credentials
+stay out of plans and display, while rendered secret bytes remain in private
+mode-0600 executable plans.
+
+Run on a controller with Python 3.8+, OpenSSL and working SSH credentials for
+two authorized disposable DNF4/systemd targets:
+
+```sh
+python3 tests/integration/sources.py --binary ./bin/richt \
+  --host-a test-a --host-b test-b --user deploy --work-root /tmp/richt-sources
+```
+
+The harness checks unique fixture ownership before mutation and restores the
+initial `tree` installation state per host. Retained private evidence includes
+sanitized command/platform logs, request counts, source documents, executable
+plans and `acceptance.json`. Source credentials are removed even on failure.
+Do not run concurrent tests that manage the same package or fixture namespace.
+
+Repository validation passed `make check` and
+`go test -race ./source ./inventoryyaml ./config ./engine ./cli`. Go TLS fixtures
+also cover Basic authentication, credential scope across origins/paths and
+redirects, invalid TLS/HTTP responses, malformed source declarations, decoded
+size/document/aggregate limits, concurrent budget accounting, cancellation and
+timeouts, cache isolation and safe error diagnostics. The catalog publisher's
+generated standalone inventory and reference digests were checked. This work
+retains plan format `1.8`; artifact downloads and package transactions keep
+their existing apply-time network requirements.
+
+The same Linux binary also passed the existing local regression harnesses on
+one target: file/SELinux/terminal/progress **20 checks**, YAML secrets **four
+groups**, and oneshot/systemd **28 checks** without a package transaction.
+Those fixtures were removed and `vm.swappiness` returned to its original value
+of 30. Final checks found SELinux Enforcing, systemd running and no failed
+units. `make docs-check` passed for the updated guides and HTTPS walkthrough.
+
 ## DEB packages through APT — 2026-11-06
 
 KRG-101 was validated in an isolated Ubuntu 24.04.5 LTS x86_64 systemd

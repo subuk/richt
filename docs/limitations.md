@@ -6,13 +6,21 @@ weight: 110
 ---
 
 Richt currently implements local/SSH transport, explicit noninteractive sudo,
-strict local YAML inventory, RPM through DNF 4/YUM 4, DEB through APT, checksum-pinned public
+strict local or HTTPS YAML inventory, pinned HTTPS services and templates,
+RPM through DNF 4/YUM 4, DEB through APT, checksum-pinned public
 HTTPS downloads and tar.gz archive trees, systemd and oneshot
 processes, templates, plain files/directories, local users/groups, RAID1, linear LVM, XFS and
 persistent mounts, and local YAML secret sources. See [installation](installation.md) and
 [validation](validation.md) for requirements and verified platforms. YUM 3,
-DNF 5, additional persistent process managers, URL inventory/templates, private authenticated
+DNF 5, additional persistent process managers, private authenticated
 artifact URLs, other archive formats, and external secret stores are unsupported.
+
+[HTTPS preparation sources](sources.md) support scoped bearer/basic credentials
+and an additional CA file through explicit local client settings. Remote
+documents cannot choose local file references, client settings, or secret
+bindings. URL queries, fragments, userinfo, HTTP, and recursive service
+references are unsupported. Inspection can fetch inventory/service documents;
+templates and secret values are read only for selected present preparation.
 
 ## Executable plans are prepared inputs
 

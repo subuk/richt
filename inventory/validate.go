@@ -321,7 +321,7 @@ func validateConfig(c Config) error {
 		return fmt.Errorf("%s config cannot set account fields", typ)
 	}
 
-	common := c.Path != "" || c.Owner != "" || c.Group != "" || c.Mode != "" || c.Template.File != "" || c.Template.Inline != nil || c.Sensitive || c.SELinux != "" || c.Validate != nil
+	common := c.Path != "" || c.Owner != "" || c.Group != "" || c.Mode != "" || hasTemplate(c.Template) || c.Sensitive || c.SELinux != "" || c.Validate != nil
 	storage := c.Array != "" || c.Level != "" || c.Metadata != "" || c.Members != nil || c.VG != "" || c.Devices != nil || c.LV != "" || c.Size != "" || c.Filesystem != "" || c.Source != "" || c.Target != "" || c.Options != nil
 	if typ == "template" || typ == "file" || typ == "directory" {
 		if storage {
@@ -331,10 +331,10 @@ func validateConfig(c Config) error {
 			return fmt.Errorf("path: expected an absolute file path")
 		}
 		if typ == "template" {
-			if (c.Template.File != "") == (c.Template.Inline != nil) {
-				return fmt.Errorf("template: specify exactly one of file or inline")
+			if err := ValidateTemplate(c.Template); err != nil {
+				return fmt.Errorf("template: %w", err)
 			}
-		} else if c.Template.File != "" || c.Template.Inline != nil || c.Sensitive || c.SELinux != "" || c.Validate != nil {
+		} else if hasTemplate(c.Template) || c.Sensitive || c.SELinux != "" || c.Validate != nil {
 			return fmt.Errorf("%s config cannot set template, sensitive, selinux or validate", typ)
 		}
 	} else {

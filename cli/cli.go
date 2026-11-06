@@ -14,6 +14,7 @@ import (
 	"github.com/subuk/richt/inventory"
 	"github.com/subuk/richt/inventoryyaml"
 	"github.com/subuk/richt/plan"
+	"github.com/subuk/richt/source"
 	"golang.org/x/sys/unix"
 	"golang.org/x/term"
 )
@@ -41,25 +42,37 @@ type arguments struct {
 	} `cmd:"" help:"Apply a saved plan, or build and apply changes."`
 }
 type selection struct {
-	Inventory string   `short:"i" help:"YAML inventory path." type:"path"`
-	Hosts     []string `name:"host" help:"Select host names (repeat or comma separate)."`
-	Tags      []string `name:"tag" help:"Select hosts carrying these tags."`
-	Services  []string `name:"service" help:"Select assigned service names."`
+	Inventory       string   `short:"i" help:"YAML inventory path or HTTPS URL."`
+	SourceConfig    string   `help:"Explicit local YAML settings for HTTPS authentication, CA and secret bindings." type:"path"`
+	InventorySHA256 string   `name:"inventory-sha256" help:"Expected SHA-256 of an HTTPS inventory."`
+	Hosts           []string `name:"host" help:"Select host names (repeat or comma separate)."`
+	Tags            []string `name:"tag" help:"Select hosts carrying these tags."`
+	Services        []string `name:"service" help:"Select assigned service names."`
 }
 
-func (s selection) load() (*inventory.Resolved, error) {
+func (s selection) load(ctx context.Context) (*inventory.Resolved, *source.Client, error) {
 	path := s.Inventory
 	if path == "" {
 		path = "inventory.yaml"
 	}
-	i, err := inventoryyaml.Load(path)
-	if err != nil {
-		return nil, err
+	// Keep Kong's established local path expansion without treating a URL as
+	// a filesystem path (which would expand URL contents and make it absolute).
+	if !source.IsURL(path) {
+		path = kong.ExpandPath(path)
 	}
-	return i.Resolve(inventory.Selectors{Hosts: s.Hosts, Tags: s.Tags, Services: s.Services})
+	sources, bindings, err := loadSourceConfig(s.SourceConfig)
+	if err != nil {
+		return nil, nil, err
+	}
+	i, err := inventoryyaml.LoadWithOptions(ctx, path, inventoryyaml.LoadOptions{Sources: sources, SHA256: s.InventorySHA256, SecretSources: bindings})
+	if err != nil {
+		return nil, nil, err
+	}
+	r, err := i.Resolve(inventory.Selectors{Hosts: s.Hosts, Tags: s.Tags, Services: s.Services})
+	return r, sources, err
 }
 func (s selection) specified() bool {
-	return s.Inventory != "" || len(s.Hosts) > 0 || len(s.Tags) > 0 || len(s.Services) > 0
+	return s.Inventory != "" || s.SourceConfig != "" || s.InventorySHA256 != "" || len(s.Hosts) > 0 || len(s.Tags) > 0 || len(s.Services) > 0
 }
 
 // Run executes richt and returns a process exit code.
@@ -108,14 +121,14 @@ func execute(command string, f arguments, stdin *os.File, out io.Writer) error {
 func executeContext(ctx context.Context, command string, f arguments, stdin *os.File, out, stderr io.Writer) error {
 	switch command {
 	case "inventory validate":
-		r, err := f.Inventory.Validate.load()
+		r, _, err := f.Inventory.Validate.load(ctx)
 		if err != nil {
 			return err
 		}
 		_, err = fmt.Fprintf(out, "Inventory valid: %d host(s).\n", len(r.Hosts))
 		return err
 	case "inventory show":
-		r, err := f.Inventory.Show.load()
+		r, _, err := f.Inventory.Show.load(ctx)
 		if err != nil {
 			return err
 		}
@@ -123,11 +136,11 @@ func executeContext(ctx context.Context, command string, f arguments, stdin *os.
 		enc.SetIndent("", "  ")
 		return enc.Encode(r)
 	case "diff":
-		r, err := f.Diff.selection.load()
+		r, sources, err := f.Diff.selection.load(ctx)
 		if err != nil {
 			return err
 		}
-		p, err := prepare(ctx, r, stderr, f.Diff.Progress)
+		p, err := prepare(ctx, r, sources, stderr, f.Diff.Progress)
 		if err != nil {
 			return err
 		}
@@ -149,7 +162,7 @@ func executeContext(ctx context.Context, command string, f arguments, stdin *os.
 		var persist func(*plan.Plan) error
 		if f.Apply.Plan != "" {
 			if f.Apply.selection.specified() {
-				return fmt.Errorf("inventory and host/tag/service filters cannot be used with a saved plan")
+				return fmt.Errorf("inventory, source settings, and host/tag/service filters cannot be used with a saved plan")
 			}
 			s, err := plan.Open(f.Apply.Plan)
 			if err != nil {
@@ -159,11 +172,11 @@ func executeContext(ctx context.Context, command string, f arguments, stdin *os.
 			p = s.Plan
 			persist = s.Save
 		} else {
-			r, err := f.Apply.selection.load()
+			r, sources, err := f.Apply.selection.load(ctx)
 			if err != nil {
 				return err
 			}
-			p, err = prepare(ctx, r, stderr, f.Apply.Progress)
+			p, err = prepare(ctx, r, sources, stderr, f.Apply.Progress)
 			if err != nil {
 				return err
 			}
@@ -190,9 +203,9 @@ func executeContext(ctx context.Context, command string, f arguments, stdin *os.
 	return fmt.Errorf("unsupported command %q", command)
 }
 
-func prepare(ctx context.Context, r *inventory.Resolved, stderr io.Writer, mode string) (*plan.Plan, error) {
+func prepare(ctx context.Context, r *inventory.Resolved, sources *source.Client, stderr io.Writer, mode string) (*plan.Plan, error) {
 	progress := newProgress(stderr, mode, "Preparing")
-	p, err := (engine.Local{}).Diff(ctx, r, engine.DiffOptions{Observer: progress.prepare})
+	p, err := (engine.Local{}).Diff(ctx, r, engine.DiffOptions{Observer: progress.prepare, Sources: sources})
 	progressErr := progress.stop()
 	if err != nil {
 		return nil, err

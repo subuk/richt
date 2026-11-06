@@ -16,6 +16,7 @@ import (
 	"github.com/subuk/richt/inventory"
 	"github.com/subuk/richt/plan"
 	"github.com/subuk/richt/secrets"
+	"github.com/subuk/richt/source"
 )
 
 // Diff renders all templates and validates capabilities before observing resources.
@@ -24,6 +25,7 @@ func Diff(r *inventory.Resolved) (*plan.Plan, error) {
 		return nil, errors.New("resolved inventory is nil")
 	}
 	lookup := secrets.New(r.SecretSources)
+	var sources *source.Client
 	p := &plan.Plan{Version: plan.Version}
 	for _, h := range r.Hosts {
 		if h.Transport.Type != "local" || h.Transport.Sudo {
@@ -44,7 +46,14 @@ func Diff(r *inventory.Resolved) (*plan.Plan, error) {
 				if label == "" {
 					label = fmt.Sprintf("[%d]", index+1)
 				}
-				f, err := Prepare(c, s.State, h.Vars, lookup)
+				if sources == nil && c.Template.URL != "" && s.State != "absent" {
+					var err error
+					sources, err = source.New(source.Options{})
+					if err != nil {
+						return nil, templateReadError(c.Sensitive, err)
+					}
+				}
+				f, err := PrepareContext(context.Background(), c, s.State, h.Vars, sources, lookup)
 				if err != nil {
 					return nil, fmt.Errorf("host %s service %s config %s: %w", h.Name, s.Name, label, err)
 				}
@@ -82,6 +91,13 @@ type SecretLookup interface {
 // Prepare freezes rendered content and requested ownership names for a file task.
 // The optional lookup is shared across all preparations in a diff.
 func Prepare(c inventory.Config, state string, vars map[string]any, lookups ...SecretLookup) (*plan.FileChange, error) {
+	return PrepareContext(context.Background(), c, state, vars, nil, lookups...)
+}
+
+// PrepareContext acquires and renders a template using the caller's context.
+// Sources may be shared across preparations to freeze remote template bytes.
+// A nil source client is initialized only when a remote template is needed.
+func PrepareContext(ctx context.Context, c inventory.Config, state string, vars map[string]any, sources *source.Client, lookups ...SecretLookup) (*plan.FileChange, error) {
 	if c.Type != "" && c.Type != "template" {
 		return nil, errors.New("config type: expected template")
 	}
@@ -127,19 +143,49 @@ func Prepare(c inventory.Config, state string, vars map[string]any, lookups ...S
 	if state == "absent" {
 		return f, nil
 	}
-	var source string
-	if c.Template.Inline != nil {
-		source = *c.Template.Inline
-	} else {
-		b, err := os.ReadFile(c.Template.File)
-		if err != nil {
-			if c.Sensitive {
-				return nil, errors.New("read sensitive template failed")
-			}
-			return nil, fmt.Errorf("read template: %w", err)
-		}
-		source = string(b)
+	text, err := acquireTemplate(ctx, c.Template, sources)
+	if err != nil {
+		return nil, templateReadError(c.Sensitive, err)
 	}
+	if err := renderTemplate(f, text, vars, lookups); err != nil {
+		return nil, err
+	}
+	return f, nil
+}
+
+func acquireTemplate(ctx context.Context, t inventory.Template, sources *source.Client) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	if err := inventory.ValidateTemplate(t); err != nil {
+		return "", err
+	}
+	if t.Inline != nil {
+		return *t.Inline, nil
+	}
+	if t.URL != "" {
+		if sources == nil {
+			var err error
+			sources, err = source.New(source.Options{})
+			if err != nil {
+				return "", err
+			}
+		}
+		document, err := sources.Read(ctx, t.URL, t.SHA256)
+		return string(document.Data), err
+	}
+	b, err := os.ReadFile(t.File)
+	return string(b), err
+}
+
+func templateReadError(sensitive bool, err error) error {
+	if sensitive {
+		return errors.New("read sensitive template failed")
+	}
+	return fmt.Errorf("read template: %w", err)
+}
+
+func renderTemplate(f *plan.FileChange, text string, vars map[string]any, lookups []SecretLookup) error {
 	var secretFailure string
 	failSecret := func(message string) (string, error) {
 		secretFailure = message
@@ -172,21 +218,21 @@ func Prepare(c inventory.Config, state string, vars map[string]any, lookups ...S
 		}
 		return value, nil
 	}}
-	tpl, err := template.New("config").Option("missingkey=error").Funcs(funcs).Parse(source)
+	tpl, err := template.New("config").Option("missingkey=error").Funcs(funcs).Parse(text)
 	if err != nil {
 		// Parser errors can include arbitrary template text before a secret call
 		// can run, so never expose the underlying diagnostic.
-		return nil, errors.New("render template: parsing failed")
+		return errors.New("render template: parsing failed")
 	}
 	var b bytes.Buffer
 	if err := tpl.Execute(&b, vars); err != nil {
 		if secretFailure != "" {
-			return nil, errors.New("render template: " + secretFailure)
+			return errors.New("render template: " + secretFailure)
 		}
-		return nil, errors.New("render template: execution failed")
+		return errors.New("render template: execution failed")
 	}
 	f.Content = b.String()
-	return f, nil
+	return nil
 }
 
 // Observe computes the final patch; apply never invokes it.

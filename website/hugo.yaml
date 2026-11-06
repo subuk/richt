@@ -86,6 +86,10 @@ module:
         - files/greeting.conf.gotmpl
         - files/README.md
         - files/service.yaml
+        - https-sources/README.md
+        - https-sources/publish.py
+        - https-sources/templates/greeting.gotmpl
+        - https-sources/templates/demo.service.gotmpl
         - inventory/richt.yaml
         - inventory/README.md
         - inventory/services/vmango.yaml

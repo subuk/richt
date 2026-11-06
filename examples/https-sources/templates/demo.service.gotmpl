@@ -1,0 +1,10 @@
+[Unit]
+Description=Richt HTTPS source example
+
+[Service]
+Type=simple
+EnvironmentFile=/var/tmp/richt-https-example/greeting.env
+ExecStart=/usr/bin/sleep infinity
+
+[Install]
+WantedBy=multi-user.target

@@ -623,9 +623,37 @@ inventing operation percentages. Caller-owned contexts handle cancellation;
 CLI signals cancel through that context. See [embedding](../../../../docs/embedding.md)
 and [CLI progress](../../../../docs/cli.md). Saved-plan version remains `1.8`.
 
+## HTTPS preparation sources
+
+KRG-80 and KRG-81 add explicit HTTPS inventory, service definitions and Go
+templates on the controller. `-i` accepts a local path or HTTPS URL. Service
+references use mutually exclusive `file`, `url` plus required SHA-256, or inline
+components; template declarations use exactly one of `file`, `inline`, or `url`
+plus required SHA-256. Root inventory pinning is optional through
+`--inventory-sha256`. Relative URLs resolve against the final declaring document
+URL after redirects; local documents require absolute URL references.
+
+An explicitly supplied local `--source-config` binds HTTPS credentials and CA
+trust and optional local YAML secret sources. Remote documents cannot declare
+local file references or secret source paths. HTTP authentication is scoped to
+an exact origin and path prefix, with a new credential decision on every redirect.
+Only verified HTTPS is allowed; credentials, queries and fragments in source
+URLs are rejected. Internal/private HTTPS endpoints are supported. Source
+requests have timeout, redirect, decoded-response, aggregate-byte and document
+count bounds. One client retains one snapshot per requested URL for a preparation;
+no persistent cache or automatic retries are added.
+
+Inventory inspection downloads definitions but does not download templates,
+read secret values or contact managed hosts. Preparation downloads only selected
+present templates and freezes rendered files before host observation. Saved
+plans retain existing executable inputs and version `1.8`, with no source
+credentials or source URLs; apply and continuation do not reopen these sources.
+Package repositories and binary artifacts retain their existing apply-time
+network contracts. See [HTTPS sources](../../../../docs/sources.md).
+
 ## Later scope
 
-NetBox inventory/plugin/rendering, URL inventory and template sources,
+NetBox inventory/plugin/rendering,
 authenticated artifact sources and other archive formats, other package managers, additional persistent
 process managers, external secret stores, multi-file configuration validation
 transactions, agents, and fleet rollout orchestration are later work. Preserve useful domain boundaries

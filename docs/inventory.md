@@ -38,7 +38,8 @@ Component names are optional reference labels, independent of resource paths,
 package names and unit names.
 Unknown fields, duplicate YAML keys, non-string mapping keys, and multiple YAML
 documents are errors. All definitions and references are validated, including
-definitions outside the selected scope.
+definitions outside the selected scope. Inspection may fetch HTTPS inventory
+and service definitions, but never templates; see [HTTPS sources](sources.md).
 
 ```yaml
 tags:
@@ -63,9 +64,10 @@ secret_sources:
 
 A service requires an integer `order`, including when it is not assigned to any
 host. Explicit zero is valid; omission is an error. Components can be defined
-inline or by `file`, exclusively. Inline definitions put `order` beside their
-components. A `file` reference reads the complete definition, including `order`,
-from that file; `order` beside `file` is an error, even if the values match.
+inline, by `file`, or by `url` with mandatory `sha256`, exclusively. Inline
+definitions put `order` beside their components. A `file` reference reads the
+complete definition, including `order`, from that file; `order` beside `file`
+or `url` is an error, even if the values match.
 Referenced files contain one service definition (`order`, `binaries`, `configs`,
 `processes`), without another `services` wrapper or recursive file references.
 For inventories using the earlier reference syntax, move `order` from beside
@@ -74,8 +76,14 @@ For inventories using the earlier reference syntax, move `order` from beside
 Service file paths are relative to the inventory file. Template paths are
 relative to the service file declaring them; inline services use the inventory
 file as their base. Absolute
-local file paths are also accepted. URL sources are unsupported. Resolved JSON
-includes absolute source/template paths and normalized absolute target paths.
+local file paths are also accepted. Local documents can also use absolute HTTPS
+service and template URLs. Remote documents resolve relative URL references
+against their final response URL and cannot name local files or declare
+`secret_sources`. HTTPS service and template references require SHA-256 pins;
+the root inventory optionally accepts `--inventory-sha256`. Resolved JSON
+includes source/template locations and normalized absolute target paths.
+See [HTTPS sources](sources.md) for client trust, authentication, and local
+secret bindings.
 
 A service must contain at least one component; binary-only, config-only and
 process-only services are accepted. Tags assign services through a mapping keyed

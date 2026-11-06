@@ -17,14 +17,17 @@ With no command, Richt prints help. `richt --version` prints the build version.
 | `richt apply PLAN.json [-y] [--parallelism N]` | Display, confirm, execute, and update a saved plan; continue unfinished tasks on a later explicit invocation. |
 
 Inventory inspection never contacts hosts, opens templates, or reads secret
-sources. Diff can contact targets and read local templates/secrets; it does not
+source values. It may fetch HTTPS inventory and service documents. Diff can
+contact targets and read local or pinned HTTPS templates and local secrets; it does not
 modify managed resources. `-o` writes the plan file as an explicit output.
 
 ## Inventory and selection flags
 
 | Flag | Meaning |
 | --- | --- |
-| `-i PATH`, `--inventory PATH` | YAML inventory; defaults to `inventory.yaml` in the current directory. |
+| `-i PATH_OR_URL`, `--inventory PATH_OR_URL` | Local YAML inventory or absolute HTTPS URL; defaults to `inventory.yaml` in the current directory. |
+| `--inventory-sha256 HEX` | Optional expected SHA-256 of an HTTPS root inventory; rejected for local inventory. |
+| `--source-config PATH` | Explicit local YAML with extra CA trust, scoped HTTPS credentials, and local YAML secret bindings. See [HTTPS sources](sources.md). |
 | `--host NAME` | Select named hosts; repeat or comma-separate names. |
 | `--tag NAME` | Select hosts carrying a tag; repeat or comma-separate names. |
 | `--service NAME` | Select already assigned services; repeat or comma-separate names. |
@@ -43,7 +46,8 @@ richt diff -i fleet.yaml --host app-a --service repository --service web -o plan
 richt apply -i fleet.yaml --tag staging --parallelism 2
 ```
 
-`-i`, `--host`, `--tag`, and `--service` are argument errors with a saved plan.
+`-i`, `--source-config`, `--inventory-sha256`, `--host`, `--tag`, and `--service`
+are argument errors with a saved plan.
 A saved plan already fixes its hosts and tasks. Build a new plan if you need a
 different selection.
 

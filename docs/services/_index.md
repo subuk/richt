@@ -17,7 +17,10 @@ settings belong to the reusable definition. Templates receive the host's merged
 variables. Each service definition requires an integer `order`; effective
 services on one host must have different orders. For a service loaded through
 `file`, `order` belongs in the referenced file beside its components. The
-inventory entry contains only the file reference.
+inventory entry contains only the file reference. A service can also use
+`url` with a mandatory `sha256`; its referenced definition owns `order` in the
+same way. [HTTPS sources](../sources.md) describes service and template pins,
+relative remote URLs, and explicit client trust and credentials.
 
 ## A complete inventory
 

@@ -24,6 +24,8 @@ The focused guides are:
 
 - [Inventory](inventory.md): strict YAML, tag assignments and variable order,
   paths, service order, resource ownership, and selection.
+- [HTTPS sources](sources.md): remote inventory, pinned services and templates,
+  explicit client trust and credentials, and local secret bindings.
 - [Services](services/_index.md): composition, [lifecycle](services/lifecycle.md),
   and [change reactions](services/reactions.md).
 - [Binaries](services/binaries/_index.md), [configs](services/configs/_index.md),

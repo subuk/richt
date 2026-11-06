@@ -51,6 +51,7 @@ type Service struct {
 	Configs    []Config  `json:"configs,omitempty" yaml:"configs"`
 	Processes  []Process `json:"processes,omitempty" yaml:"processes"`
 	SourceFile string    `json:"source_file,omitempty" yaml:"-"`
+	SourceURL  string    `json:"source_url,omitempty" yaml:"-"`
 }
 
 type Binary struct {
@@ -72,6 +73,8 @@ type Binary struct {
 }
 
 type Template struct {
+	URL    string  `json:"url,omitempty" yaml:"url"`
+	SHA256 string  `json:"sha256,omitempty" yaml:"sha256"`
 	File   string  `json:"file,omitempty" yaml:"file"`
 	Inline *string `json:"inline,omitempty" yaml:"inline"`
 }

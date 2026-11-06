@@ -19,6 +19,7 @@ import (
 	"github.com/subuk/richt/plan"
 	"github.com/subuk/richt/rpm"
 	"github.com/subuk/richt/secrets"
+	"github.com/subuk/richt/source"
 	"github.com/subuk/richt/storage"
 	"github.com/subuk/richt/systemd"
 	"github.com/subuk/richt/transport"
@@ -220,7 +221,8 @@ func task(service, id, component, operation string) plan.Task {
 	return plan.Task{ID: service + "/" + id, Service: service, Component: component, Operation: operation, Progress: plan.Progress{Status: "pending"}}
 }
 
-// Diff completes rendering before host observation. No repository is contacted.
+// Diff acquires and renders templates before host observation. Package repositories
+// are not contacted during preparation.
 func (e Local) Diff(ctx context.Context, r *inventory.Resolved, options ...DiffOptions) (*plan.Plan, error) {
 	if r == nil {
 		return nil, errors.New("resolved inventory is nil")
@@ -229,8 +231,10 @@ func (e Local) Diff(ctx context.Context, r *inventory.Resolved, options ...DiffO
 		return nil, errors.New("diff accepts at most one options value")
 	}
 	var observer func(PrepareEvent)
+	var sources *source.Client
 	if len(options) == 1 {
 		observer = options[0].Observer
+		sources = options[0].Sources
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -251,7 +255,17 @@ func (e Local) Diff(ctx context.Context, r *inventory.Resolved, options ...DiffO
 					ps.files = append(ps.files, preparedFile{id: id, component: component, ref: ref, definition: &c})
 					return nil
 				}
-				f, err := config.Prepare(c, s.State, h.Vars, lookup)
+				if sources == nil && c.Template.URL != "" && s.State != "absent" {
+					var err error
+					sources, err = source.New(source.Options{})
+					if err != nil {
+						if c.Sensitive {
+							err = errors.New("read sensitive template failed")
+						}
+						return fmt.Errorf("host %s service %s %s: %w", h.Name, s.Name, component, err)
+					}
+				}
+				f, err := config.PrepareContext(ctx, c, s.State, h.Vars, sources, lookup)
 				if err != nil {
 					return fmt.Errorf("host %s service %s %s: %w", h.Name, s.Name, component, err)
 				}

@@ -14,6 +14,7 @@ execution. Recorded results and their limits live in [validation](validation.md)
 | --- | --- | --- |
 | First local file | [Quickstart](quickstart.md) | A fresh temporary directory; no root, RPM, or systemd. Create/update/no changes/explicit removal. |
 | Split inventory and service files | [File inventory](../examples/files/inventory.yaml) and [service](../examples/files/service.yaml) | Local `/var/tmp/richt-example/greeting.conf`; template path relative to the service file. |
+| HTTPS inventory, services and templates | [HTTPS sources](../examples/https-sources/README.md) | Publish a pinned catalog from local files; controller HTTPS trust, optional scoped credentials, and local secret bindings. Saved plans retain rendered bytes. |
 | Plain files and directories | [Typed config paths](../examples/typed-configs/README.md) | Local existence and attribute management, preserved unmanaged contents, and explicit recursive removal. No block devices. |
 | Local accounts and owned paths | [Users and groups](../examples/accounts/README.md) | Disposable Linux host with shadow utilities and GNU/glibc `getent`; root and mount namespace privilege for removal. Groups precede users and owned files. |
 | Weighted variables and selection | [Two-host inventory](../examples/inventory/richt.yaml) | Safe to inspect with `inventory validate/show`; one local and one illustrative SSH host. Execution changes host configuration. |

@@ -24,8 +24,10 @@ bin/richt apply /var/tmp/richt-example-plan.json
 ```
 
 Inventory inspection validates and resolves definitions without contacting
-hosts, opening templates, or fetching secrets. Diff renders templates and
-observes the targets to prepare operations without changing managed resources.
+hosts, opening templates, or fetching secrets. It can fetch HTTPS inventory and
+service definitions. Diff acquires and verifies pinned remote templates,
+renders them and observes the targets to prepare operations without changing
+managed resources.
 Missing template variables fail preparation. An `absent` assignment prepares
 explicit removal without rendering templates or reading secret sources.
 
@@ -59,6 +61,12 @@ verify frozen prior contents/presence/type or recognize their own unfinished
 desired result, and require any prepared backup. Intervening content edits fail
 with a conflict. Reprepare and review a new plan when you need
 current observations or changed desired inputs.
+
+This includes [HTTPS inventory, services, and templates](sources.md). Their
+source URLs, pins, CA settings and credentials are preparation inputs and are
+absent from the executable operations. Applying a saved plan does not load
+`--source-config` or contact those sources. Package transactions and artifact
+downloads retain the execution-time network dependencies below.
 
 Some operations deliberately use execution-time information:
 
@@ -123,8 +131,9 @@ bin/richt apply -y /var/tmp/richt-example-plan.json
 bin/richt apply -y -i examples/files/inventory.yaml
 ```
 
-The inventory option `-i` and host, tag, and service selectors are accepted during
-plan construction and rejected when applying a saved plan. A saved plan already
+The inventory option `-i`, `--source-config`, `--inventory-sha256`, and host,
+tag, and service selectors are accepted during plan construction and rejected
+when applying a saved plan. A saved plan already
 fixes its scope.
 `--parallelism N` can change the concurrency limit for any apply, including a
 saved plan; it does not change its hosts, tasks, inputs, or progress.

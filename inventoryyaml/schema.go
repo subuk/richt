@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/subuk/richt/inventory"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -41,38 +42,52 @@ func inventorySchema(root *yaml.Node) error {
 	})
 }
 
-// A definition contains its order and components, or refers to a file containing
-// that complete definition. Field presence matters even for zero or null values.
-func serviceDefinitionSchema(root *yaml.Node, allowFile bool) error {
+// A definition contains its order and components, or refers to a file or URL
+// containing that complete definition. Presence matters for zero or null values.
+func serviceDefinitionSchema(root *yaml.Node, allowReference bool) error {
 	if root.Kind == yaml.DocumentNode && len(root.Content) != 0 {
 		root = root.Content[0]
 	}
 	fields := map[string]*yaml.Node{}
-	if err := mappingFields(root, func(key string, value *yaml.Node) error {
-		fields[key] = value
-		return nil
-	}); err != nil {
+	if err := mappingFields(root, func(key string, value *yaml.Node) error { fields[key] = value; return nil }); err != nil {
 		return err
 	}
-	if file := fields["file"]; allowFile && file != nil {
+	for _, reference := range []string{"file", "url"} {
+		value := fields[reference]
+		if value == nil {
+			continue
+		}
+		if !allowReference {
+			return fmt.Errorf("line %d: field %s is not allowed in a referenced service definition", value.Line, reference)
+		}
+		other := "url"
+		if reference == "url" {
+			other = "file"
+		}
+		if fields[other] != nil {
+			return fmt.Errorf("line %d: service file and url are mutually exclusive", value.Line)
+		}
 		if order := fields["order"]; order != nil {
-			return fmt.Errorf("line %d: file cannot be combined with order; set order in the referenced service file", order.Line)
+			return fmt.Errorf("line %d: %s cannot be combined with order; set order in the referenced service file", order.Line, reference)
 		}
 		for _, key := range []string{"binaries", "configs", "processes"} {
-			if value := fields[key]; value != nil {
-				return fmt.Errorf("line %d: file cannot be combined with inline components", value.Line)
+			if component := fields[key]; component != nil {
+				return fmt.Errorf("line %d: %s cannot be combined with inline components", component.Line, reference)
 			}
 		}
-		file = dereference(file)
-		if file.Kind != yaml.ScalarNode || file.Tag != "!!str" || strings.TrimSpace(file.Value) == "" {
-			return fmt.Errorf("line %d: service file must be a nonempty string", file.Line)
+		if err := nonemptyString(value, "service "+reference); err != nil {
+			return err
+		}
+		if reference == "url" {
+			return checksumSchema(fields["sha256"])
+		}
+		if hash := fields["sha256"]; hash != nil {
+			return fmt.Errorf("line %d: service sha256 requires url", hash.Line)
 		}
 		return nil
 	}
-	if !allowFile {
-		if file := fields["file"]; file != nil {
-			return fmt.Errorf("line %d: field file is not allowed in a referenced service definition", file.Line)
-		}
+	if hash := fields["sha256"]; hash != nil {
+		return fmt.Errorf("line %d: service sha256 requires url", hash.Line)
 	}
 	if order := fields["order"]; order != nil {
 		if err := integer(order, "order"); err != nil {
@@ -82,6 +97,59 @@ func serviceDefinitionSchema(root *yaml.Node, allowFile bool) error {
 		return fmt.Errorf("order: required integer")
 	}
 	return serviceSchema(root)
+}
+
+func nonemptyString(node *yaml.Node, context string) error {
+	node = dereference(node)
+	if node.Kind != yaml.ScalarNode || node.Tag != "!!str" || strings.TrimSpace(node.Value) == "" {
+		return fmt.Errorf("line %d: %s must be a nonempty string", node.Line, context)
+	}
+	return nil
+}
+
+func checksumSchema(node *yaml.Node) error {
+	if node == nil {
+		return fmt.Errorf("sha256: required for url")
+	}
+	node = dereference(node)
+	if node.Kind != yaml.ScalarNode || node.Tag != "!!str" {
+		return fmt.Errorf("line %d: sha256 must be a string of exactly 64 hexadecimal digits", node.Line)
+	}
+	if err := inventory.ValidateSourceSHA256(node.Value); err != nil {
+		return fmt.Errorf("line %d: %w", node.Line, err)
+	}
+	return nil
+}
+
+func templateSchema(node *yaml.Node) error {
+	node = dereference(node)
+	if node.Kind != yaml.MappingNode {
+		return fmt.Errorf("line %d: template must be a mapping", node.Line)
+	}
+	fields := map[string]*yaml.Node{}
+	if err := mappingFields(node, func(key string, value *yaml.Node) error { fields[key] = value; return nil }); err != nil {
+		return err
+	}
+	count := 0
+	for _, key := range []string{"file", "inline", "url"} {
+		if value := fields[key]; value != nil {
+			count++
+			value = dereference(value)
+			if value.Kind != yaml.ScalarNode || value.Tag != "!!str" || (key != "inline" && strings.TrimSpace(value.Value) == "") {
+				return fmt.Errorf("line %d: template %s must be a string (file and url must be nonempty)", value.Line, key)
+			}
+		}
+	}
+	if count != 1 {
+		return fmt.Errorf("line %d: template: specify exactly one of file, inline or url", node.Line)
+	}
+	if fields["url"] != nil {
+		return checksumSchema(fields["sha256"])
+	}
+	if hash := fields["sha256"]; hash != nil {
+		return fmt.Errorf("line %d: template sha256 requires url", hash.Line)
+	}
+	return nil
 }
 
 func tagAssignments(node *yaml.Node, context string) error {
@@ -372,6 +440,9 @@ func configSchema(node *yaml.Node) error {
 	return mappingFields(node, func(key string, value *yaml.Node) error {
 		if !valid[key] {
 			return fmt.Errorf("line %d: field %s is not allowed: %s config cannot set %s", value.Line, key, typ, key)
+		}
+		if key == "template" {
+			return templateSchema(value)
 		}
 		if typ == "user" || typ == "group" {
 			value = dereference(value)

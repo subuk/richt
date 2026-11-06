@@ -1,6 +1,10 @@
 package engine
 
-import "context"
+import (
+	"context"
+
+	"github.com/subuk/richt/source"
+)
 
 // PrepareEvent identifies the work about to run during plan preparation.
 // Phase is rendering, checking, or observing. An empty Service identifies
@@ -11,8 +15,12 @@ type PrepareEvent struct {
 	Service string
 }
 
-// DiffOptions configures preparation reporting without changing the plan.
+// DiffOptions configures preparation inputs and reporting without changing the plan.
 type DiffOptions struct {
+	// Sources supplies the controller-side HTTPS template reader. A nil value
+	// creates one shared default client when the first remote template is needed.
+	Sources *source.Client
+
 	// Observer is called synchronously before the reported work begins.
 	// It must return promptly. The event is a detached value safe to retain.
 	Observer func(PrepareEvent)
