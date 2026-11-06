@@ -4,6 +4,69 @@ description: "Recorded Linux acceptance results, environment, commands, and limi
 weight: 120
 ---
 
+## DEB packages through APT — 2026-11-06
+
+KRG-101 was validated in an isolated Ubuntu 24.04.5 LTS x86_64 systemd
+container on an authorized disposable AlmaLinux host. The Ubuntu userspace ran
+APT 2.8.4, dpkg 1.22.6, Python 3.12.3 and systemd 255.4. Source was
+`62a3d096af2c` plus the DEB/APT changes recorded with this report. The final
+Linux binary SHA-256 was
+`808c05280ecdb16b85b057ef95ecb56bfaf91e34a4c89386fb4a81040937d313`;
+the macOS SSH controller binary was
+`eecb837d1ddfbef7c519b6538d2795d35524a78fb035296b507735ca51966962`.
+
+| Suite | Result |
+| --- | --- |
+| Local Ubuntu APT CLI harness | 23 checks passed |
+| Ubuntu APT CLI over SSH and explicit non-root sudo | 23 checks passed |
+| Existing AlmaLinux file/SELinux/progress/secret regression | 18 checks passed |
+| Existing AlmaLinux RPM/systemd/oneshot regression | 33 checks passed, using the published `tree` RPM |
+| Repository verification | `make check`, `make docs-check`, and `go test -race ./apt ./engine ./plan` passed |
+
+The APT harness builds unique DEB packages and a signed local repository. It
+verifies preparation while that new repository is offline, no index changes
+during diff, planned key/source creation before package installation, missing
+systemd-unit discovery, an empty second diff, exact upgrade/downgrade, Debian
+version equality, and preservation of an installed unversioned package when a
+newer repository version exists. It checks cache reuse, source changes by an
+earlier service, 48-hour expiry, deleted package indexes, and a failed repository
+refresh that cannot advance the success stamp or install a package.
+
+Unavailable versions and native frontend lock contention fail without running
+later host tasks. The lock test measures a shortened one-second saved budget.
+A deliberate package post-installation failure produces actual half-configured
+dpkg state; explicit repair and continuation then complete the saved plan
+without inventory. Absence stops/disables the unit, removes the package, and
+retains an operator-modified conffile. Both final runs also used target APT
+configuration enabling `Fix-Broken`, `Fix-Missing`, and `--force-confnew`, to
+verify that Richt's fixed transaction and conffile policies take precedence.
+
+The Go suite includes 26 Python helper tests for freshness records, config/key
+fingerprints, index deletion, private metadata paths, lock waits, command bounds,
+native package operands, held/broken states, global dpkg audit, and required
+capabilities. These portable tests use fake package transactions. They complement
+the real Ubuntu runs rather than establish another tested distribution.
+
+Run the harness only on an authorized disposable system with systemd, Python 3,
+APT, `apt-utils`, `dpkg-dev`, and GnuPG. It needs root locally or an SSH login
+with noninteractive sudo. It temporarily holds the native package lock; serialize
+it with other package work. It cleans its unique packages, keys, sources, units,
+and files, and retains private plans/logs in the requested output directory.
+
+```sh
+sudo python3 tests/integration/apt.py --binary ./bin/richt-linux-amd64 \
+  --output /root/richt-apt-local
+python3 tests/integration/apt.py --binary ./bin/richt --ssh-host ubuntu-test \
+  --output /tmp/richt-apt-ssh
+```
+
+The published `tree` DEB also passed an SSH/sudo install and empty second diff.
+This coverage establishes Ubuntu userspace behavior in a system container, not
+Ubuntu VM boot behavior, another CPU architecture, or Debian runtime validation.
+The AlmaLinux regressions retained SELinux Enforcing and the existing PostgreSQL
+and node-exporter services. Test fixtures and the Ubuntu container were removed
+after private evidence was retained.
+
 ## Additive local memberships — 2026-11-06
 
 KRG-105 was validated on an authorized AlmaLinux 10.2 x86_64 host with

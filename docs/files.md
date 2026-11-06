@@ -34,7 +34,8 @@ operations, rendered file contents and patches, requested attributes and
 owner/group names, file validators and their timeouts, atomic-write and backup
 selections, operation IDs, explicit prior/desired file states, frozen backup
 paths and prior metadata, package requests (including
-their `disable_excludes` override), artifact URLs/checksums/paths and extraction
+their RPM `disable_excludes` override or DEB cache, lock, timeout and conffile
+policies), artifact URLs/checksums/paths and extraction
 settings, artifact attributes/timeouts and ownership identities, masking targets, allowed systemd process
 branches, and oneshot argv, timeouts, and
 changed trigger references. Typed configs also fix path attributes, storage
@@ -64,9 +65,11 @@ Some operations deliberately use execution-time information:
 - Owner/group names are resolved again on the target; numeric IDs may change.
 - The system SSH client reads its current configuration. Explicit saved
   connection inputs remain fixed, but an alias can resolve to a new address.
-- DNF resolves repository metadata, dependencies, and the transaction when the
-  prepared package request runs. An exact version fixes that request, not the
-  complete transaction or RPM checksums; RPM artifacts are not embedded.
+- DNF and APT resolve repositories, dependencies, and the transaction when the
+  prepared package request runs. APT conditionally refreshes shared metadata
+  before each install/version-change transaction using the saved cache policy.
+  Removal does not refresh it. An exact version fixes that request, not the
+  complete transaction or package checksums; package artifacts are not embedded.
 - Downloads and archives fetch the frozen public HTTPS URL on the target and
   require its frozen SHA-256 before atomic publication. Artifact bytes are not
   embedded in JSON. Protected manifests and transaction records guard ownership,
@@ -101,6 +104,7 @@ Some operations deliberately use execution-time information:
   execution-time dependencies; these checks do not rebuild the plan.
 
 See [file configs](services/configs/files.md), [RPM binaries](services/binaries/rpm.md),
+[DEB binaries](services/binaries/deb.md),
 [process lifecycle](services/lifecycle.md), and [SSH](ssh.md) for these boundaries.
 The [storage config reference](services/configs/storage.md) explains device,
 filesystem, mount and destructive removal checks.

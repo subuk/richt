@@ -258,12 +258,13 @@ func binarySchema(node *yaml.Node) error {
 	}
 	allowed := map[string]string{
 		"rpm":      "manager package version disable_excludes",
+		"deb":      "manager package version",
 		"download": "url sha256 path owner group mode timeout",
 		"archive":  "url sha256 path owner group timeout format strip_components",
 	}
 	list, ok := allowed[typ]
 	if !ok {
-		return fmt.Errorf("binary type: expected rpm, download or archive")
+		return fmt.Errorf("binary type: expected rpm, deb, download or archive")
 	}
 	valid := map[string]bool{"name": true, "type": true}
 	for _, key := range strings.Fields(list) {

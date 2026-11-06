@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/subuk/richt/accounts"
+	"github.com/subuk/richt/apt"
 	"github.com/subuk/richt/artifact"
 	"github.com/subuk/richt/config"
 	"github.com/subuk/richt/inventory"
@@ -26,6 +27,7 @@ import (
 type Local struct {
 	Accounts  accounts.Backend
 	RPM       rpm.Backend
+	APT       apt.Backend
 	Artifacts artifact.Backend
 	Systemd   systemd.Backend
 	Oneshot   oneshot.Backend
@@ -78,6 +80,7 @@ func (e Local) ForHost(h plan.Host) (plan.Executor, error) {
 	e.Accounts = accounts.Backend{Runner: target.Run}
 	e.Mount = mount.Backend{Run: target.Run, RunInput: target.RunInput}
 	e.RPM = rpm.Backend{Run: target.Run}
+	e.APT = apt.Backend{Run: target.Run}
 	e.Systemd = systemd.Backend{Run: target.Run, ReadFile: target.ReadFile, Glob: target.Glob}
 	return e, nil
 }
@@ -93,7 +96,7 @@ func host(h inventory.ResolvedHost) plan.Host {
 
 func (e Local) Resolve(t plan.Task) ([]plan.Action, error) {
 	resources := 0
-	for _, present := range []bool{t.Account != nil, t.Artifact != nil, t.File != nil, t.Path != nil, t.Storage != nil, t.Mount != nil, t.RPM != nil, t.Process != nil, t.Oneshot != nil} {
+	for _, present := range []bool{t.Account != nil, t.Artifact != nil, t.File != nil, t.Path != nil, t.Storage != nil, t.Mount != nil, t.RPM != nil, t.DEB != nil, t.Process != nil, t.Oneshot != nil} {
 		if present {
 			resources++
 		}
@@ -101,10 +104,10 @@ func (e Local) Resolve(t plan.Task) ([]plan.Action, error) {
 	if resources > 1 {
 		return nil, errors.New("task contains mixed resource payloads")
 	}
-	if t.Account != nil && t.Operation != "account" || t.Artifact != nil && t.Operation != "artifact" || t.Path != nil && t.Operation != "path" || t.Storage != nil && t.Operation != "storage" || t.Mount != nil && t.Operation != "mount" {
+	if t.Account != nil && t.Operation != "account" || t.Artifact != nil && t.Operation != "artifact" || t.Path != nil && t.Operation != "path" || t.Storage != nil && t.Operation != "storage" || t.Mount != nil && t.Operation != "mount" || t.RPM != nil && t.Operation != "rpm" || t.DEB != nil && t.Operation != "deb" {
 		return nil, errors.New("resource payload does not match operation")
 	}
-	if t.Operation == "daemon-reload" && (t.Account != nil || t.Artifact != nil || t.File != nil || t.RPM != nil || t.Process != nil || t.Oneshot != nil || t.Path != nil || t.Storage != nil || t.Mount != nil) {
+	if t.Operation == "daemon-reload" && (t.Account != nil || t.Artifact != nil || t.File != nil || t.RPM != nil || t.DEB != nil || t.Process != nil || t.Oneshot != nil || t.Path != nil || t.Storage != nil || t.Mount != nil) {
 		return nil, errors.New("daemon-reload task must not contain a resource payload")
 	}
 	if t.Oneshot != nil && t.Operation != "oneshot" {
@@ -127,6 +130,8 @@ func (e Local) Resolve(t plan.Task) ([]plan.Action, error) {
 		return e.Oneshot.Resolve(t)
 	case "rpm":
 		return e.RPM.Resolve(t)
+	case "deb":
+		return e.APT.Resolve(t)
 	case "systemd", "systemd-enable", "systemd-mask", "daemon-reload":
 		return e.Systemd.Resolve(t)
 	default:
@@ -152,6 +157,8 @@ func (e Local) Execute(ctx context.Context, a plan.Action) error {
 		return e.Oneshot.Execute(ctx, a)
 	case "rpm":
 		return e.RPM.Execute(ctx, a)
+	case "deb":
+		return e.APT.Execute(ctx, a)
 	case "systemd", "systemd-enable", "systemd-mask", "daemon-reload":
 		return e.Systemd.Execute(ctx, a)
 	default:
@@ -179,6 +186,7 @@ type preparedBinary struct {
 	index    int
 	name     string
 	change   *plan.RPMChange
+	deb      *plan.DEBChange
 	artifact *plan.ArtifactChange
 }
 
@@ -257,6 +265,8 @@ func (e Local) Diff(ctx context.Context, r *inventory.Resolved) (*plan.Plan, err
 				b := preparedBinary{index: index, name: binary.Name}
 				var err error
 				switch binary.Type {
+				case "deb":
+					b.deb, err = apt.Prepare(binary, s.State)
 				case "download", "archive":
 					b.artifact, err = artifact.Prepare(binary, s.State)
 				default:
@@ -344,6 +354,16 @@ func (e Local) Diff(ctx context.Context, r *inventory.Resolved) (*plan.Plan, err
 					}
 					continue
 				}
+				if binary := prepared.deb; binary != nil {
+					key := "deb/" + binary.Manager
+					if !checkedManagers[key] {
+						if err := bound[hi].APT.CheckManager(ctx, binary.Manager); err != nil {
+							return nil, fmt.Errorf("host %s: %w", h.Name, err)
+						}
+						checkedManagers[key] = true
+					}
+					continue
+				}
 				binary := prepared.change
 				if !checkedManagers[binary.Manager] {
 					if err := bound[hi].RPM.CheckManager(ctx, binary.Manager); err != nil {
@@ -397,6 +417,9 @@ func (e Local) observe(ctx context.Context, ps preparedService, sequence *config
 		if binary.artifact != nil {
 			op = "artifact"
 			yes, err = e.Artifacts.Observe(ctx, binary.artifact)
+		} else if binary.deb != nil {
+			op = "deb"
+			yes, err = e.APT.Observe(ctx, binary.deb)
 		} else {
 			yes, err = e.RPM.Observe(ctx, binary.change)
 		}
@@ -408,8 +431,8 @@ func (e Local) observe(ctx context.Context, ps preparedService, sequence *config
 				changed["binary."+binary.name] = true
 			}
 			t := task(s.Name, "binary/"+strconv.Itoa(binary.index), "binary/"+label(binary.name, binary.index), op)
-			t.RPM, t.Artifact = binary.change, binary.artifact
-			packageChanged = packageChanged || binary.change != nil
+			t.RPM, t.DEB, t.Artifact = binary.change, binary.deb, binary.artifact
+			packageChanged = packageChanged || binary.change != nil || binary.deb != nil
 			binaries = append(binaries, t)
 		}
 	}

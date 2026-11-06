@@ -40,7 +40,7 @@ func (b Backend) checkDelete(ctx context.Context) error {
 }
 
 func Resolve(t plan.Task) ([]plan.Action, error) {
-	if t.Operation != "account" || t.Account == nil || t.File != nil || t.RPM != nil || t.Artifact != nil || t.Process != nil || t.Oneshot != nil || t.Path != nil || t.Storage != nil || t.Mount != nil {
+	if t.Operation != "account" || t.Account == nil || t.File != nil || t.RPM != nil || t.Artifact != nil || t.Process != nil || t.Oneshot != nil || t.Path != nil || t.Storage != nil || t.Mount != nil || t.DEB != nil {
 		return nil, errors.New("invalid account task")
 	}
 	a := t.Account

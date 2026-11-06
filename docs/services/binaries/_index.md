@@ -10,6 +10,7 @@ An optional `name` label allows [process reactions](../reactions.md) such as
 do not require a config or process component.
 
 Choose [RPM packages](rpm.md) (`type: rpm`) for DNF 4/YUM 4 package requests,
+[DEB packages](deb.md) (`type: deb`) for APT package requests,
 [downloaded files](download.md) (`type: download`) for a checksum-pinned HTTPS
 file, or [archive trees](archive.md) (`type: archive`, `format: tar.gz`) for an
 exclusively owned installation directory. Each reference defines preparation,

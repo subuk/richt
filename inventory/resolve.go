@@ -119,6 +119,9 @@ func normalizedService(s Service) Service {
 		if b.Type == "rpm" && b.Manager == "" {
 			b.Manager = "dnf"
 		}
+		if b.Type == "deb" && b.Manager == "" {
+			b.Manager = "apt"
+		}
 		binaries[k] = b
 	}
 	s.Binaries = binaries

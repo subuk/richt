@@ -167,7 +167,7 @@ func (b Backend) NeedsChange(ctx context.Context, c *plan.ProcessChange) (bool, 
 	return op != "" || (c.Enabled != nil && enabled(s) != *c.Enabled) || c.Masked != nil && MaskNeedsChange(s, *c.Masked), s, nil
 }
 func (b Backend) Resolve(t plan.Task) ([]plan.Action, error) {
-	if t.File != nil || t.Account != nil || t.Artifact != nil || t.RPM != nil || t.Oneshot != nil {
+	if t.File != nil || t.Account != nil || t.Artifact != nil || t.RPM != nil || t.Oneshot != nil || t.DEB != nil {
 		return nil, errors.New("systemd task contains another operation payload")
 	}
 	if t.Operation == "daemon-reload" {

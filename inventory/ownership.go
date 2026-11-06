@@ -57,8 +57,12 @@ func (in *Inventory) validateOwnership(host string, assignments []Assignment) er
 				paths = append(paths, pathOwner{path: ArtifactMetadataPath(b.Path), service: a.Name, component: component + ".metadata", tree: true, artifact: true})
 				continue
 			}
-			// DNF and YUM both own packages in the RPM database.
-			if err := claim("package rpm:"+b.Package, a.Name, "binary."+name); err != nil {
+			// Managers share ownership within their native package database.
+			database := "rpm"
+			if b.Type == "deb" {
+				database = "dpkg"
+			}
+			if err := claim("package "+database+":"+b.Package, a.Name, "binary."+name); err != nil {
 				return err
 			}
 		}

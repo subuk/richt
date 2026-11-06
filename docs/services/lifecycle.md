@@ -74,7 +74,7 @@ Changes to owned units/drop-ins schedule daemon reload and a restart reaction
 for their process. Changed ordinary configs under `/etc/systemd/system/`,
 `/usr/lib/systemd/system/`, or `/run/systemd/system/` also schedule daemon reload.
 A changed package request in a service with systemd processes schedules it too, allowing
-new package units to be discovered without relying on RPM scriptlets.
+new package units to be discovered without relying on package maintainer scripts.
 Daemon reload precedes process tasks for present services. See
 [systemd definitions](processes/systemd.md#owned-units-and-drop-ins) for file
 paths and reload capability verification.
@@ -136,8 +136,9 @@ mount apply before artifact preparation. Binaries precede configs within a
 service, and preparation must observe the actual artifact filesystem.
 
 Richt also requests package removal. The
-[RPM reference](binaries/rpm.md#removal) explains dependency removal and package
-config handling. Data outside explicitly managed deletion scopes and `.rpmsave` files remain.
+[RPM reference](binaries/rpm.md#removal) and [DEB reference](binaries/deb.md#lifecycle-saved-plans-and-removal) explain dependency and package config handling.
+DEB removal does not purge conffiles or run autoremove. Data outside explicitly
+managed deletion scopes and RPM `.rpmsave` files remain.
 
 ## Failure and continuation
 

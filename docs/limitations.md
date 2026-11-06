@@ -6,12 +6,12 @@ weight: 110
 ---
 
 Richt currently implements local/SSH transport, explicit noninteractive sudo,
-strict local YAML inventory, RPM through DNF 4/YUM 4, checksum-pinned public
+strict local YAML inventory, RPM through DNF 4/YUM 4, DEB through APT, checksum-pinned public
 HTTPS downloads and tar.gz archive trees, systemd and oneshot
 processes, templates, plain files/directories, local users/groups, RAID1, linear LVM, XFS and
 persistent mounts, and local YAML secret sources. See [installation](installation.md) and
 [validation](validation.md) for requirements and verified platforms. YUM 3,
-DNF 5, APT, non-systemd managers, URL inventory/templates, private authenticated
+DNF 5, additional persistent process managers, URL inventory/templates, private authenticated
 artifact URLs, other archive formats, and external secret stores are unsupported.
 
 ## Executable plans are prepared inputs
@@ -36,6 +36,12 @@ These inputs retain defined execution-time dependencies:
   A pinned NEVRA fixes the explicit package request, not RPM checksums,
   scriptlets, every dependency, or repository trust configuration. RPM artifacts
   are not embedded in the plan.
+- APT reads installed dpkg state at diff; repositories and dependency resolution
+  are apply-time inputs. Install/version actions conditionally refresh shared
+  metadata with the fixed 48-hour freshness policy. Native concrete package
+  names and exact Debian versions are supported; virtual packages, architecture
+  selectors, purge, autoremove, global upgrades and held/untrusted overrides
+  are unsupported. See [DEB packages](services/binaries/deb.md).
 - Download/archive apply requires target Python 3.8+, verified TLS and bytes
   matching the frozen SHA-256. Artifact destinations are exclusively managed;
   pre-existing resources are not adopted. Replaced artifact roots, unknown
@@ -93,7 +99,8 @@ automatic dependency selection.
 [service lifecycle order](services/lifecycle.md).
 Deleting an assignment alone does not remove anything. DNF can remove dependent
 packages and RPM can retain `.rpmsave` files. RPM removal does not purge unrelated
-application state. Explicit directory, LV, VG and array removal has the
+application state. DEB removal retains conffiles and does not run autoremove.
+Explicit directory, LV, VG and array removal has the
 destructive scope described by the [config types](services/configs/_index.md),
 including data on adopted resources. Optional template validators check a
 prepared candidate before writing; there is no multi-file validation transaction.

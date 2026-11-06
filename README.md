@@ -7,7 +7,7 @@ ordered lists of binaries, configs, and processes in any nonempty combination.
 Tags assign service target states to hosts; service definitions set execution order.
 
 Inspect the inventory, prepare changes with `diff`, review the executable plan,
-and explicitly `apply` it. Current backends provide RPM packages, checksum-pinned HTTPS downloads and archive trees, templated
+and explicitly `apply` it. Current backends provide RPM and DEB packages, checksum-pinned HTTPS downloads and archive trees, templated
 files, and systemd or change-triggered oneshot processes over local or SSH
 transport, with explicit noninteractive sudo, bounded host concurrency, and local YAML secret sources.
 
@@ -101,7 +101,7 @@ prove runtime RPM, systemd, root, or SELinux behavior. [Linux validation](docs/v
 describes the separate disposable-host acceptance workflows.
 
 Public Go packages separate inventory/domain validation, YAML loading, executable
-plans, files, RPM, systemd, oneshot commands, transport, and orchestration.
+plans, files, RPM/APT, systemd, oneshot commands, transport, and orchestration.
 The CLI uses Kong.
 Contributor guidance is in [AGENTS.md](AGENTS.md); the local
 [development workflow](.agents/skills/richt-development/SKILL.md) and

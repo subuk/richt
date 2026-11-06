@@ -136,8 +136,23 @@ func validateService(s Service) error {
 			}
 			continue
 		}
+		if b.Type == "deb" {
+			if hasArtifactFields(b) || b.DisableExcludes != "" {
+				return fmt.Errorf("binary.%s: deb binary cannot set artifact fields or disable_excludes", name)
+			}
+			if b.Manager != "" && b.Manager != "apt" {
+				return fmt.Errorf("binary.%s manager: expected apt", name)
+			}
+			if err := ValidateDEBPackage(b.Package); err != nil {
+				return fmt.Errorf("binary.%s package: %w", name, err)
+			}
+			if err := ValidateDEBVersion(b.Version); err != nil {
+				return fmt.Errorf("binary.%s version: %w", name, err)
+			}
+			continue
+		}
 		if b.Type != "rpm" {
-			return fmt.Errorf("binary.%s type: expected rpm, download or archive", name)
+			return fmt.Errorf("binary.%s type: expected rpm, deb, download or archive", name)
 		}
 		if hasArtifactFields(b) {
 			return fmt.Errorf("binary.%s: rpm binary cannot set artifact fields", name)

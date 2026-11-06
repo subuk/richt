@@ -22,7 +22,7 @@ type Backend struct {
 }
 
 func (Backend) Resolve(t plan.Task) ([]plan.Action, error) {
-	if t.Operation != "oneshot" || t.Account != nil || t.Artifact != nil || t.File != nil || t.RPM != nil || t.Process != nil {
+	if t.Operation != "oneshot" || t.Account != nil || t.Artifact != nil || t.File != nil || t.RPM != nil || t.Process != nil || t.DEB != nil {
 		return nil, errors.New("invalid oneshot operation or mixed payload")
 	}
 	if err := t.Oneshot.Validate(); err != nil {
@@ -41,7 +41,7 @@ func (Backend) Resolve(t plan.Task) ([]plan.Action, error) {
 }
 
 func (b Backend) Execute(ctx context.Context, a plan.Action) error {
-	if a.Kind != "oneshot" || a.File != nil || a.RPM != nil || a.Process != nil {
+	if a.Kind != "oneshot" || a.File != nil || a.RPM != nil || a.Process != nil || a.DEB != nil {
 		return errors.New("invalid oneshot action or mixed payload")
 	}
 	if err := a.Oneshot.Validate(); err != nil {

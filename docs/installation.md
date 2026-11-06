@@ -60,7 +60,7 @@ Add that `PATH` setting to your shell configuration to keep it for future
 sessions. Release binaries need no Go toolchain. SSH execution still requires
 the system OpenSSH `ssh` client in `PATH` and configured authentication and host
 trust; see the [SSH guide](ssh.md). Controller binaries do not expand supported
-target resources: RPM and systemd operations still require a suitable Linux
+target resources: package and systemd operations still require a suitable Linux
 target. Windows controller support is deferred to
 [KRG-92](https://linear.app/krglv/issue/KRG-92/support-windows-as-an-ssh-only-controller).
 This release workflow does not publish DEB, RPM, or Docker artifacts.
@@ -114,6 +114,7 @@ agent, central server, NetBox, or Argo CD.
 | SSH controller | Richt and system OpenSSH `ssh` in `PATH`; local template and secret files for preparation. macOS has been used as a controller. |
 | SSH target | Linux shell and standard GNU coreutils/findutils, `getent`, Python 3 standard library for template files, plus the utilities needed by selected resources. No Go toolchain or Richt binary is needed there. |
 | RPM resources | DNF 4, or YUM 4 backed by DNF 4, and an RPM database. Repository/network access is needed when DNF executes the transaction. |
+| DEB resources | Linux, APT 2.2+ with apt-cache/apt-config, dpkg/dpkg-query and Python 3.8+ standard library; standard APT/dpkg paths and protected root-owned configuration. Repository/network access is needed for conditional metadata refresh and installation at apply. |
 | Download/archive binaries | Linux, Python 3.8+ standard library, GNU `readlink`, util-linux `findmnt`, target HTTPS connectivity and trusted CA certificates; filesystem support for atomic `renameat2` publication. No daemon or installed Richt binary on SSH targets. |
 | Systemd processes | systemd with `systemctl`; declared units or packages that supply them. |
 | Oneshot processes | The declared executable and its dependencies on the target; no systemd requirement. |
@@ -122,8 +123,10 @@ agent, central server, NetBox, or Argo CD.
 
 The recorded full-stack platform is AlmaLinux 10.2 x86_64, DNF 4.20.0,
 YUM 4 compatibility, systemd 257, with file/label acceptance on SELinux Enforcing.
+DEB/APT acceptance additionally covers Ubuntu 24.04.5 x86_64 userspace in a
+systemd container, locally and through SSH/sudo, with APT 2.8.4 and dpkg 1.22.6.
 Other distributions, versions, architectures, and package managers are not
-established by that result. CI cross-compiles all four controller binaries on
+established by those results. CI cross-compiles all four controller binaries on
 one Linux runner with `CGO_ENABLED=0` and smoke-tests only the unpacked native
 Linux amd64 archive. This does not establish macOS runtime behavior or full
 Linux host acceptance. See [CI and releases](ci.md) for build coverage and
@@ -131,7 +134,7 @@ Linux host acceptance. See [CI and releases](ci.md) for build coverage and
 
 Only selected resources need their backend capabilities. File-only use does
 not require DNF or systemd. Python 3.8+ is a target runtime requirement for
-download/archive binaries. Other resources do not acquire that requirement;
+download/archive and DEB binaries. Other resources do not acquire that requirement;
 Python 3 is also used by repository verifiers and acceptance harnesses.
 
 ## Privileges
@@ -140,7 +143,7 @@ Run inventory commands as an ordinary user. Diff observes targets, so it needs
 read and observation access; it may fail on protected resources without suitable
 privileges. Apply needs permission to create parents, write/remove the managed
 files, set requested attributes, and run selected package and process operations.
-System configuration and RPM transactions normally require root.
+System configuration and package transactions normally require root.
 
 Choose privileges explicitly in inventory:
 

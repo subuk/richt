@@ -255,7 +255,7 @@ func (b Backend) Prepare(ctx context.Context, config inventory.Config, state str
 }
 
 func (Backend) Resolve(t plan.Task) ([]plan.Action, error) {
-	if t.Operation != "mount" || t.Account != nil || t.Artifact != nil || t.File != nil || t.RPM != nil || t.Process != nil || t.Oneshot != nil || t.Path != nil || t.Storage != nil {
+	if t.Operation != "mount" || t.Account != nil || t.Artifact != nil || t.File != nil || t.RPM != nil || t.Process != nil || t.Oneshot != nil || t.Path != nil || t.Storage != nil || t.DEB != nil {
 		return nil, errors.New("invalid mount operation or mixed payload")
 	}
 	c := t.Mount
@@ -278,7 +278,7 @@ func mountOptions(c *plan.MountChange) string {
 }
 
 func (b Backend) Execute(ctx context.Context, a plan.Action) error {
-	if a.Kind != "mount" || a.File != nil || a.RPM != nil || a.Process != nil || a.Oneshot != nil || a.Path != nil || a.Storage != nil {
+	if a.Kind != "mount" || a.File != nil || a.RPM != nil || a.Process != nil || a.Oneshot != nil || a.Path != nil || a.Storage != nil || a.DEB != nil {
 		return errors.New("unsupported mount action")
 	}
 	c := a.Mount

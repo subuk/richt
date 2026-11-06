@@ -45,6 +45,7 @@ type Task struct {
 	Operation string          `json:"operation"`
 	File      *FileChange     `json:"file,omitempty"`
 	RPM       *RPMChange      `json:"rpm,omitempty"`
+	DEB       *DEBChange      `json:"deb,omitempty"`
 	Artifact  *ArtifactChange `json:"artifact,omitempty"`
 	Process   *ProcessChange  `json:"process,omitempty"`
 	Oneshot   *OneshotChange  `json:"oneshot,omitempty"`
@@ -197,6 +198,7 @@ type Action struct {
 	Kind        string
 	File        *FileChange
 	RPM         *RPMChange
+	DEB         *DEBChange
 	Artifact    *ArtifactChange
 	Process     *ProcessChange
 	Oneshot     *OneshotChange
@@ -266,6 +268,12 @@ func (p *Plan) Validate() error {
 			}
 			ids[t.ID] = true
 			payloads := 0
+			if t.DEB != nil {
+				payloads++
+				if err := t.DEB.Validate(); err != nil {
+					return fmt.Errorf("task %s: %w", t.ID, err)
+				}
+			}
 			if t.Account != nil {
 				payloads++
 				if err := t.Account.Validate(); err != nil {
@@ -317,6 +325,7 @@ func (p *Plan) Validate() error {
 				return fmt.Errorf("task %s: mixed operation payloads", t.ID)
 			}
 			if (t.File != nil) != (t.Operation == "file") ||
+				(t.DEB != nil) != (t.Operation == "deb") ||
 				(t.Account != nil) != (t.Operation == "account") ||
 				(t.Artifact != nil) != (t.Operation == "artifact") ||
 				(t.Path != nil) != (t.Operation == "path") ||

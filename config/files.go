@@ -284,7 +284,7 @@ func ownership(f *plan.FileChange) (int, int, error) {
 type Local struct{}
 
 func (Local) Resolve(t plan.Task) ([]plan.Action, error) {
-	if t.Operation != "file" || t.Account != nil || t.Artifact != nil || t.File == nil || t.RPM != nil || t.Process != nil || t.Oneshot != nil {
+	if t.Operation != "file" || t.Account != nil || t.Artifact != nil || t.File == nil || t.RPM != nil || t.Process != nil || t.Oneshot != nil || t.DEB != nil {
 		return nil, fmt.Errorf("unsupported operation %q", t.Operation)
 	}
 	f := t.File

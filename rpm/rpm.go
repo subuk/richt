@@ -164,7 +164,7 @@ func Arguments(c *plan.RPMChange) []string {
 	return append(args, "install-n", "--", c.Package)
 }
 func (b Backend) Resolve(t plan.Task) ([]plan.Action, error) {
-	if t.File != nil || t.Account != nil || t.Artifact != nil || t.Process != nil || t.Oneshot != nil {
+	if t.File != nil || t.Account != nil || t.Artifact != nil || t.Process != nil || t.Oneshot != nil || t.DEB != nil {
 		return nil, errors.New("RPM task contains another operation payload")
 	}
 	if t.Operation != "rpm" {

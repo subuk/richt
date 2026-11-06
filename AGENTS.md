@@ -20,7 +20,7 @@ output in English.
   empty future layers, or speculative interfaces. Add abstractions when an
   implemented boundary needs them.
 - Current execution supports local/SSH transports, explicit noninteractive sudo,
-  bounded host parallelism, DNF4/YUM4, files, systemd and oneshot processes, and
+  bounded host parallelism, DNF4/YUM4 and APT/DEB, files, systemd and oneshot processes, and
   local YAML secret sources. Read [SSH rules](docs/ssh.md) for live client settings and authentication
   and [secret rules](docs/secrets.md) for lookup, sensitivity, and safe diagnostics.
   External secret stores remain later scope.
@@ -41,7 +41,9 @@ output in English.
   Read [lifecycle](docs/services/lifecycle.md) and
   [reactions](docs/services/reactions.md) before changing package/process
   ordering, removal, timeouts, or reload capability checks. Plans fix
-  package requests, while target DNF resolves repository transactions at apply.
+  package requests, while target DNF/APT resolves repository transactions at apply.
+  DEB diff reads installed dpkg state only; conditional APT metadata refresh
+  belongs to each install/version action at apply.
 - Keep schema, examples, guides, and observable CLI behavior consistent when a
   task intentionally changes a contract. Do not silently introduce automatic
   retries, rollback, autosaved plans, or run history.

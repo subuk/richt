@@ -1,0 +1,15 @@
+tags:
+  tools:
+    services:
+      tree: {}
+services:
+  tree:
+    order: 10
+    binaries:
+      - name: package
+        type: deb
+        package: tree
+hosts:
+  - name: debian-example
+    tags: [tools]
+    transport: {type: local, sudo: true}

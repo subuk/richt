@@ -570,11 +570,43 @@ They do not add global rollback, automatic retries or run history. Successful
 tasks remain skipped. The archive tree must not contain application state or
 independently managed configs. Absent follows normal process/config/binary
 ordering and retains the stable metadata lock. Actual artifact changes feed
-the existing restart/reload/oneshot reactions; only RPM changes imply package
+the existing restart/reload/oneshot reactions; RPM and DEB changes imply package
 unit discovery or package-triggered daemon reload.
 
 See [downloaded binaries](../../../../docs/services/binaries/download.md) and
 [archive binaries](../../../../docs/services/binaries/archive.md).
+
+## DEB packages through APT (KRG-101)
+
+`type: deb` extends ordered binaries with native, concrete Debian package names,
+optional `manager: apt`, and an optional exact Debian `version`. Inventory does
+not expose cache, timeout or conffile options. An unversioned installed package
+is preserved; Debian version comparison matches explicit exact requests and
+permits upgrade/downgrade. Virtual packages, architecture selectors and repository
+management are outside this package request.
+
+Diff checks only required capabilities and installed dpkg state. It does not
+query repositories, refresh metadata or resolve dependencies. Saved DEB inputs
+retain fixed policies: cache age `48h`, lock timeout `60s`, total timeout `15m`,
+and conffile policy `keep`. Each apply install/version action checks shared
+metadata freshness and conditionally updates when there is no successful stamp,
+the stamp is old, APT source/config inputs changed, or package list files were
+deleted. Cache state is shared across operations, services and runs; earlier
+service source changes are seen before the next package action. The check and
+possible refresh are displayed within that action. Removal and no-op preparation
+do not refresh. A failed refresh fails the task, preserving ordinary continuation.
+
+APT resolves sources, versions and dependencies at apply. Noninteractive
+transactions retain local conffiles and enforce normal repository trust. There
+is no autoremove, purge, global upgrade or held/untrusted override. DEB changes
+participate in binary reactions, missing-unit discovery, daemon reload and the
+existing declaration/lifecycle order. Required target capabilities are APT 2.2+,
+dpkg/dpkg-query and Python 3.8+ on Linux; unused package managers never block
+other resources. Saved-plan format remains `1.8`.
+
+The [DEB reference](../../../../docs/services/binaries/deb.md) owns exact syntax
+and boundaries. [Linux validation](../../../../docs/validation.md) records actual
+runtime results separately from Go tests and compilation.
 
 ## Later scope
 

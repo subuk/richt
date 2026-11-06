@@ -131,7 +131,8 @@ and resolves paths; rendering, target ownership and permissions, and backend
 capabilities are checked during preparation or execution.
 
 [Services](services/_index.md) owns component behavior and the present/absent
-lifecycle. See [RPM binaries](services/binaries/rpm.md) for package requests,
+lifecycle. See [RPM binaries](services/binaries/rpm.md) and
+[DEB binaries](services/binaries/deb.md) for package requests,
 [downloads](services/binaries/download.md) and [archives](services/binaries/archive.md)
 for checksum-pinned HTTPS artifacts,
 [typed configs](services/configs/_index.md) for paths, storage, mounts, and
@@ -141,7 +142,8 @@ drop-ins, enablement, optional `masked: true|false`, and timeouts.
 [Oneshot processes](services/processes/oneshot.md) declare a direct `command` argv,
 nonempty `run_on` references, and an optional timeout. Validator
 executables are not opened or run by inventory inspection; short and exact RPM
-version syntax and optional `disable_excludes` scope are checked without
+version syntax, exact Debian versions, and optional
+RPM `disable_excludes` scope are checked without
 contacting hosts or repositories. Artifact URLs, checksums and per-type fields
 are structurally checked without contacting download servers. [Reactions](services/reactions.md) defines
 `restart_on`, `reload_on`, and `run_on` references and their validation.
@@ -179,9 +181,10 @@ For a reproducible conflict, add `home` to `lanst.tags` in a copy of the example
 ## Resource ownership
 
 Before service filtering, every assignment of each selected host is checked.
-Different services cannot own the same explicitly declared RPM package,
-normalized absolute file path, or systemd unit, even with identical settings or
-different `present`/`absent` states. DNF and YUM share the RPM package namespace.
+Different services cannot own the same explicitly declared package in its backend
+namespace, normalized absolute file path, or systemd unit, even with identical
+settings or different `present`/`absent` states. DNF and YUM share the RPM package
+namespace. APT uses a separate DEB package namespace.
 Managed unit files and drop-ins also claim their unit, including ordinary
 configs under standard systemd system directories. Exact duplicate file/package
 components within one service and two processes managing the same unit are

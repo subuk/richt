@@ -87,7 +87,8 @@ branches. The component references own their fields and backend limits.
 ## Package requests
 
 [RPM binaries](binaries/rpm.md) support DNF 4 and its YUM 4 compatibility command.
-An unversioned package is installed only if absent; an exact request can upgrade
+[DEB binaries](binaries/deb.md) support APT with exact Debian versions and a
+conditional metadata refresh during apply. An unversioned package is installed only if absent; an exact request can upgrade
 or downgrade. Plans retain the request while the target resolves the transaction
 at apply.
 
