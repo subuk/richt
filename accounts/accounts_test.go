@@ -490,3 +490,248 @@ func TestExistingAccountsWithOmittedIDsRejectNumericConflictsDuringPreparation(t
 		})
 	}
 }
+
+func boolValue(value bool) *bool { return &value }
+func (h *host) addMembership(groupName, userName string) {
+	g := h.groups[groupName]
+	g.members = append(g.members, userName)
+	h.groups[groupName] = g
+}
+
+func TestSupplementaryMembershipModes(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		groups       *[]string
+		appendGroups *bool
+		changed      bool
+	}{
+		{"omitted", nil, nil, false},
+		{"exact empty", list(), nil, true},
+		{"explicit exact empty", list(), boolValue(false), true},
+		{"exact requested subset", list("extra"), boolValue(false), true},
+		{"append empty", list(), boolValue(true), false},
+		{"append existing subset", list("extra"), boolValue(true), false},
+		{"append missing", list("app"), boolValue(true), true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := fixture()
+			h.users["worker"] = user{"worker", 3100, 2100, "/srv/state", "/bin/sh", "existing"}
+			h.groups["other"] = group{"other", 2102, []string{"worker"}}
+			h.addMembership("extra", "worker")
+			a, changed, err := h.backend().Prepare(context.Background(), inventory.Config{Type: "user", User: "worker", Group: "app", SupplementaryGroups: tc.groups, AppendGroups: tc.appendGroups}, "present", nil)
+			if err != nil || changed != tc.changed {
+				t.Fatalf("prepare: changed=%t err=%v", changed, err)
+			}
+			if (a.AppendGroups == nil) != (tc.appendGroups == nil) || a.AppendGroups != nil && *a.AppendGroups != *tc.appendGroups {
+				t.Fatal("membership mode not frozen")
+			}
+			if tc.name == "append missing" && a.Operation != "update" {
+				t.Fatal("primary membership incorrectly counted as supplementary")
+			}
+			if !changed && execute(t, h.backend(), a) != nil {
+				t.Fatal("matching noop failed")
+			}
+		})
+	}
+}
+
+func TestAppendPreservesMembershipsAddedAfterPreparationAndInterruptedUpdate(t *testing.T) {
+	h := fixture()
+	h.users["worker"] = user{"worker", 3100, 2100, "/srv/state", "/bin/sh", "existing"}
+	h.groups["before"] = group{"before", 2102, []string{"worker"}}
+	b := h.backend()
+	a, changed, err := b.Prepare(context.Background(), inventory.Config{Type: "user", User: "worker", Group: "app", SupplementaryGroups: list("extra"), AppendGroups: boolValue(true)}, "present", nil)
+	if err != nil || !changed {
+		t.Fatalf("prepare: %t %v", changed, err)
+	}
+	h.groups["after"] = group{"after", 2103, []string{"worker"}}
+	h.mutate = func(name string, args []string) error {
+		if name != "usermod" || !sameArgs(args, []string{"--gid", "app", "--append", "--groups", "extra", "--", "worker"}) {
+			t.Fatalf("unsafe additive command: %s %#v", name, args)
+		}
+		h.addMembership("extra", "worker")
+		return errors.New("lost reply after update")
+	}
+	actions, err := b.Resolve(plan.Task{Operation: "account", Account: a})
+	if err != nil {
+		t.Fatal(err)
+	}
+	display := strings.Join(actions[0].Description, "\n")
+	if !strings.Contains(display, "append local supplementary groups (preserve other memberships): extra") || !strings.Contains(display, `"--append" "--groups" "extra"`) {
+		t.Fatalf("mode missing from display: %s", display)
+	}
+	if err := execute(t, b, a); err == nil {
+		t.Fatal("command error hidden")
+	}
+	if err := execute(t, b, a); err != nil {
+		t.Fatalf("interrupted update retry: %v", err)
+	}
+	if len(h.mutations()) != 1 {
+		t.Fatal("matching retry repeated mutation")
+	}
+	if changed, err := b.Observe(context.Background(), a); changed || err != nil {
+		t.Fatalf("subset verification: %t %v", changed, err)
+	}
+	s, err := b.read(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameStrings(memberships(s, "worker"), []string{"before", "after", "extra"}) {
+		t.Fatalf("unrequested memberships lost: %#v", memberships(s, "worker"))
+	}
+}
+
+func TestAppendEmptyUpdateChangesOnlyOtherAttributes(t *testing.T) {
+	h := fixture()
+	h.users["worker"] = user{"worker", 3100, 2100, "/srv/state", "/bin/sh", "existing"}
+	h.addMembership("extra", "worker")
+	b := h.backend()
+	a, changed, err := b.Prepare(context.Background(), inventory.Config{Type: "user", User: "worker", Group: "app", Comment: str("new"), SupplementaryGroups: list(), AppendGroups: boolValue(true)}, "present", nil)
+	if err != nil || !changed {
+		t.Fatalf("prepare: %t %v", changed, err)
+	}
+	h.mutate = func(name string, args []string) error {
+		if name != "usermod" || !sameArgs(args, []string{"--gid", "app", "--comment", "new", "--", "worker"}) {
+			t.Fatalf("empty append changed memberships: %s %#v", name, args)
+		}
+		u := h.users["worker"]
+		u.comment = "new"
+		h.users["worker"] = u
+		return nil
+	}
+	if err := execute(t, b, a); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.groups["extra"].members) != 1 {
+		t.Fatal("empty append removed membership")
+	}
+}
+
+func TestAdditiveCreationAndRetry(t *testing.T) {
+	for _, groups := range [][]string{{}, {"extra"}} {
+		t.Run(strings.Join(groups, ","), func(t *testing.T) {
+			h := fixture()
+			b := h.backend()
+			a, changed, err := b.Prepare(context.Background(), inventory.Config{Type: "user", User: "worker", Group: "app", SupplementaryGroups: &groups, AppendGroups: boolValue(true)}, "present", nil)
+			if err != nil || !changed || a.AppendGroups == nil || !*a.AppendGroups || a.SupplementaryGroups == nil {
+				t.Fatalf("prepare: %#v %t %v", a, changed, err)
+			}
+			h.mutate = func(name string, args []string) error {
+				want := []string{"--no-user-group", "--no-create-home", "--password", "!", "--gid", "app", "--home", "/nonexistent", "--shell", "/usr/sbin/nologin", "--comment", "", "--groups", strings.Join(groups, ","), "--", "worker"}
+				if name != "useradd" || !sameArgs(args, want) {
+					t.Fatalf("creation mode command: %s %#v", name, args)
+				}
+				h.users["worker"] = user{"worker", 3100, 2100, "/nonexistent", "/usr/sbin/nologin", ""}
+				for _, g := range groups {
+					h.addMembership(g, "worker")
+				}
+				return errors.New("lost reply after create")
+			}
+			if err := execute(t, b, a); err == nil {
+				t.Fatal("creation failure hidden")
+			}
+			h.groups["unrelated"] = group{"unrelated", 2102, []string{"worker"}}
+			if err := execute(t, b, a); err != nil {
+				t.Fatalf("additive creation retry with extra membership: %v", err)
+			}
+			if len(h.mutations()) != 1 {
+				t.Fatal("creation retry mutated account")
+			}
+			if len(groups) > 0 {
+				g := h.groups[groups[0]]
+				g.members = nil
+				h.groups[groups[0]] = g
+				if err := execute(t, b, a); err == nil {
+					t.Fatal("creation retry accepted missing requested membership")
+				}
+			}
+		})
+	}
+}
+
+func TestAppendGroupsKeepsLocalDependenciesAndProjection(t *testing.T) {
+	for _, setup := range []func(*host){
+		func(h *host) { delete(h.groups, "extra") },
+		func(h *host) { delete(h.groups, "extra"); h.externalGroups["extra"] = group{"extra", 2101, nil} },
+		func(h *host) { h.externalGroups["remote"] = group{"remote", 2101, nil} },
+	} {
+		h := fixture()
+		setup(h)
+		if _, _, err := h.backend().Prepare(context.Background(), inventory.Config{Type: "user", User: "worker", Group: "app", SupplementaryGroups: list("extra"), AppendGroups: boolValue(true)}, "present", nil); err == nil {
+			t.Fatal("invalid additive local dependency accepted")
+		}
+		if len(h.mutations()) != 0 {
+			t.Fatal("preparation mutated accounts")
+		}
+	}
+	h := fixture()
+	b := h.backend()
+	p := &Preparation{}
+	if _, _, err := b.Prepare(context.Background(), inventory.Config{Type: "group", Group: "future"}, "present", p); err != nil {
+		t.Fatal(err)
+	}
+	a, _, err := b.Prepare(context.Background(), inventory.Config{Type: "user", User: "worker", Group: "app", SupplementaryGroups: list("future"), AppendGroups: boolValue(true)}, "present", p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(a.Groups) != 2 || a.Groups[1].Name != "future" || a.Groups[1].GID != nil {
+		t.Fatalf("additive group projection lost: %#v", a.Groups)
+	}
+	p = &Preparation{}
+	if _, _, err := b.Prepare(context.Background(), inventory.Config{Type: "group", Group: "extra"}, "absent", p); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := b.Prepare(context.Background(), inventory.Config{Type: "user", User: "worker", Group: "app", SupplementaryGroups: list("extra"), AppendGroups: boolValue(true)}, "present", p); err == nil {
+		t.Fatal("projected removed supplementary group accepted")
+	}
+}
+
+func TestDeletionDiscardsMembershipIntent(t *testing.T) {
+	h := fixture()
+	h.users["worker"] = user{"worker", 3100, 2100, "/srv/state", "/bin/sh", "existing"}
+	a, _, err := h.backend().Prepare(context.Background(), inventory.Config{Type: "user", User: "worker", Group: "app", SupplementaryGroups: list("missing"), AppendGroups: boolValue(true)}, "absent", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.AppendGroups != nil || a.SupplementaryGroups != nil || len(a.Groups) != 0 {
+		t.Fatalf("deletion retained membership operation: %#v", a)
+	}
+}
+
+func TestExplicitFalseReplacesMembershipsExactly(t *testing.T) {
+	h := fixture()
+	h.users["worker"] = user{"worker", 3100, 2100, "/srv/state", "/bin/sh", "existing"}
+	h.groups["unrelated"] = group{"unrelated", 2102, []string{"worker"}}
+	b := h.backend()
+	a, changed, err := b.Prepare(context.Background(), inventory.Config{Type: "user", User: "worker", Group: "app", SupplementaryGroups: list("extra"), AppendGroups: boolValue(false)}, "present", nil)
+	if err != nil || !changed {
+		t.Fatalf("prepare: %t %v", changed, err)
+	}
+	h.mutate = func(name string, args []string) error {
+		if name != "usermod" || !sameArgs(args, []string{"--gid", "app", "--groups", "extra", "--", "worker"}) {
+			t.Fatalf("unexpected exact command: %s %#v", name, args)
+		}
+		h.addMembership("extra", "worker")
+		g := h.groups["unrelated"]
+		g.members = nil
+		h.groups["unrelated"] = g
+		return nil
+	}
+	actions, err := b.Resolve(plan.Task{Operation: "account", Account: a})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.Join(actions[0].Description, "\n"), "exact local supplementary groups: extra") {
+		t.Fatal("explicit false display lost exact mode")
+	}
+	if err := execute(t, b, a); err != nil {
+		t.Fatal(err)
+	}
+	if changed, err := b.Observe(context.Background(), a); changed || err != nil {
+		t.Fatalf("exact result: %t %v", changed, err)
+	}
+	h.addMembership("unrelated", "worker")
+	if changed, err := b.Observe(context.Background(), a); !changed || err != nil {
+		t.Fatalf("exact mode accepted extra membership: %t %v", changed, err)
+	}
+}

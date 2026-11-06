@@ -35,7 +35,7 @@ func ValidateAccountConfig(c Config) error {
 		return err
 	}
 	if c.Type == "group" {
-		if c.User != "" || c.UID != nil || c.Home != "" || c.Shell != "" || c.Comment != nil || c.SupplementaryGroups != nil {
+		if c.User != "" || c.UID != nil || c.Home != "" || c.Shell != "" || c.Comment != nil || c.SupplementaryGroups != nil || c.AppendGroups != nil {
 			return fmt.Errorf("group config cannot set user fields")
 		}
 		if c.Group == "root" {
@@ -66,6 +66,9 @@ func ValidateAccountConfig(c Config) error {
 	if c.Comment != nil && (strings.ContainsRune(*c.Comment, ':') || strings.IndexFunc(*c.Comment, unicode.IsControl) >= 0) {
 		return fmt.Errorf("comment: colons and control characters are prohibited")
 	}
+	if c.AppendGroups != nil && c.SupplementaryGroups == nil {
+		return fmt.Errorf("append_groups requires supplementary_groups")
+	}
 	if c.SupplementaryGroups != nil {
 		seen := map[string]bool{}
 		for _, group := range *c.SupplementaryGroups {
@@ -82,5 +85,5 @@ func ValidateAccountConfig(c Config) error {
 }
 
 func hasAccountFields(c Config) bool {
-	return c.User != "" || c.UID != nil || c.GID != nil || c.System != nil || c.Home != "" || c.Shell != "" || c.Comment != nil || c.SupplementaryGroups != nil
+	return c.User != "" || c.UID != nil || c.GID != nil || c.System != nil || c.Home != "" || c.Shell != "" || c.Comment != nil || c.SupplementaryGroups != nil || c.AppendGroups != nil
 }

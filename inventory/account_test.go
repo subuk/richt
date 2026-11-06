@@ -98,3 +98,24 @@ func TestAccountsConflictWithWholeAccountDatabaseOwnership(t *testing.T) {
 		}
 	}
 }
+
+func TestAppendGroupsValidation(t *testing.T) {
+	for _, value := range []bool{false, true} {
+		for _, groups := range [][]string{{}, {"extra"}} {
+			if err := validateConfig(Config{Type: "user", User: "app", Group: "app", SupplementaryGroups: &groups, AppendGroups: &value}); err != nil {
+				t.Fatalf("valid mode %t: %v", value, err)
+			}
+		}
+		for _, c := range []Config{
+			{Type: "user", User: "app", Group: "app", AppendGroups: &value},
+			{Type: "group", Group: "app", AppendGroups: &value},
+			{Type: "file", Path: "/tmp/file", AppendGroups: &value},
+			{Type: "directory", Path: "/tmp/dir", AppendGroups: &value},
+			{Type: "mount", Source: "/dev/test", Target: "/mnt/test", AppendGroups: &value},
+		} {
+			if err := validateConfig(c); err == nil {
+				t.Fatalf("invalid mode accepted: %#v", c)
+			}
+		}
+	}
+}

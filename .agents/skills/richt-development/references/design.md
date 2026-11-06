@@ -185,12 +185,24 @@ namespace with a private login.defs policy; host policy is unchanged. This
 requires the documented namespace capability. Changing a user's primary group
 retains shadow-utils' documented home-file group ownership side effect.
 
-The account operation was introduced in version 1.6 and is retained in 1.7. It fixes creation,
+KRG-105 adds optional `append_groups` to user configs alongside
+`supplementary_groups`. True ensures the listed local supplementary memberships
+while preserving all others, including additions after preparation. False or
+omission retains exact-list behavior. An explicit flag requires a list; an
+empty list clears memberships in exact mode and is a membership no-op in append
+mode. Omitted membership settings remain unmanaged. Primary membership does
+not implicitly satisfy a supplementary request. Existing local/NSS checks and
+preceding-group projection also apply to additive requests. Plans freeze the
+list and mode; append execution and unfinished retries verify a subset instead
+of an exact set. Service recipes remain responsible for restarting processes
+to acquire changed credentials.
+
+The account operation was introduced in version 1.6 and is retained in 1.8. It fixes creation,
 update or deletion inputs, existing numeric identities and group dependencies.
 Execution checks those preconditions and verifies results; an unfinished task
 may accept its already matching result. Automatic IDs are allocated at apply,
-so creation retries cannot distinguish an independently created account with
-exactly the same requested attributes. Passwords, external directory services,
+so creation retries cannot distinguish an independently created account that
+satisfies the same requested attributes and membership mode. Passwords, external directory services,
 SSH keys, account expiry and login policy remain outside this extension.
 
 ## Executable plans and progress
@@ -203,7 +215,7 @@ inclusion filters in that scope. Omission preserves backend defaults; changing
 only the override never changes installed-package matching or triggers a
 reinstall/reaction. Prepared plans display and freeze the value. This additive
 optional input was introduced in saved format 1.5 and remains supported in the
-current 1.7 schema.
+current 1.8 schema.
 
 Preparation and diff do not change managed resources. A plan fixes host targets,
 task order, operations, ready file contents/patches and attributes, explicit
@@ -223,7 +235,7 @@ not reasons to recalculate tasks. Other incompatible backend semantics fail. Pro
 result verification remain execution operations. Successful tasks are not
 rechecked during continuation.
 
-The current saved format is strict, indented JSON schema version `1.7`.
+The current saved format is strict, indented JSON schema version `1.8`.
 This is a breaking change: reject every older version before execution, with a
 clear instruction to prepare a new plan. There is no migration or legacy
 execution path. Task IDs use original zero-based list positions and operations,

@@ -1,6 +1,10 @@
 package plan
 
-import "testing"
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+)
 
 func accountNumber(v uint32) *uint32 { return &v }
 func validAccountPlan() *AccountChange {
@@ -93,5 +97,50 @@ func TestGroupPlanRejectsUserAndAbsentFields(t *testing.T) {
 				t.Fatal("malformed group plan accepted")
 			}
 		})
+	}
+}
+
+func TestAccountMembershipModeValidationAndJSON(t *testing.T) {
+	for _, value := range []bool{false, true} {
+		a := validAccountPlan()
+		a.AppendGroups = &value
+		if err := a.Validate(); err != nil {
+			t.Fatal(err)
+		}
+		data, err := json.Marshal(a)
+		if err != nil || !strings.Contains(string(data), `"append_groups":`) {
+			t.Fatalf("mode lost: %s %v", data, err)
+		}
+		var decoded AccountChange
+		if err := json.Unmarshal(data, &decoded); err != nil {
+			t.Fatal(err)
+		}
+		if decoded.AppendGroups == nil || *decoded.AppendGroups != value {
+			t.Fatal("mode lost in JSON round trip")
+		}
+		a.Operation = "update"
+		a.Expected = &AccountIdentity{UID: 1001, GID: 1001}
+		a.SupplementaryGroups = nil
+		if err := a.Validate(); err == nil {
+			t.Fatal("mode without memberships accepted")
+		}
+		g := &AccountChange{Kind: "group", Name: "app", State: "present", Operation: "create", AppendGroups: &value}
+		if err := g.Validate(); err == nil {
+			t.Fatal("membership mode on group accepted")
+		}
+		a = &AccountChange{Kind: "user", Name: "app", State: "absent", Operation: "delete", Expected: &AccountIdentity{UID: 1001, GID: 1001}, AppendGroups: &value}
+		if err := a.Validate(); err == nil {
+			t.Fatal("membership mode on deletion accepted")
+		}
+	}
+	for _, raw := range []string{`null`, `"true"`, `1`, `[]`, `{}`} {
+		var a AccountChange
+		if err := json.Unmarshal([]byte(`{"append_groups":`+raw+`}`), &a); err == nil {
+			t.Fatalf("invalid mode accepted: %s", raw)
+		}
+	}
+	var a AccountChange
+	if err := json.Unmarshal([]byte(`{"append_groups":true,"unexpected":true}`), &a); err == nil {
+		t.Fatal("unknown account field accepted")
 	}
 }

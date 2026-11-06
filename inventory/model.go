@@ -109,6 +109,7 @@ type Config struct {
 	Shell               string     `json:"shell,omitempty" yaml:"shell"`
 	Comment             *string    `json:"comment,omitempty" yaml:"comment"`
 	SupplementaryGroups *[]string  `json:"supplementary_groups,omitempty" yaml:"supplementary_groups"`
+	AppendGroups        *bool      `json:"append_groups,omitempty" yaml:"append_groups"`
 }
 
 // Validator checks a prepared candidate on the target before its content is written.

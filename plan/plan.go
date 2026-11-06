@@ -17,7 +17,7 @@ import (
 	"github.com/subuk/richt/inventory"
 )
 
-const Version = "1.7"
+const Version = "1.8"
 
 type Plan struct {
 	Version string `json:"version"`

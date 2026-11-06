@@ -45,6 +45,9 @@ checks, and branches, and trust its source before applying it.
 Local account operations also freeze the user/group name, explicit IDs and
 attributes, membership intent, observed identity, and allowed before/after
 states. Omitted optional fields remain unmanaged for existing accounts.
+User plans retain `append_groups` with the requested supplementary groups.
+Append mode preserves unrelated memberships, including those added after diff;
+verification requires the listed memberships without requiring an exact set.
 
 ## Frozen inputs and execution boundaries
 
@@ -154,8 +157,9 @@ partial-failure example.
 
 ## Plan format and security
 
-Saved plans use strict, indented JSON schema version `1.7`. This is a breaking
-format change: all older versions, including `1.5` and `1.6`, are rejected before
+Saved plans use strict, indented JSON schema version `1.8`. This adds explicit
+supplementary membership mode to user operations. It is a breaking format
+change: all older versions, including `1.7`, are rejected before
 execution with an instruction to prepare a new plan. There is no migration or
 legacy execution path. Unknown fields, incompatible versions, invalid
 operations, missing required file inputs, and malformed progress are rejected.
@@ -182,14 +186,14 @@ A oneshot task uses operation `oneshot`; its `oneshot` payload holds `command`,
 can also include orchestration tasks such as daemon reload.
 Operation `artifact` carries the pinned download/archive request, provenance
 token, observed identity and safe publication preconditions. It is supported
-in version `1.7`. Artifact bytes and extracted trees are absent from JSON.
+in version `1.8`. Artifact bytes and extracted trees are absent from JSON.
 Operations `path`, `storage`, and `mount` carry their corresponding typed
 payloads. Preparation can account for a device or empty filesystem produced by
 an earlier config without probing a resource that does not exist yet. Applying
 that plan still follows its original list order and verifies the saved inputs.
 
 Operation `account` carries local user/group requests, observed identity and
-before/after preconditions, within the current version `1.7` schema.
+before/after preconditions, within the current version `1.8` schema.
 
 Saved JSON contains real rendered text and patches, including old and new
 secret bytes. Sensitive display does not remove them from executable inputs.

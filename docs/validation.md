@@ -4,6 +4,40 @@ description: "Recorded Linux acceptance results, environment, commands, and limi
 weight: 120
 ---
 
+## Additive local memberships — 2026-11-06
+
+KRG-105 was validated on an authorized AlmaLinux 10.2 x86_64 host with
+shadow-utils 4.15.0, glibc 2.39, systemd 257 and SELinux Enforcing. Source was
+`94a6ca92b9d2` plus the additive membership changes recorded with this report.
+The Linux binary SHA-256 was
+`3d9e321352e5af82b179f8da86d6032adbc6da64ef1feeecb126cb3fc9f70943`;
+the macOS SSH controller binary was
+`4b702b127f9008fd2dda8e4d6f54401b393fd3c31696d56ecbba57620ee51f8a`.
+
+| Suite | Result |
+| --- | --- |
+| Extended local account CLI harness | 29 checks passed |
+| Extended account CLI over SSH and explicit sudo | 29 checks passed |
+| Existing file/SELinux/progress/secret regression | 18 checks passed |
+| Existing oneshot and systemd process regression | 28 checks passed; no package transaction requested |
+| Repository verification | `make check`, `make docs-check`, and `go test -race ./accounts ./plan ./engine` passed |
+
+The account harness verifies frozen append intent, preservation of memberships
+added between diff and apply, apply without inventory, an empty subsequent
+diff, interrupted update and creation continuation with extra memberships,
+empty additive lists during attribute changes, and explicit false restoring
+exact-list clearing. Existing account creation, ownership, removal, identity
+checks and login.defs preservation remain covered. Go tests additionally cover
+strict YAML/JSON mode validation, local/NSS conflicts, preceding-group
+projection, primary-group separation and rejection of saved format `1.7`.
+Both account runs removed their unique users, groups and managed files, and
+verified that host login.defs stayed unchanged. Private command logs, saved
+plans and reports were retained for diagnosis.
+
+The account harness is `tests/integration/accounts.py`; use the local and
+SSH/sudo commands below on an authorized target. This coverage does not claim
+external directory mutation support or validation on other distributions.
+
 ## Local accounts — 2026-11-03
 
 User/group configs were exercised on an authorized AlmaLinux 10.2 x86_64 host

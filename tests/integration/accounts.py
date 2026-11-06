@@ -28,6 +28,8 @@ def main():
     binary = str(Path(args.binary).resolve())
     name = "rct_" + uuid.uuid4().hex[:12]
     extra = name + "_extra"
+    preserved = name + "_preserved"
+    intervening = name + "_intervening"
     root = "/var/tmp/" + name
     checks = []
     sequence = 0
@@ -106,7 +108,7 @@ def main():
     configs = [group, supplementary, user, directory, template, plain]
     fixtures_owned = False
     try:
-        target(f"if getent passwd {name}; then exit 1; fi; if getent group {name}; then exit 1; fi; if getent group {extra}; then exit 1; fi; test ! -e {root}")
+        target(f"if getent passwd {name}; then exit 1; fi; if getent group {name}; then exit 1; fi; if getent group {extra}; then exit 1; fi; if getent group {preserved}; then exit 1; fi; if getent group {intervening}; then exit 1; fi; test ! -e {root}")
         policy_before = target("sha256sum /etc/login.defs").stdout
         target(f"mkdir -m 0700 {root}")
         fixtures_owned = True
@@ -152,6 +154,30 @@ def main():
         check("explicit empty memberships clear local groups and updates can continue")
         check("changed account triggers one reaction; noop and retries do not repeat it",
               target(f"wc -l < {root}/events").stdout.strip() == "2")
+        target(f"groupadd {preserved}; groupadd {intervening}; usermod --append --groups {preserved} {name}")
+        additive = dict(updated, supplementary_groups=[extra], append_groups=True)
+        additive_plan = prepare("append", [additive])
+        account = next(t["account"] for t in tasks(additive_plan) if t["operation"] == "account")
+        check("saved additive plan freezes requested membership mode", account["append_groups"] is True and account["supplementary_groups"] == [extra])
+        target(f"usermod --append --groups {intervening} {name}")
+        (output / "append.yaml").unlink()
+        apply(additive_plan)
+        for membership in [extra, preserved, intervening]:
+            target(f"test \"$(getent -s files group {membership} | cut -d: -f4)\" = {name}")
+        check("additive saved apply preserves preexisting and intervening memberships without inventory")
+        apply(replay(additive_plan, "interrupted-append"))
+        check("additive continuation accepts requested subset with unrelated memberships")
+        check("additive subset is idempotent", not tasks(prepare("append-noop", [additive])))
+        empty_append = dict(additive, supplementary_groups=[])
+        check("empty additive list preserves all memberships", not tasks(prepare("append-empty-noop", [empty_append])))
+        apply(prepare("append-empty-update", [dict(empty_append, comment="empty append update")]))
+        for membership in [extra, preserved, intervening]:
+            target(f"test \"$(getent -s files group {membership} | cut -d: -f4)\" = {name}")
+        check("empty additive list does not change memberships during an attribute update")
+        apply(prepare("explicit-exact-clear", [dict(updated, append_groups=False)]))
+        for membership in [extra, preserved, intervening]:
+            target(f"test \"$(getent -s files group {membership} | cut -d: -f4)\" = ''")
+        check("explicit false with an empty list clears every local supplementary membership")
         target(f"mkdir {root}/home; printf retained > {root}/home/marker")
         deletion = prepare("user-delete", [updated], "absent")
         apply(deletion)
@@ -159,12 +185,19 @@ def main():
         apply(replay(deletion, "interrupted-delete"))
         check("user deletion preserves same-name group and home data and can continue")
         # Recreate the user and prepare full reverse removal.
-        apply(prepare("recreate", [updated]))
+        recreated = prepare("recreate", [dict(updated, supplementary_groups=[extra], append_groups=True)])
+        apply(recreated)
+        target(f"usermod --append --groups {preserved} {name}")
+        apply(replay(recreated, "interrupted-additive-create"))
+        target(f"test \"$(getent -s files group {extra} | cut -d: -f4)\" = {name}; "
+               f"test \"$(getent -s files group {preserved} | cut -d: -f4)\" = {name}")
+        check("additive creation retry preserves unrelated memberships added after creation")
+        target(f"groupdel {preserved}; groupdel {intervening}")
         absent = prepare("absent", configs, "absent")
         account_tasks = [t["account"] for t in tasks(absent) if t["operation"] == "account"]
         check("absent order deletes users before groups", [t["kind"] for t in account_tasks] == ["user", "group", "group"])
         apply(absent)
-        target(f"if getent passwd {name}; then exit 1; fi; if getent group {name}; then exit 1; fi; if getent group {extra}; then exit 1; fi; test ! -e {root}/data; test -f {root}/home/marker")
+        target(f"if getent passwd {name}; then exit 1; fi; if getent group {name}; then exit 1; fi; if getent group {extra}; then exit 1; fi; if getent group {preserved}; then exit 1; fi; if getent group {intervening}; then exit 1; fi; test ! -e {root}/data; test -f {root}/home/marker")
         check("full absence removes only declared accounts and filesystem resources")
         check("repeated absent diff is empty after owners disappear", not tasks(prepare("absent-noop", configs, "absent")))
         explicit_id = uid + 200000
@@ -193,6 +226,8 @@ def main():
             target(f"if getent -s files passwd {name} >/dev/null; then userdel {name}; fi; "
                    f"if getent -s files group {name} >/dev/null; then groupdel {name}; fi; "
                    f"if getent -s files group {extra} >/dev/null; then groupdel {extra}; fi; "
+                   f"if getent -s files group {preserved} >/dev/null; then groupdel {preserved}; fi; "
+                   f"if getent -s files group {intervening} >/dev/null; then groupdel {intervening}; fi; "
                    f"rm -rf --one-file-system -- {root}")
 
 

@@ -75,7 +75,11 @@ func Resolve(t plan.Task) ([]plan.Action, error) {
 		description = append(description, "comment "+*a.Comment)
 	}
 	if a.SupplementaryGroups != nil {
-		description = append(description, "exact local supplementary groups: "+strings.Join(*a.SupplementaryGroups, ","))
+		mode := "exact local supplementary groups: "
+		if a.AppendGroups != nil && *a.AppendGroups {
+			mode = "append local supplementary groups (preserve other memberships): "
+		}
+		description = append(description, mode+strings.Join(*a.SupplementaryGroups, ","))
 	}
 	if a.Operation == "delete" && a.Kind == "user" {
 		description = append(description, "preserve home and groups; userdel in private mount namespace with private USERGROUPS_ENAB=no policy (requires unshare/mount privilege)")
@@ -307,7 +311,13 @@ func command(a *plan.AccountChange) (string, []string) {
 			args = append(args, "--comment", *a.Comment)
 		}
 		if a.SupplementaryGroups != nil {
-			args = append(args, "--groups", strings.Join(*a.SupplementaryGroups, ","))
+			additive := a.AppendGroups != nil && *a.AppendGroups
+			if a.Operation == "create" || !additive || len(*a.SupplementaryGroups) > 0 {
+				if a.Operation != "create" && additive {
+					args = append(args, "--append")
+				}
+				args = append(args, "--groups", strings.Join(*a.SupplementaryGroups, ","))
+			}
 		}
 	}
 	args = append(args, "--", a.Name)

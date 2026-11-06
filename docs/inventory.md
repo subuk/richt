@@ -151,9 +151,12 @@ Components have no dependency graph.
 
 [Local user and group configs](services/configs/accounts.md) accept `type: user`
 with required `user` and primary `group`, or `type: group` with required `group`.
-Optional `uid`/`gid`, `system`, home/shell/comment and exact supplementary
+Optional `uid`/`gid`, `system`, home/shell/comment and supplementary
 membership have strict per-type fields. Omitted memberships preserve existing
-state; `supplementary_groups: []` explicitly clears local memberships. Inventory
+state. `supplementary_groups` manages an exact list by default;
+`append_groups: true` adds the listed memberships while preserving others. An explicit flag
+requires the list. `supplementary_groups: []` clears local memberships in exact
+mode and leaves them unchanged in append mode. Inventory
 inspection checks structure only and never resolves target accounts.
 
 ## Variable merging

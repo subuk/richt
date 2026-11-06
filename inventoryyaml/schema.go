@@ -357,7 +357,7 @@ func configSchema(node *yaml.Node) error {
 		"lvm-vg":    "vg devices",
 		"lvm-lv":    "vg lv size filesystem",
 		"mount":     "source target filesystem options",
-		"user":      "user uid group system home shell comment supplementary_groups",
+		"user":      "user uid group system home shell comment supplementary_groups append_groups",
 		"group":     "group gid system",
 	}
 	list, ok := allowed[typ]
@@ -377,9 +377,9 @@ func configSchema(node *yaml.Node) error {
 			switch key {
 			case "uid", "gid":
 				return integer(value, "config "+key)
-			case "system":
+			case "system", "append_groups":
 				if value.Kind != yaml.ScalarNode || value.Tag != "!!bool" {
-					return fmt.Errorf("line %d: config system must be a boolean", value.Line)
+					return fmt.Errorf("line %d: config %s must be a boolean", value.Line, key)
 				}
 			case "supplementary_groups":
 				return stringList(value, "config supplementary_groups")

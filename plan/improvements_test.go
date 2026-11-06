@@ -12,7 +12,7 @@ import (
 )
 
 func TestSupportedPlanVersionsAreAccepted(t *testing.T) {
-	for _, version := range []string{"", "1.0", "1.1", "1.2", "1.3", "999", "1.4", "1.5", "1.6", plan.Version} {
+	for _, version := range []string{"", "1.0", "1.1", "1.2", "1.3", "999", "1.4", "1.5", "1.6", "1.7", plan.Version} {
 		p := &plan.Plan{Version: version, Hosts: []plan.Host{}}
 		err := p.Validate()
 		if (err != nil) != (version != plan.Version) {

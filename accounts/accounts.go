@@ -332,6 +332,7 @@ func (b Backend) Prepare(ctx context.Context, c inventory.Config, state string, 
 			a.Shell = c.Shell
 			a.Comment = c.Comment
 			a.SupplementaryGroups = c.SupplementaryGroups
+			a.AppendGroups = c.AppendGroups
 			if !exists {
 				a.Operation = "create"
 				a.System = c.System
@@ -490,5 +491,24 @@ func matches(s snapshot, a *plan.AccountChange) bool {
 	if a.Comment != nil && *a.Comment != u.comment {
 		return false
 	}
-	return a.SupplementaryGroups == nil || sameStrings(*a.SupplementaryGroups, memberships(s, a.Name))
+	if a.SupplementaryGroups == nil {
+		return true
+	}
+	actual := memberships(s, a.Name)
+	if a.AppendGroups != nil && *a.AppendGroups {
+		for _, requested := range *a.SupplementaryGroups {
+			found := false
+			for _, name := range actual {
+				if name == requested {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return false
+			}
+		}
+		return true
+	}
+	return sameStrings(*a.SupplementaryGroups, actual)
 }

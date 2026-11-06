@@ -1,7 +1,11 @@
 # Local account example
 
-This example creates two local groups and one local system user, sets an exact
-supplementary membership, then creates a directory and file owned by that user.
+This example creates two local groups and one local system user, ensures a
+supplementary membership while preserving any others, then creates a directory
+and file owned by that user. `append_groups: true` selects additive membership;
+false or omission makes `supplementary_groups` an exact list. An explicit flag
+requires the list. An empty list does nothing in append mode and clears local
+supplementary memberships in exact mode.
 Use a disposable Linux host with GNU/glibc `getent -s files`, shadow account
 utilities, and root privileges. User removal additionally needs util-linux
 `unshare`/`mount` and mount namespace privilege. This example does not create a

@@ -1,6 +1,8 @@
 package plan
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"strings"
@@ -24,7 +26,32 @@ type AccountChange struct {
 	Shell               string           `json:"shell,omitempty"`
 	Comment             *string          `json:"comment,omitempty"`
 	SupplementaryGroups *[]string        `json:"supplementary_groups,omitempty"`
+	AppendGroups        *bool            `json:"append_groups,omitempty"`
 	Groups              []AccountGroup   `json:"groups,omitempty"`
+}
+
+// UnmarshalJSON retains explicit membership mode and rejects null mode values.
+func (c *AccountChange) UnmarshalJSON(data []byte) error {
+	type plain AccountChange
+	var decoded plain
+	wire := struct {
+		*plain
+		AppendGroups json.RawMessage `json:"append_groups"`
+	}{plain: &decoded}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&wire); err != nil {
+		return errors.New("invalid account JSON")
+	}
+	if wire.AppendGroups != nil {
+		var value *bool
+		if err := json.Unmarshal(wire.AppendGroups, &value); err != nil || value == nil {
+			return errors.New("account append_groups must be a boolean when supplied")
+		}
+		decoded.AppendGroups = value
+	}
+	*c = AccountChange(decoded)
+	return nil
 }
 
 type AccountIdentity struct {
@@ -83,11 +110,11 @@ func (c *AccountChange) Validate() error {
 	if c.System != nil && c.Operation != "create" {
 		return errors.New("system allocation is valid only for account creation")
 	}
-	if c.State == "absent" && (c.UID != nil || c.GID != nil || c.System != nil || c.PrimaryGroup != "" || c.Home != "" || c.Shell != "" || c.Comment != nil || c.SupplementaryGroups != nil || len(c.Groups) != 0) {
+	if c.State == "absent" && (c.UID != nil || c.GID != nil || c.System != nil || c.PrimaryGroup != "" || c.Home != "" || c.Shell != "" || c.Comment != nil || c.SupplementaryGroups != nil || c.AppendGroups != nil || len(c.Groups) != 0) {
 		return errors.New("creation fields on absent account plan")
 	}
 	if c.Kind == "group" {
-		if c.UID != nil || c.PrimaryGroup != "" || c.Home != "" || c.Shell != "" || c.Comment != nil || c.SupplementaryGroups != nil || len(c.Groups) != 0 {
+		if c.UID != nil || c.PrimaryGroup != "" || c.Home != "" || c.Shell != "" || c.Comment != nil || c.SupplementaryGroups != nil || c.AppendGroups != nil || len(c.Groups) != 0 {
 			return errors.New("user fields on group plan")
 		}
 		if c.Expected != nil && c.GID != nil && *c.GID != c.Expected.GID {
@@ -117,6 +144,9 @@ func (c *AccountChange) Validate() error {
 	}
 	if c.Operation == "create" && c.SupplementaryGroups == nil {
 		return errors.New("account creation requires frozen supplementary groups")
+	}
+	if c.AppendGroups != nil && c.SupplementaryGroups == nil {
+		return errors.New("append_groups requires supplementary_groups in account plan")
 	}
 	refs := map[string]bool{}
 	if c.PrimaryGroup != "" {

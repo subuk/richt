@@ -23,6 +23,7 @@ services:
         shell: /usr/sbin/nologin
         comment: "Richt account example"
         supplementary_groups: [richt-example-extra]
+        append_groups: true
       - name: data
         type: directory
         path: /var/tmp/richt-account-example

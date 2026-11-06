@@ -1,6 +1,6 @@
 ---
 title: "Local users and groups"
-description: "Manage local account identities, attributes, and exact supplementary memberships."
+description: "Manage local account identities, attributes, and exact or additive supplementary memberships."
 weight: 30
 ---
 
@@ -43,7 +43,8 @@ configs:
 | `home` | User | Optional absolute home path recorded in the account database |
 | `shell` | User | Optional absolute login-shell path |
 | `comment` | User | Optional comment; `""` explicitly clears it |
-| `supplementary_groups` | User | Optional exact list of local supplementary groups; `[]` explicitly clears it |
+| `supplementary_groups` | User | Optional list of local supplementary groups; exact unless `append_groups: true` |
+| `append_groups` | User | Optional boolean; true adds the listed memberships while preserving others; false or omission manages the exact list |
 
 Omitted home, shell, comment, and supplementary groups preserve existing
 attributes. New users default to home `/nonexistent`, shell
@@ -86,7 +87,33 @@ explicit [noninteractive sudo](../../ssh.md) boundary.
 The primary group and every declared supplementary group must be local groups
 or outputs of preceding group configs. Supplementary membership manages only
 the local group database and never edits directory-service groups. Omission
-preserves supplementary memberships; a supplied list replaces them exactly.
+preserves supplementary memberships; a supplied list replaces them exactly
+unless `append_groups: true` is set. An explicit `append_groups` value requires
+`supplementary_groups`, even when the flag is false. An empty list clears local
+supplementary memberships in exact mode and leaves them unchanged in append
+mode. Primary group membership is separate and does not implicitly satisfy a
+requested supplementary membership.
+
+For example, grant a service account access to an existing local `libvirt`
+group while retaining memberships assigned by administrators or other software:
+
+```yaml
+configs:
+  - type: user
+    user: vmango
+    group: vmango
+    supplementary_groups: [libvirt]
+    append_groups: true
+```
+
+The primary `vmango` group and supplementary `libvirt` group must exist locally
+or be created by earlier configs. For a new user, the listed memberships are
+set during creation. For an existing user, append mode uses
+`usermod --append --groups` and verifies that all requested memberships exist;
+additional memberships are allowed. A fresh diff is empty once the requested
+attributes and memberships match. Restarting a running service to acquire its
+new credentials belongs to the service recipe; named account configs can use
+the usual process reactions.
 
 Declare groups before users, then files/directories owned by those users and
 groups. Preparation projects preceding account changes, so a file can refer to
@@ -127,11 +154,14 @@ Preparation observes local state and freezes the requested account operation,
 identity, attributes, membership intent, and safety preconditions. Apply does
 not reload inventory or prepare a new diff. It checks the saved preconditions
 and NSS conflicts before mutation, then verifies the resulting local account
-and explicitly managed attributes. Unexpected replacement accounts or changed
+and explicitly managed attributes. Append mode freezes the requested additions,
+not a copy of the user's observed group set, so unrelated memberships added
+between preparation and apply survive. Its result check and unfinished-task
+continuation allow additional memberships. Unexpected replacement accounts or changed
 identities fail safely. An unfinished task can recognize its requested result
 after interruption; automatic ID allocation still occurs on the target.
-A creation retry accepts an existing account that exactly matches the frozen
-requested attributes. It cannot distinguish its own interrupted creation from
+A creation retry accepts an existing account that satisfies the frozen
+requested attributes and membership mode. It cannot distinguish its own interrupted creation from
 an independently created matching account, especially when the numeric ID was
 allocated automatically.
 
