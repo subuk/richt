@@ -238,7 +238,7 @@ units and drop-ins. No persistent secret history is kept.
 
 Sensitivity controls display, while target permissions are separately declared.
 New targets default to mode 0644; specify `mode: "0600"` for private files.
-See [YAML secrets](secrets.md) and [file configs](services/configs/files.md) for
+See [Secrets](secrets.md) and [file configs](services/configs/files.md) for
 source lookup, safe diagnostics, target writes, and attributes. The
 [isolated secret example](../examples/secrets/README.md) uses fictional values.
 

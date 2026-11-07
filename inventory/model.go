@@ -140,10 +140,11 @@ type Process struct {
 	Overrides map[string]Config `json:"overrides,omitempty" yaml:"overrides"`
 }
 
-// SecretSource is a declaration only. Inventory resolution never reads its file.
+// SecretSource is a declaration only. Inventory resolution never reads its values.
 type SecretSource struct {
-	Type string `json:"type" yaml:"type"`
-	File string `json:"file" yaml:"file"`
+	Type string            `json:"type" yaml:"type"`
+	File string            `json:"file,omitempty" yaml:"file"`
+	Env  map[string]string `json:"env,omitempty" yaml:"env"`
 }
 
 type Selectors struct{ Hosts, Tags, Services []string }

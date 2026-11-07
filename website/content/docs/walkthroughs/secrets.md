@@ -1,5 +1,5 @@
 ---
-title: Two YAML secret sources
+title: YAML and environment secrets
 weight: 50
 sourceDir: examples/secrets
 ---

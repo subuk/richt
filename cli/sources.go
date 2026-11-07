@@ -11,6 +11,7 @@ import (
 	"unicode"
 
 	"github.com/subuk/richt/inventory"
+	"github.com/subuk/richt/inventoryyaml"
 	"github.com/subuk/richt/source"
 	"go.yaml.in/yaml/v3"
 )
@@ -52,6 +53,17 @@ func loadSourceConfig(filename string) (*source.Client, map[string]inventory.Sec
 		if err != nil {
 			return nil, nil, errors.New("source config: cannot read local settings (maximum 1 MiB)")
 		}
+		var declarations struct {
+			SecretSources yaml.Node `yaml:"secret_sources"`
+		}
+		if err := yaml.Unmarshal(data, &declarations); err != nil {
+			return nil, nil, errors.New("source config: invalid YAML settings")
+		}
+		if declarations.SecretSources.Kind != 0 {
+			if err := inventoryyaml.ValidateSecretSourceDeclarations(&declarations.SecretSources); err != nil {
+				return nil, nil, errors.New("source config: invalid secret source declarations")
+			}
+		}
 		decoder := yaml.NewDecoder(bytes.NewReader(data))
 		decoder.KnownFields(true)
 		if err := decoder.Decode(&settings); err != nil {
@@ -87,12 +99,14 @@ func loadSourceConfig(filename string) (*source.Client, map[string]inventory.Sec
 			options.Auth = append(options.Auth, a)
 		}
 		for name, binding := range settings.SecretSources {
-			if binding.Type != "yaml" || binding.File == "" {
-				return nil, nil, errors.New("source config: secret sources require type yaml and a local file")
+			if err := inventory.ValidateSecretSource(name, binding); err != nil {
+				return nil, nil, errors.New("source config: invalid secret source declaration")
 			}
-			binding.File, err = clientPath(filename, binding.File)
-			if err != nil {
-				return nil, nil, errors.New("source config: secret source file must be a local path")
+			if binding.Type == "yaml" {
+				binding.File, err = clientPath(filename, binding.File)
+				if err != nil {
+					return nil, nil, errors.New("source config: secret source file must be a local path")
+				}
 			}
 			settings.SecretSources[name] = binding
 		}

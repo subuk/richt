@@ -28,7 +28,7 @@ modify managed resources. `-o` writes the plan file as an explicit output.
 | --- | --- |
 | `-i PATH_OR_URL`, `--inventory PATH_OR_URL` | Local YAML inventory or absolute HTTPS URL; defaults to `inventory.yaml` in the current directory. |
 | `--inventory-sha256 HEX` | Optional expected SHA-256 of an HTTPS root inventory; rejected for local inventory. |
-| `--source-config PATH` | Explicit local YAML with extra CA trust, scoped HTTPS credentials, and local YAML secret bindings. See [HTTPS sources](sources.md). |
+| `--source-config PATH` | Explicit local YAML with extra CA trust, scoped HTTPS credentials, and YAML and environment secret bindings. See [HTTPS sources](sources.md). |
 | `--host NAME` | Select named hosts; repeat or comma-separate names. |
 | `--tag NAME` | Select hosts carrying a tag; repeat or comma-separate names. |
 | `--service NAME` | Select already assigned services; repeat or comma-separate names. |

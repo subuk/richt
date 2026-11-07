@@ -88,7 +88,7 @@ Read these contracts instead of reconstructing syntax from older proposals:
   and attributes/SELinux, systemd capabilities, unit/drop-in handling, and removal.
 - [Saved plans and apply](../../../../docs/files.md) owns preparation,
   confirmation, executable JSON, locking, and continuation.
-- [Secrets](../../../../docs/secrets.md) owns YAML source values, template lookup,
+- [Secrets](../../../../docs/secrets.md) owns YAML and environment source values, template lookup,
   sensitivity, safe diagnostics, and secret-bearing plan handling.
 
 Important invariants across those contracts:
@@ -432,14 +432,22 @@ The config references and executable-plan guide describe the supported checks.
 
 ## Secret-source execution
 
-Inventory declares named `secret_sources` with `{type: yaml, file: ...}`;
-paths resolve relative to the inventory file. Inventory inspection never opens
-sources. Preparation implements these contracts:
+Inventory declares named `secret_sources` with `{type: yaml, file: ...}` or
+`{type: env, env: {<key>: <variable>}}`; file paths resolve relative to the
+inventory file. Inventory inspection never reads source values. Preparation
+implements these contracts:
 
-- The extensible secret-source boundary reads local
-  YAML on the machine running diff; multiple sources of the same backend may
-  read different files. Environment variables and external secret stores are
-  later extensions.
+- The secret-source boundary reads local YAML or explicitly mapped environment
+  variables on the machine running diff; multiple sources of either backend
+  remain independent. External secret stores remain later scope.
+- Environment mappings use full dot-separated lookup keys and portable variable
+  names (`[A-Za-z_][A-Za-z0-9_]*`), with no prefix discovery or interpolation.
+  On first source lookup, all declared variables are read once and cached for
+  the preparation. Any missing variable fails that entire source; an empty
+  string is valid and multiline values retain all whitespace. Errors are cached
+  too. Unused sources and absent services do not read environment values.
+  Local client bindings support env for HTTPS inventory; remote documents still
+  cannot declare sources or choose controller variables. This is KRG-84.
 - `{{ secret "database.password" }}` takes a key and optional source, as in
   `{{ secret "database.password" "production" }}`. Omitted source means the named
   `default`; an explicit source selects only that source. No merging, search, or
@@ -634,7 +642,7 @@ plus required SHA-256. Root inventory pinning is optional through
 URL after redirects; local documents require absolute URL references.
 
 An explicitly supplied local `--source-config` binds HTTPS credentials and CA
-trust and optional local YAML secret sources. Remote documents cannot declare
+trust and optional local YAML or environment secret sources. Remote documents cannot declare
 local file references or secret source paths. HTTP authentication is scoped to
 an exact origin and path prefix, with a new credential decision on every redirect.
 Only verified HTTPS is allowed; credentials, queries and fragments in source

@@ -1,14 +1,15 @@
 ---
-title: "YAML secrets and sensitive files"
+title: "Secrets and sensitive files"
 description: "Resolve local secret sources during preparation and protect executable saved inputs."
 weight: 80
 ---
 
-Local inventories declare YAML secret sources directly. For remote inventory
-and service documents, the operator provides named local bindings through an
-explicit `--source-config` file; remote documents cannot declare local secret
-paths. The same file can configure HTTPS authentication, whose credentials are
-separate from template secret values. Client bindings also work with local
+Local inventories declare YAML and environment secret sources directly. For
+remote inventory and service documents, the operator provides named local
+bindings through an explicit `--source-config` file. Remote documents cannot
+declare secret sources or select controller environment variables. The same
+file can configure HTTPS authentication, whose credentials are separate from
+template secret values. Client bindings also work with local
 inventories; duplicate source names are rejected. See [HTTPS sources](sources.md#explicit-client-settings).
 
 Secret values are fetched during plan preparation on the machine running
@@ -30,12 +31,12 @@ secret_sources:
 ```
 
 Paths are relative to the inventory file, regardless of the target transport.
-Only local YAML sources are supported; environment variables and external
-secret stores are outside the current implementation. Inventory commands show
-declarations without checking whether the declared files exist or are valid.
+YAML files and explicitly mapped environment variables are supported; external
+secret stores remain outside the implementation. Inventory commands show
+declarations without reading files or environment values.
 
-A source contains one YAML mapping. Nested mappings provide dot-separated key
-access. Mapping keys must be nonempty strings without dots. Leaf values must
+A YAML source contains one YAML mapping. Nested mappings provide dot-separated
+key access. Mapping keys must be nonempty strings without dots. Leaf values must
 be strings, including empty strings and multiline strings; quote numeric,
 boolean, or date-like values when they should be strings. Empty mappings are
 accepted but do not resolve to string values. For example, these values are
@@ -55,6 +56,50 @@ Lists, numbers, booleans, dates, nulls, duplicate keys, aliases, YAML merges,
 custom tags, malformed YAML, and multiple documents are rejected. The entire
 selected source is validated on first use, including keys not requested by the
 template. Sources not used by the selected preparation remain unopened.
+
+## Environment sources
+
+Map full secret keys to controller environment variable names:
+
+```yaml
+secret_sources:
+  default:
+    type: env
+    env:
+      database.password: APP_DB_PASSWORD
+      api.token: APP_API_TOKEN
+  production: {type: yaml, file: secrets/production.yaml}
+```
+
+The `env` mapping is flat: `database.password` is the complete lookup key, not
+an instruction to traverse nested YAML. Keys follow the same nonempty
+dot-separated segment rules as `secret` lookup. Variable names must match
+`[A-Za-z_][A-Za-z0-9_]*`. Both keys and variable names must be YAML strings;
+there is no prefix discovery, interpolation, or implicit environment lookup.
+An empty mapping is valid but supplies no keys. `type: env` requires `env`
+and forbids `file`; `type: yaml` requires `file` and forbids `env`, including
+explicitly empty or null incompatible fields.
+
+At the first lookup, Richt reads all variables declared in that source from
+its own process environment and caches the values for that preparation. A
+missing variable makes the entire source fail, even if the template requested
+a different key. A present empty string is valid. Spaces, multiline values,
+and trailing line endings are preserved exactly; values are not parsed as YAML
+or trimmed. Values must be valid UTF-8 text, so saved JSON retains their bytes;
+invalid UTF-8 fails preparation instead of silently replacing bytes. Failed loads are cached too. Unused sources are never read; a new
+diff gets fresh values. Concurrent lookups share the same source cache.
+
+For SSH targets, these are still controller values, not target environment
+variables. With local `sudo: true`, they come from the Richt process before
+its target commands invoke sudo. If Richt itself is started through sudo,
+its environment is whatever sudo supplies to that process.
+
+The same declarations work in an explicit local `--source-config` file, also
+for HTTPS inventories. Remote documents cannot declare `secret_sources`;
+only local operator bindings select controller variables. HTTP authentication
+credentials have their own rules and are separate from template secrets.
+
+## Template lookup
 
 ```gotemplate
 password={{ secret "database.password" }}
@@ -106,8 +151,8 @@ the removal sensitive.
 Saved JSON is executable data and contains real rendered contents and patches,
 including old secret bytes. Sensitivity is persisted, but display placeholders
 never replace executable inputs. Apply and explicit continuation use the saved
-bytes after inventory, templates, and source files change or disappear; completed
-tasks are skipped as usual. Inspect human-readable plan output and protect the
+bytes after inventory, templates, source files, and environment values change
+or disappear; completed tasks are skipped as usual. Inspect human-readable plan output and protect the
 JSON itself.
 
 Plans, locks, and atomic plan replacements use mode 0600. Keep their containing

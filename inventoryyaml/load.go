@@ -101,12 +101,17 @@ func LoadWithOptions(ctx context.Context, location string, options LoadOptions) 
 			return nil, fmt.Errorf("client secret source %q conflicts with an inventory declaration", name)
 		}
 		binding := options.SecretSources[name]
-		if !filepath.IsAbs(binding.File) {
-			return nil, fmt.Errorf("client secret source %q file: expected an absolute local file path", name)
+		if err := inventory.ValidateSecretSource(name, binding); err != nil {
+			return nil, fmt.Errorf("client %w", err)
 		}
-		binding.File, err = localPath("", binding.File)
-		if err != nil {
-			return nil, fmt.Errorf("client secret source %q file: %w", name, err)
+		if binding.Type == "yaml" {
+			if !filepath.IsAbs(binding.File) {
+				return nil, fmt.Errorf("client secret source %q file: expected an absolute local file path", name)
+			}
+			binding.File, err = localPath("", binding.File)
+			if err != nil {
+				return nil, fmt.Errorf("client secret source %q file: %w", name, err)
+			}
 		}
 		in.SecretSources[name] = binding
 	}

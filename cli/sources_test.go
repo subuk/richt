@@ -207,6 +207,62 @@ func TestCLIHTTPSCancellation(t *testing.T) {
 	}
 }
 
+func TestClientEnvironmentSecretBindings(t *testing.T) {
+	filename := filepath.Join(t.TempDir(), "client.yaml")
+	writeSourceFixture(t, filename, `secret_sources:
+  default: {type: env, env: {database.password: RICHT_UNSET_CLIENT_SECRET}}
+  empty: {type: env, env: {}}
+  local: {type: yaml, file: secrets.yaml}
+`)
+	_, bindings, err := loadSourceConfig(filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bindings["default"].Env["database.password"] != "RICHT_UNSET_CLIENT_SECRET" || bindings["empty"].Env == nil {
+		t.Fatal("environment declarations changed")
+	}
+	if bindings["local"].File != filepath.Join(filepath.Dir(filename), "secrets.yaml") {
+		t.Fatal("YAML path was not resolved against client settings")
+	}
+	for _, declaration := range []string{
+		"{type: env}",
+		"{type: env, env: null}",
+		"{type: env, env: []}",
+		"{type: env, env: {password: 123}}",
+		"{type: env, env: {password: true}}",
+		"{type: env, env: {password: 2026-11-07}}",
+		"{type: env, env: {password: null}}",
+		"{type: env, env: {123: TOKEN}}",
+		"{type: env, env: {password: TOKEN, password: SECOND}}",
+		"{type: env, env: {password: {nested: TOKEN}}}",
+		"{type: env, env: {password: [TOKEN]}}",
+		"{type: env, env: {'a..b': TOKEN}}",
+		"{type: env, env: {password: INVALID-NAME}}",
+		"{type: env, env: {}, file: ''}",
+		"{type: env, env: {}, file: null}",
+		"{type: yaml, file: secrets.yaml, env: null}",
+		"{type: yaml, file: secrets.yaml, env: {}}",
+		"{type: yaml, file: 123}",
+		"{type: env, env: {}, unknown: private-marker}",
+	} {
+		t.Run(declaration, func(t *testing.T) {
+			writeSourceFixture(t, filename, "secret_sources: {default: "+declaration+"}\n")
+			if _, _, err := loadSourceConfig(filename); err == nil || strings.Contains(err.Error(), "private-marker") {
+				t.Fatalf("invalid client declaration must fail safely: %v", err)
+			}
+		})
+	}
+	for _, text := range []string{
+		"secret_sources: {default: {type: env, env: {}}, default: {type: env, env: {}}}",
+		"secret_sources: {123: {type: env, env: {}}}",
+	} {
+		writeSourceFixture(t, filename, text)
+		if _, _, err := loadSourceConfig(filename); err == nil {
+			t.Fatal("duplicate or non-string source name accepted")
+		}
+	}
+}
+
 func TestCLIRejectsMalformedSourceURLsWithoutPathExpansion(t *testing.T) {
 	for _, input := range []string{
 		"https:private-source-marker@example.invalid/inventory.yaml",

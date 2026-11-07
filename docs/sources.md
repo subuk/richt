@@ -72,7 +72,7 @@ be embedded in documents. There is no HTTP fallback or TLS verification bypass.
 `--source-config PATH` reads one local YAML file explicitly selected by the
 operator. There is no automatic discovery or remote selection of this file.
 Unknown fields are errors. It may add a CA file, scoped credentials, and named
-local YAML secret bindings:
+YAML and environment secret bindings:
 
 ```yaml
 ca_file: trust/company-ca.pem
@@ -87,6 +87,9 @@ auth:
       password: {file: credentials/password.txt}
 secret_sources:
   production: {type: yaml, file: secrets/production.yaml}
+  ci:
+    type: env
+    env: {database.password: APP_DB_PASSWORD}
 ```
 
 `ca_file` adds certificates to the system trust roots. Its path, credential

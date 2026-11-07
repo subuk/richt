@@ -21,7 +21,7 @@ output in English.
   implemented boundary needs them.
 - Current execution supports local/SSH transports, explicit noninteractive sudo,
   bounded host parallelism, DNF4/YUM4 and APT/DEB, files, systemd and oneshot processes, and
-  local YAML secret sources. Read [SSH rules](docs/ssh.md) for live client settings and authentication
+  YAML and environment secret sources. Read [SSH rules](docs/ssh.md) for live client settings and authentication
   and [secret rules](docs/secrets.md) for lookup, sensitivity, and safe diagnostics.
   External secret stores remain later scope.
 

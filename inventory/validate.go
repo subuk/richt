@@ -50,15 +50,8 @@ func (in *Inventory) Validate() error {
 		}
 	}
 	for _, name := range sortedKeys(in.SecretSources) {
-		if err := validName("secret source", name); err != nil {
+		if err := ValidateSecretSource(name, in.SecretSources[name]); err != nil {
 			return err
-		}
-		s := in.SecretSources[name]
-		if s.Type != "yaml" {
-			return fmt.Errorf("secret source %q type: expected yaml", name)
-		}
-		if strings.TrimSpace(s.File) == "" {
-			return fmt.Errorf("secret source %q file: required", name)
 		}
 	}
 	for _, name := range sortedKeys(in.Services) {

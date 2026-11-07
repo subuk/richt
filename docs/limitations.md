@@ -10,7 +10,7 @@ strict local or HTTPS YAML inventory, pinned HTTPS services and templates,
 RPM through DNF 4/YUM 4, DEB through APT, checksum-pinned public
 HTTPS downloads and tar.gz archive trees, systemd and oneshot
 processes, templates, plain files/directories, local users/groups, RAID1, linear LVM, XFS and
-persistent mounts, and local YAML secret sources. See [installation](installation.md) and
+persistent mounts, and YAML and environment secret sources. See [installation](installation.md) and
 [validation](validation.md) for requirements and verified platforms. YUM 3,
 DNF 5, additional persistent process managers, private authenticated
 artifact URLs, other archive formats, and external secret stores are unsupported.

@@ -75,13 +75,13 @@ IDs are allowed. These rules also apply to local files. The saved file bytes,
 resource requests, task order, and process branches remain fixed; apply does
 not reread inventory/templates or recalculate changes.
 
-YAML secret sources are read on the controller during preparation, including
+YAML and environment secret sources are read on the controller during preparation, including
 when writes use SSH or sudo. Apply and continuation use real saved bytes without
 reading those sources. Secret calls automatically hide the entire old/new file
 diff; explicit `sensitive: true` also protects old bytes when removing a secret
 call or a file. Set target `mode: "0600"` explicitly when required. Saved plans
 contain real secrets and use mode 0600, as do their locks and atomic replacements.
-See [YAML secrets and sensitive files](secrets.md).
+See [Secrets and sensitive files](secrets.md).
 
 ## Parallel execution and continuation
 

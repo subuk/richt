@@ -17,6 +17,8 @@ func inventorySchema(root *yaml.Node) error {
 	}
 	return mappingFields(root, func(key string, value *yaml.Node) error {
 		switch key {
+		case "secret_sources":
+			return ValidateSecretSourceDeclarations(value)
 		case "services":
 			return mappingFields(value, func(name string, definition *yaml.Node) error {
 				if err := serviceDefinitionSchema(definition, true); err != nil {

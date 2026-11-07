@@ -122,6 +122,7 @@ in, err := inventoryyaml.LoadWithOptions(ctx, inventoryURL, inventoryyaml.LoadOp
     SHA256: inventoryDigest,
     SecretSources: map[string]inventory.SecretSource{
         "production": {Type: "yaml", File: "/private/secrets.yaml"},
+        "ci": {Type: "env", Env: map[string]string{"database.password": "APP_DB_PASSWORD"}},
     },
 })
 if err != nil {
@@ -139,8 +140,10 @@ prepared, err := (engine.Local{}).Diff(ctx, resolved, engine.DiffOptions{Sources
 entries contain `Origin`, `PathPrefix`, and either `BearerToken` or
 `Username`/`Password`. Embedded callers own credential acquisition; the CLI's
 env/file reference format belongs to `--source-config`. Never log credential
-values. `inventoryyaml.LoadOptions.SecretSources` requires absolute local YAML
-paths and rejects collisions with inventory declarations.
+values. `inventoryyaml.LoadOptions.SecretSources` accepts YAML bindings with
+absolute local paths or environment bindings with explicit `Env` key-to-variable
+maps. Both reject collisions with inventory declarations. Environment values
+are read lazily during preparation, never during loading or saved-plan apply.
 
 `config.PrepareContext(ctx, config, state, vars, sources, lookups...)` acquires
 then renders one template. Existing `config.Prepare` uses a background context

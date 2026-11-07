@@ -80,7 +80,7 @@ password = {{ printf "%q" (secret "database.password" "production") }}
 ```
 
 The [`secret` function](../../secrets.md) retrieves a string from a declared
-local YAML source and automatically marks the file sensitive. Parse and execution
+local YAML or environment source and automatically marks the file sensitive. Parse and execution
 failures use safe generic diagnostics so template text or transformed secret
 values cannot escape through errors.
 

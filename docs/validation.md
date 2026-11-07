@@ -4,6 +4,53 @@ description: "Recorded Linux acceptance results, environment, commands, and limi
 weight: 120
 ---
 
+## Environment secret sources — 2026-11-07
+
+KRG-84 was validated from source `ac75cb1bd4dd` plus these changes on
+AlmaLinux 10.2 x86_64 with SELinux Enforcing and systemd 257. The controller
+binary SHA-256 was
+`5777e2069171b3b33a7a359a4c4ceb79a65c1d29252320b2397eafc19e974865`;
+the Linux binary SHA-256 was
+`00743a8cd864bde3e6e06558ce6ac0336dce7ed3e3699bca029c8378ba91cc24`.
+
+The extended [secret verifier](../examples/secrets/README.md) passed **13 env
+checks** locally on Linux with explicit sudo, and **13 checks on each of two
+separate SSH/sudo targets** from a macOS controller. Each invocation also
+passed the existing **four YAML groups**. It covers inspection with unavailable
+sources, whole-source failure for an unrequested missing variable, independent
+YAML/env keys, empty and multiline values, unused sources, private plan/lock
+and target permissions, client bindings, and no-op diffs. A real oneshot reaction
+prints secret-bearing bytes on stdout/stderr and deliberately fails; its output
+and plain CLI progress remain safe. Continuation retries that reaction without
+rereading deleted inputs or variables. A fresh diff observes a changed secret
+and runs one new reaction. Successful-task continuation and absent removal
+preserve their existing behavior.
+
+```sh
+# On a Linux controller and local target:
+python3 examples/secrets/verify.py ./bin/richt --env --sudo \
+  --work-root /tmp/richt-env-evidence
+# On a supported controller with an authorized Linux SSH target:
+python3 examples/secrets/verify.py ./bin/richt --env \
+  --host deploy@test-a --sudo --work-root /tmp/richt-env-evidence
+```
+
+All unique managed env fixtures were removed. Private controller reports and
+plans were retained for review. Both targets remained Enforcing with systemd
+running and no failed units. One additional configured host timed out during
+read-only preflight; no changes were attempted there. The existing local
+file/SELinux/terminal/progress regression also passed **20 checks**, with its
+temporary resources removed.
+
+`make check`, `make docs-check`, Python syntax, env fixture inspection, and
+relevant race tests passed (`./secrets`, engine env scenarios, and CLI env
+continuation scenarios). Go tests cover HTTPS inventory with local env bindings,
+strict declaration types and incompatible fields, concurrent source caching,
+shared config/unit/drop-in/host snapshots, systemd reload planning, failure
+before host contact, and invalid UTF-8 rejection. Saved-plan format remains
+`1.8`. This acceptance introduced no package transactions and exercised
+oneshot reactions; actual systemd reload behavior was not newly tested here.
+
 ## HTTPS inventory, services and templates — 2026-11-07
 
 KRG-80 and KRG-81 were validated from source `df0f1e548fc3` plus these changes

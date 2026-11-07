@@ -25,7 +25,7 @@ execution. Recorded results and their limits live in [validation](validation.md)
 | Pinned archive and process | [node_exporter archive](../examples/node-exporter/README.md) | Disposable Linux amd64/systemd/SSH target, Python 3.8+, existing dedicated account, protected destination and unused loopback port. |
 | Repository exclusion override | [Kubernetes packages](../examples/kubernetes/README.md) | DNF 4 target with root privileges; repository setup followed by pinned kubelet/kubeadm requests. Package setup only. |
 | Failure and manual continuation | [Continuation example](../examples/continuation/README.md) | Config-only deliberate partial failure, repair, and saved-plan resume. |
-| Two independent secret sources | [Secrets example](../examples/secrets/README.md) | Python 3 verifier and local Richt; dummy values, private temporary targets, frozen saved bytes, and automatic cleanup. |
+| YAML and environment secret sources | [Secrets example](../examples/secrets/README.md) | Python 3 verifier and local Richt; optional Linux/SSH env checks, dummy values, frozen saved bytes, process reactions, and automatic cleanup. |
 | Change-triggered command | [Oneshot sysctl](../examples/oneshot/README.md) | Disposable Linux target with sysctl and root privileges; writes one sysctl config and applies it without a systemd unit. |
 | Two SSH hosts | [SSH walkthrough](../examples/ssh/README.md) and [inventory](../examples/ssh/inventory.yaml) | Ready vmango RPMs on two disposable Linux targets; replace illustrative client aliases and configure noninteractive sudo. |
 
