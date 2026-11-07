@@ -2,10 +2,15 @@ GO ?= go
 VERSION ?= dev
 LDFLAGS = -X github.com/subuk/richt/cli.Version=$(VERSION)
 
-.PHONY: check build install linux-amd64 release-archives release-check docs-build docs-serve docs-check
+.DEFAULT_GOAL := build
+
+.PHONY: check test build install linux-amd64 release-archives release-check docs-build docs-serve docs-check
 
 check:
 	GO='$(GO)' sh scripts/check.sh
+
+test:
+	$(GO) test ./...
 
 build:
 	mkdir -p bin

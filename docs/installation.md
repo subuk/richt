@@ -89,9 +89,10 @@ make build
 make install
 ```
 
-`make build` writes `bin/richt`. `make install` writes to `GOBIN`, or to
-`$(go env GOPATH)/bin` when `GOBIN` is unset; put that directory on `PATH`. To keep
-an installation in the checkout:
+`make` defaults to `make build` and writes `bin/richt`. Run `make test` for Go
+tests or `make check` for the full repository checks. `make install` writes to
+`GOBIN`, or to `$(go env GOPATH)/bin` when `GOBIN` is unset; put that directory on
+`PATH`. To keep an installation in the checkout:
 
 ```sh
 mkdir -p bin

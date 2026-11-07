@@ -25,10 +25,13 @@ or macOS on amd64 or arm64 when a release is available. To build from a checkout
 install Go 1.27.3 or newer and Make:
 
 ```sh
-make build
+make
 ./bin/richt --help
 ./bin/richt --version
 ```
+
+`make` (or `make build`) builds `bin/richt`. Tests and other checks run only
+when explicitly requested.
 
 Follow the [config-only quickstart](docs/quickstart.md) to create, review, apply,
 update, and remove a file in a private temporary directory without root. See
@@ -89,15 +92,16 @@ publish a site.
 ## Development
 
 ```sh
+make test
 make check
 go test -race ./...
 make release-check
 ```
 
-`make check` checks formatting, runs vet and all Go tests, exercises CLI smoke
-behavior, and cross-builds Linux amd64. The additional commands check races and
-release tooling. [CI and releases](docs/ci.md) describes the shared build for
-pull requests, pushes to `main`, and manual releases, including four-platform
+`make test` runs all Go tests. `make check` checks formatting, runs vet and all
+Go tests, exercises CLI smoke behavior, and cross-builds Linux amd64. The
+additional commands check races and release tooling. [CI and releases](docs/ci.md)
+describes the shared build for pull requests, pushes to `main`, and manual releases, including four-platform
 archives and smoke testing the unpacked Linux amd64 archive. These checks do not
 prove runtime RPM, systemd, root, or SELinux behavior. [Linux validation](docs/validation.md)
 describes the separate disposable-host acceptance workflows.
